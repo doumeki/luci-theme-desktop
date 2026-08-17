@@ -1,0 +1,70 @@
+{#
+    Desktop Theme - Footer (ucode-native)
+    Copyright 2026 DMKLIGHT
+    Licensed under the Apache License v2.0
+-#}
+
+{%
+    let is_embedded = (http.formvalue("embed") ?? "") == "1";
+
+    // Server-side mobile verdict (authoritative for isMobile(); the JS
+    // side only falls back to viewport/touch heuristics when this is
+    // absent). Matches phones/tablets — touch laptops stay desktop.
+    // ucode has no string methods; use match() with a case-insensitive
+    // regex on the raw UA (same pattern as the Lua footer.htm).
+    let _ua = http.getenv("HTTP_USER_AGENT") ?? "";
+    let is_mobile_ua = match(_ua, /android|iphone|ipod|ipad|mobile|windows phone|opera mini/i) != null;
+
+    // Direct visit to a non-landing page (already authenticated): render
+    // the shell AND auto-open that path as an app window. Desktop and
+    // mobile alike. Landing page (empty path) → no boot app.
+    let req_path = ctx.request_path ?? [];
+    let boot_app = "";
+    if (!is_embedded && ctx.authsession && length(req_path) > 0)
+        boot_app = "/cgi-bin/luci/" + join("/", req_path);
+%}
+
+{% if (!is_embedded): %}
+    <!-- ===== DESKTOP SHELL MODE ===== -->
+    </div><!-- close luci-content-wrapper -->
+    <footer style="display:none;">
+        Powered by LuCI
+    </footer>
+    <script>
+        var luciLocation = {{ sprintf('%J', ctx.request_path) }};
+        window.__DESKTOP_THEME_VERSION__ = '0.1.0';
+        window.__IS_MOBILE__ = {{ is_mobile_ua ? 'true' : 'false' }};
+        window.__LUCI_RUNTIME__ = 'ucode';
+        window.__DESKTOP_BOOT_APP__ = {{ boot_app == "" ? 'null' : sprintf('%J', boot_app) }};
+        if (window.LuCIDesktop && window.LuCIDesktop.boot) {
+            LuCIDesktop.boot();
+        }
+        var wrapper = document.getElementById('luci-content-wrapper');
+        if (wrapper) {
+            if (window.XHR && XHR.halt) XHR.halt();
+        }
+    </script>
+{% else %}
+    <!-- ===== EMBEDDED MODE ===== -->
+    </div></div></div></div><!-- close .container, #maincontent, .main-right, .main -->
+    <script>
+        var luciLocation = {{ sprintf('%J', ctx.request_path) }};
+        document.querySelectorAll('.cbi-section > legend').forEach(function(el) {
+            if (!el.parentNode.querySelector('.panel-title')) {
+                var span = document.createElement('span');
+                span.className = 'panel-title';
+                span.textContent = el.textContent;
+                el.parentNode.insertBefore(span, el.nextSibling);
+            }
+        });
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'iframe-loaded',
+                title: document.title || '',
+                url: window.location.href
+            }, '*');
+        }
+    </script>
+{% endif %}
+</body>
+</html>

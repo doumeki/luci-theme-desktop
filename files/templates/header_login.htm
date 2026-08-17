@@ -1,0 +1,64 @@
+<%#
+    Desktop Theme - Login Header
+    Minimal header for the login page.
+-%>
+<%
+    local sys  = require "luci.sys"
+    local util = require "luci.util"
+    local http = require "luci.http"
+    local boardinfo = util.ubus("system", "board")
+    http.prepare_content("text/html")
+-%>
+<!DOCTYPE html>
+<html lang="<%=luci.i18n.context.lang%>">
+<head>
+    <meta charset="utf-8">
+    <title><%=striptags(boardinfo.hostname or "OpenWrt")%> - Login</title>
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"/>
+    <meta name="theme-color" content="#1a1a2e">
+    <link rel="stylesheet" href="<%=media%>/css/cascade.css">
+    <link rel="stylesheet" href="<%=media%>/css/fonts.css">
+    <link rel="stylesheet" href="<%=media%>/css/shell.css">
+    <style>
+        body { display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+        #desktop-wallpaper {
+            position:fixed; inset:0; z-index:0;
+        }
+            background: radial-gradient(ellipse at 30% 20%, #1a3a5c 0%, transparent 60%),
+                        radial-gradient(ellipse at 70% 80%, #1a1a3e 0%, transparent 60%),
+                        linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+            background-size: cover; }
+        .errorbox { color:#e74c3c; background:rgba(231,76,60,0.1); padding:8px 16px;
+            border-radius:6px; margin-bottom:12px; font-size:13px; }
+        .input-container { display:flex; flex-direction:column; gap:12px; }
+        .input-group input { width:100%; padding:10px 14px; border-radius:8px;
+            border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06);
+            color:#e0e0e0; font-size:14px; transition:0.2s; }
+        .input-group input:focus { border-color:var(--accent-color,#4a90d9); outline:none;
+            background:rgba(255,255,255,0.1); box-shadow:0 0 0 3px rgba(74,144,217,0.15); }
+        .input-group input::placeholder { color:rgba(255,255,255,0.3); }
+        .cbi-button-apply { background:var(--accent-color,#4a90d9)!important; color:#fff!important;
+            border:none!important; padding:10px 20px; border-radius:8px; font-size:15px;
+            font-weight:600; cursor:pointer; transition:0.2s; }
+        .cbi-button-apply:hover { filter:brightness(1.1); }
+        .login-card {
+            position:relative; z-index:1;
+            background: rgba(255,255,255,0.06); backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px); border-radius: 16px;
+            padding: 32px 40px; box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.08); min-width: 360px; }
+        .login-card .hostname { text-align:center; font-size:24px; font-weight:600;
+            color:#e0e0e0; margin-bottom:20px; }
+        .login-card .cbi-button { width:100%; margin-top:8px; }
+        .login-card input[type=text],
+        .login-card input[type=password] { width:100%; padding:10px 14px; border-radius:8px;
+            border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06);
+            color:#e0e0e0; font-size:14px; }
+        .login-card input:focus { border-color:var(--accent-color,#4a90d9); outline:none; }
+        .login-card .cbi-value-title { color:rgba(255,255,255,0.6); font-size:13px; margin-bottom:4px; }
+    </style>
+</head>
+<body>
+    <div id="desktop-wallpaper"></div>
+    <div class="login-card">
+        <div class="hostname"><%=striptags(boardinfo.hostname or "OpenWrt")%></div>

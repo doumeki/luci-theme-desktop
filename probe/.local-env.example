@@ -1,0 +1,13 @@
+# Local development environment (COPY to .local-env — NEVER commit .local-env)
+# .local-env holds machine-specific values; the repo only ships this example.
+# probe/*.sh and probe/*.js source this file when present.
+
+# OpenWrt build tree root (where `make package/.../compile` works)
+LEDE_ROOT=
+
+# Router 1 (ucode/apk track, passwordless root)
+ROUTER_1=192.168.1.1
+
+# Router 2 (Lua/opkg track, key auth)
+ROUTER_2=192.168.2.253
+SSH_KEY_2=~/.ssh/id_ed253

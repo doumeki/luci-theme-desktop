@@ -1,0 +1,41 @@
+#!/bin/sh
+# Desktop Theme - Online wallpaper fetcher
+# Usage: online_wallpaper <bing|picsum>
+# Returns: wallpaper URL on stdout
+
+MODE="$1"
+CACHE_URL="/var/run/desktop_${MODE}.url"
+CACHE_TS="/var/run/desktop_${MODE}.ts"
+MAX_AGE=0     # no cache, always fetch fresh
+
+# Return cached URL if still fresh
+if [ -f "$CACHE_URL" ] && [ -f "$CACHE_TS" ]; then
+    NOW=$(/bin/date +%s)
+    TS=$(cat "$CACHE_TS" 2>/dev/null)
+    AGE=$((NOW - TS))
+    if [ "$AGE" -lt "$MAX_AGE" ]; then
+        cat "$CACHE_URL"
+        exit 0
+    fi
+fi
+
+# Fetch fresh URL
+URL=""
+case "$MODE" in
+    bing)
+        DATA=$(/usr/bin/curl -fks --max-time 3 "https://www.bing.com/HPImageArchive.aspx?format=js&n=1" 2>/dev/null)
+        PATH=$(echo "$DATA" | /bin/sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+        [ -n "$PATH" ] && URL="https://www.bing.com$PATH"
+        ;;
+    picsum)
+        URL=$(/usr/bin/curl -fksL --max-time 3 -o /dev/null -w "%{url_effective}" "https://picsum.photos/1920/1080" 2>/dev/null)
+        ;;
+esac
+
+if [ -n "$URL" ]; then
+    echo "$URL" > "$CACHE_URL"
+    /bin/date +%s > "$CACHE_TS"
+    echo "$URL"
+elif [ -f "$CACHE_URL" ]; then
+    cat "$CACHE_URL"
+fi

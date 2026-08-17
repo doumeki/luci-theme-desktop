@@ -1,0 +1,89 @@
+{
+  "_说明": "便笺完整 JSON 格式。共享数据存 /etc/luci-theme-desktop/stickysync.json（全视图共用）；每视图的位置/大小存 UCI desktop.widgets.config（桌面）与 desktop.mobile_widgets.config（移动端）。",
+  "_共享字段": {
+    "存在性": "closed: 关闭标记（✕ 关闭=隐藏但内容保留；设置面板 Clear 才是真删除）",
+    "内容": "notes: 7 个颜色各存一页内容（颜色 ↔ 内容一一对应）",
+    "show的颜色": "activeColor: 当前显示哪个颜色页（内容=notes[activeColor]，背景=activeColor）",
+    "样式": "opacity: 透明度（0~1）；clickThrough: 点击穿透（true=点击穿透不交互）"
+  },
+  "_per视图字段": {
+    "位置": "x, y",
+    "大小": "width, height",
+    "缩放": "scale",
+    "显示": "mobileHidden: 移动端隐藏；active: 该视图是否启用"
+  },
+  "stickysync.json 实际结构": {
+    "sticky-note-1": {
+      "notes": {
+        "#f9e74a": "黄色页内容",
+        "#f78b6e": "珊瑚页内容",
+        "#7ec8a0": "绿色页内容",
+        "#6eb5f7": "蓝色页内容",
+        "#c49bdb": "紫色页内容",
+        "#f5a3c7": "粉色页内容",
+        "#ffffff": "白色页内容"
+      },
+      "activeColor": "#7ec8a0",
+      "closed": false,
+      "opacity": 0.88,
+      "clickThrough": false
+    },
+    "sticky-note-2": {
+      "notes": {
+        "#f9e74a": "",
+        "#f78b6e": "",
+        "#7ec8a0": "",
+        "#6eb5f7": "",
+        "#c49bdb": "",
+        "#f5a3c7": "",
+        "#ffffff": ""
+      },
+      "activeColor": "#f9e74a"
+    },
+    "sticky-note-3": {
+      "notes": {
+        "#f9e74a": "",
+        "#f78b6e": "",
+        "#7ec8a0": "绿3",
+        "#6eb5f7": "",
+        "#c49bdb": "",
+        "#f5a3c7": "",
+        "#ffffff": ""
+      },
+      "activeColor": "#7ec8a0",
+      "closed": false,
+      "opacity": 0.88,
+      "clickThrough": false
+    }
+  },
+  "desktop.widgets.config（桌面 per-view，示意）": {
+    "instances": [
+      {
+        "id": "sticky-note-3",
+        "typeId": "sticky-note",
+        "x": 140,
+        "y": 200,
+        "width": 200,
+        "height": 160,
+        "scale": 1,
+        "data": { "mobileHidden": false },
+        "active": true
+      }
+    ]
+  },
+  "desktop.mobile_widgets.config（移动端 per-view，示意）": {
+    "instances": [
+      {
+        "id": "sticky-note-3",
+        "typeId": "sticky-note",
+        "x": 60,
+        "y": 300,
+        "width": 180,
+        "height": 150,
+        "scale": 1,
+        "data": { "mobileHidden": false },
+        "active": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Desktop Theme - JS Test Runner</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font: 14px/1.5 monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+        h1 { font-size: 18px; margin-bottom: 16px; color: #fff; }
+        .suite { margin-bottom: 20px; }
+        .suite-title { font-weight: bold; color: #4a90d9; margin-bottom: 4px; padding: 4px 8px; background: rgba(74,144,217,0.1); border-radius: 4px; }
+        .test { padding: 3px 8px 3px 20px; }
+        .test.pass { color: #27ae60; }
+        .test.pass::before { content: '✓ '; }
+        .test.fail { color: #e74c3c; background: rgba(231,76,60,0.1); }
+        .test.fail::before { content: '✗ '; }
+        .summary { margin-top: 20px; padding: 10px; border-radius: 4px; background: rgba(255,255,255,0.05); }
+        .summary.pass { border-left: 4px solid #27ae60; }
+        .summary.fail { border-left: 4px solid #e74c3c; }
+        pre { margin-left: 20px; color: #e74c3c; font-size: 12px; max-height: 200px; overflow: auto; }
+        hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 12px 0; }
+        #status { position: fixed; top: 20px; right: 20px; padding: 8px 16px; border-radius: 4px; font-weight: bold; }
+        #status.running { background: #f39c12; color: #000; }
+        #status.pass { background: #27ae60; color: #fff; }
+        #status.fail { background: #e74c3c; color: #fff; }
+    </style>
+</head>
+<body>
+<h1>Desktop Theme — JS Unit Tests</h1>
+<div id="status" class="running">RUNNING</div>
+<div id="results"></div>
+
+<!-- Minimal DOM skeleton for module init (modules bail gracefully without these,
+     but tests that call init() manually need them to exist) -->
+<div id="window-container" style="display:none;"></div>
+<div id="taskbar" style="display:none;">
+    <div id="taskbar-start"><button id="btn-start">●</button></div>
+    <div id="taskbar-windows"></div>
+    <div id="taskbar-tray"><span id="taskbar-clock"></span><button id="btn-show-desktop" title="Show Desktop">▌</button></div>
+</div>
+<div id="start-menu" style="display:none;"></div>
+<script id="desktop-config" type="application/json">{"widgets":{},"pins":[],"theme":{}}</script>
+<div id="desktop" style="display:none;">
+    <div id="desktop-icons"></div>
+</div>
+
+<script>
+// ============= Minimal Test Framework =============
+var testRunner = {
+    passed: 0,
+    failed: 0,
+    currentSuite: null,
+    resultsEl: null,
+
+    _beforeEach: null,
+    _afterEach: null,
+    _queue: [],
+    _running: false,
+
+    describe: function(name, fn) {
+        this.currentSuite = name;
+        this._beforeEach = null;
+        this._afterEach = null;
+        this.suiteDiv = document.createElement('div');
+        this.suiteDiv.className = 'suite';
+        this.suiteDiv.innerHTML = '<div class="suite-title">' + name + '</div>';
+        this.resultsEl.appendChild(this.suiteDiv);
+        fn();
+        this._beforeEach = null;
+        this._afterEach = null;
+    },
+
+    beforeEach: function(fn) {
+        this._beforeEach = fn;
+    },
+
+    afterEach: function(fn) {
+        this._afterEach = fn;
+    },
+
+    // Tests register here; execution is deferred to run() (queued so
+    // promise-returning tests settle before the next test starts)
+    it: function(name, fn) {
+        this._queue.push({
+            suiteDiv: this.suiteDiv,
+            name: name,
+            fn: fn,
+            beforeEach: this._beforeEach,
+            afterEach: this._afterEach
+        });
+    },
+
+    // Execute the queue sequentially; finish() runs after the last test
+    // settles. Async tests return a Promise; a 10s watchdog fails a hung
+    // test so the rest of the suite still runs.
+    run: function() {
+        if (this._running) return;
+        this._running = true;
+        var runner = this;
+
+        function next() {
+            var t = runner._queue.shift();
+            if (!t) { runner.finish(); return; }
+
+            var testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            testDiv.textContent = t.name;
+            t.suiteDiv.appendChild(testDiv);
+
+            var done = false;
+            var watchdog = setTimeout(function() {
+                finish(false, new Error('async test timeout (10s)'));
+            }, 10000);
+
+            function finish(ok, err) {
+                if (done) return;
+                done = true;
+                clearTimeout(watchdog);
+                if (ok) {
+                    testDiv.classList.add('pass');
+                    runner.passed++;
+                } else {
+                    testDiv.classList.add('fail');
+                    testDiv.textContent = t.name + ' — ' + (err && err.message ? err.message : String(err));
+                    if (err && err.stack) {
+                        var pre = document.createElement('pre');
+                        pre.textContent = err.stack;
+                        testDiv.appendChild(pre);
+                    }
+                    runner.failed++;
+                }
+                next();
+            }
+
+            // afterEach runs before the verdict (original sync semantics:
+            // an afterEach throw fails the test, but never blocks the queue)
+            function settle(ok, err) {
+                try {
+                    if (t.afterEach) t.afterEach();
+                } catch (e2) {
+                    ok = false;
+                    err = e2;
+                }
+                finish(ok, err);
+            }
+
+            try {
+                if (t.beforeEach) t.beforeEach();
+                var ret = t.fn();
+                if (ret && typeof ret.then === 'function') {
+                    ret.then(function() { settle(true); }, function(e) { settle(false, e); });
+                } else {
+                    settle(true);
+                }
+            } catch (e) {
+                settle(false, e);
+            }
+        }
+
+        next();
+    },
+
+    finish: function() {
+        var statusEl = document.getElementById('status');
+        var allPass = this.failed === 0;
+        statusEl.className = allPass ? 'pass' : 'fail';
+        statusEl.textContent = this.passed + '/' + (this.passed + this.failed) + ' passed';
+        if (allPass) {
+            statusEl.textContent += ' ✓';
+        }
+
+        var summary = document.createElement('div');
+        summary.className = 'summary ' + (allPass ? 'pass' : 'fail');
+        summary.innerHTML = '<strong>Total:</strong> ' + this.passed + ' passed, ' + this.failed + ' failed (' + (this.passed + this.failed) + ' total)';
+        this.resultsEl.appendChild(summary);
+
+        // Headless/CI: write results to page title
+        var failedNames = [], failedDetails = [];
+        document.querySelectorAll('.test.fail').forEach(function(t) {
+            failedNames.push(t.textContent.split(' — ')[0].substring(0, 60));
+            // msg = error message + first stack line (skip the assertion
+            // helper frames that repeat for every failure)
+            var msg = t.textContent.indexOf(' — ') !== -1 ? t.textContent.split(' — ').slice(1).join(' — ') : '';
+            var pre = t.querySelector('pre');
+            if (pre) {
+                var lines = pre.textContent.split('\n').filter(function(l) {
+                    return l.indexOf('test-runner.html') === -1;
+                });
+                msg += ' | ' + lines.slice(0, 2).join(' | ');
+            }
+            failedDetails.push({name: failedNames[failedNames.length - 1], msg: msg.substring(0, 250)});
+        });
+        document.title = this.passed + '/' + (this.passed + this.failed) + ' passed' +
+            (failedNames.length > 0 ? ' | FAIL: ' + failedNames.join(', ') : '');
+
+        // Headless/CI: expose results via global variable + DOM for run-headless.js
+        window.__TEST_RESULTS__ = { passed: this.passed, total: this.passed + this.failed, failed: this.failed, failures: failedNames, details: failedDetails };
+
+        // When served over http (the headless runner), fire the verdict to
+        // the runner as an async POST — the runner reads this instead of
+        // probing the DOM through marionette (whose execute channel can
+        // wedge after a cold-start Navigate). Under file:// this is skipped.
+        if (location.protocol === 'http:') {
+            try {
+                var x = new XMLHttpRequest();
+                x.open('POST', '/__results__', true);
+                x.setRequestHeader('Content-Type', 'application/json');
+                x.send(JSON.stringify(window.__TEST_RESULTS__));
+            } catch (e) {}
+        }
+        document.body.setAttribute('data-test-passed', this.passed);
+        document.body.setAttribute('data-test-failed', this.failed);
+        document.body.setAttribute('data-test-total', this.passed + this.failed);
+
+        // (Removed) sync XHR result report: under file:// it could hang the
+        // main thread indefinitely, wedging every later ExecuteScript call.
+        // The headless runner reads results from the DOM directly — no
+        // transport needed.
+    }
+};
+
+// Shortcuts
+function describe(name, fn) { testRunner.describe(name, fn); }
+function it(name, fn) { testRunner.it(name, fn); }
+function beforeEach(fn) { testRunner.beforeEach(fn); }
+function afterEach(fn) { testRunner.afterEach(fn); }
+
+// Assertions
+var assert = {
+    equal: function(actual, expected, msg) {
+        if (actual !== expected) {
+            throw new Error((msg || '') + ' expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+        }
+    },
+    notEqual: function(actual, expected, msg) {
+        if (actual === expected) {
+            throw new Error((msg || '') + ' expected not ' + JSON.stringify(expected));
+        }
+    },
+    ok: function(value, msg) {
+        if (!value) throw new Error((msg || '') + ' expected truthy, got ' + JSON.stringify(value));
+    },
+    fail: function(msg) {
+        throw new Error(msg || 'assert.fail()');
+    },
+    throws: function(fn, msg) {
+        var threw = false;
+        try { fn(); } catch(e) { threw = true; }
+        if (!threw) throw new Error((msg || '') + ' expected function to throw');
+    },
+    isNull: function(value, msg) {
+        if (value !== null) throw new Error((msg || '') + ' expected null, got ' + JSON.stringify(value));
+    },
+    contains: function(haystack, needle, msg) {
+        if (haystack.indexOf(needle) === -1) {
+            throw new Error((msg || '') + ' expected string to contain ' + JSON.stringify(needle));
+        }
+    },
+    notContains: function(haystack, needle, msg) {
+        if (haystack.indexOf(needle) !== -1) {
+            throw new Error((msg || '') + ' expected string to NOT contain ' + JSON.stringify(needle));
+        }
+    }
+};
+
+// ============= Test DOM Setup =============
+function setupTestDOM() {
+    document.body.innerHTML += '<div id="window-container"></div>';
+}
+
+function cleanupTestDOM() {
+    var c = document.getElementById('window-container');
+    if (c) c.innerHTML = '';
+    // Also clean up any windows outside container
+    var wins = document.querySelectorAll('.window');
+    wins.forEach(function(w) { w.remove(); });
+}
+</script>
+
+<!-- Initialize resultsEl BEFORE test scripts run -->
+<script>
+testRunner.resultsEl = document.getElementById('results');
+
+window.__DESKTOP_MIRROR_THEME__ = '';
+// Global test safety: prevent real navigation from test container links
+document.addEventListener('click', function(e) {
+    var a = e.target.closest('#__test-container a[href]');
+    if (!a) return;
+    var href = a.getAttribute('href');
+    if (!href) return;
+    // Block external URLs (the ones we test with)
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+}, true);
+</script>
+
+<!-- i18n first (defines _) — all modules depend on it -->
+<script src="../../files/htdocs/js/i18n.js"></script>
+<!-- Load shell.js namespace first -->
+<script src="../../files/htdocs/js/shell.js"></script>
+<!-- Load modules (WM will be overridden below for test safety) -->
+<script src="../../files/htdocs/js/wm.js"></script>
+<script src="../../files/htdocs/js/iframe-bridge.js"></script>
+<script src="../../files/htdocs/js/taskbar.js"></script>
+<script src="../../files/htdocs/js/startmenu.js"></script>
+<script src="../../files/htdocs/js/desktop.js"></script>
+<script src="../../files/htdocs/js/mobile.js"></script>
+<script src="../../files/htdocs/js/widget.js"></script>
+<script src="../../files/htdocs/js/widgets/clock.js"></script>
+<script src="../../files/htdocs/js/widgets/stickynote.js"></script>
+<script src="../../files/htdocs/js/widgets/system-info.js"></script>
+<script src="../../files/htdocs/js/widgets/net-traffic.js"></script>
+<script src="../../files/htdocs/js/theme-config.js"></script>
+<script src="../../files/htdocs/js/panel-helper.js"></script>
+<script src="../../files/htdocs/js/themesettings.js"></script>
+<script src="../../files/htdocs/js/tray.js"></script>
+
+<!-- Test safety: stub WM.open to use about:blank, prevent network requests -->
+<script>
+(function() {
+    var _origOpen = WM.open;
+    WM.open = function(url, title, icon) {
+        // Use about:blank so no real network requests happen during tests
+        var id = _origOpen.call(WM, 'about:blank', title, icon);
+        // Store the intended URL for assertions
+        if (LuCIDesktop.windows[id]) {
+            LuCIDesktop.windows[id].url = url;
+        }
+        return id;
+    };
+    // Also override getEmbedUrl for tests that check it directly
+    var _origGetEmbed = WM.getEmbedUrl;
+    // keep getEmbedUrl working normally for tests
+})();
+</script>
+
+<!-- Test files -->
+<script src="i18n.test.js"></script>
+<script src="wm.test.js"></script>
+<script src="iframe-bridge.test.js"></script>
+<script src="taskbar.test.js"></script>
+<script src="startmenu.test.js"></script>
+<script src="widget.test.js"></script>
+<script src="widget-api.test.js"></script>
+<script src="widget-async.test.js"></script>
+<script src="system-info.test.js"></script>
+<script src="net-traffic.test.js"></script>
+<script src="theme-config.test.js"></script>
+<script src="shell.test.js"></script>
+<script src="tray.test.js"></script>
+<script src="theme-settings.test.js"></script>
+<script src="wallpaper-preview.test.js"></script>
+<script src="features.test.js"></script>
+<script src="desktop.test.js"></script>
+<script src="stickynote.test.js"></script>
+<script src="mobile.test.js"></script>
+<script src="shell-app.test.js"></script>
+
+<!-- Run tests after all scripts loaded -->
+<script>
+testRunner.resultsEl = document.getElementById('results');
+window.addEventListener('DOMContentLoaded', function() {
+    // All tests are registered (they're in IIFEs); run the queue now
+    testRunner.run();
+});
+</script>
+</body>
+</html>

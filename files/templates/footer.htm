@@ -1,0 +1,87 @@
+<%#
+    Desktop Theme - Footer
+    Copyright 2026 DMKLIGHT
+    Licensed under the Apache License v2.0
+
+    Dual-mode: ?embed=1 → minimal close; otherwise → close shell + boot JS
+-%>
+
+<%
+    local ver = require "luci.version"
+    local http = require "luci.http"
+    local disp = require "luci.dispatcher"
+    local is_embedded = (http.formvalue("embed") or "") == "1"
+    -- Server-side mobile verdict (authoritative for isMobile(); the JS
+    -- side only falls back to viewport/touch heuristics when this is
+    -- absent, e.g. embed mode or dev). Matches phones/tablets — desktop
+    -- UA browsers with touch screens (touch laptops, all-in-ones) stay
+    -- desktop even though they match (pointer: coarse).
+    local _ua = (http.getenv("HTTP_USER_AGENT") or ""):lower()
+    local is_mobile_ua =
+        (_ua:find("android") or _ua:find("iphone") or _ua:find("ipod") or
+         _ua:find("ipad") or _ua:find("mobile") or _ua:find("windows phone") or
+         _ua:find("opera mini")) ~= nil
+    -- Direct visit to a non-landing page (already authenticated): render
+    -- the shell AND auto-open that path as an app window. Desktop and
+    -- mobile alike. Landing page → no boot app. Use the ORIGINAL request
+    -- path (context.request): context.path gets rewritten by the
+    -- dispatcher's root→dashboard redirect, so on a real landing-page
+    -- visit context.path is non-empty while context.request is empty.
+    local req_path = disp.context.request or {}
+    local boot_app = ""
+    if not is_embedded and luci.dispatcher.context.authsession and #req_path > 0 then
+        boot_app = "/cgi-bin/luci/" .. table.concat(req_path, "/")
+    end
+%>
+
+<% if not is_embedded then %>
+    <!-- ===== DESKTOP SHELL MODE ===== -->
+    </div><!-- close luci-content-wrapper -->
+    <footer style="display:none;">
+        Powered by <%= ver.luciname %> (<%= ver.luciversion %>)
+    </footer>
+    <script>
+        var luciLocation = <%= luci.http.write_json(luci.dispatcher.context.path) %>;
+        window.__DESKTOP_THEME_VERSION__ = '0.1.0';
+        window.__IS_MOBILE__ = <%= is_mobile_ua and "true" or "false" %>;
+        window.__LUCI_RUNTIME__ = 'lua';
+        window.__DESKTOP_BOOT_APP__ = <%= boot_app == "" and "null" or luci.http.write_json(boot_app) %>;
+        // Boot the desktop shell after DOM is ready
+        if (window.LuCIDesktop && window.LuCIDesktop.boot) {
+            LuCIDesktop.boot();
+        }
+        // Clean up controller output: stop XHR polling (content stays hidden)
+        var wrapper = document.getElementById('luci-content-wrapper');
+        if (wrapper) {
+            // Stop XHR polling from the controller page (don't remove DOM —
+            // the controller JS may need its elements for callbacks)
+            if (window.XHR && XHR.halt) XHR.halt();
+        }
+    </script>
+<% else %>
+    <!-- ===== EMBEDDED MODE ===== -->
+    </div></div></div></div><!-- close .container, #maincontent, .main-right, .main -->
+    <script>
+        var luciLocation = <%= luci.http.write_json(luci.dispatcher.context.path) %>;
+        // Argon hides <legend> and creates <span class="panel-title"> via its own JS.
+        // Since we don't load argon's JS, replicate that here.
+        document.querySelectorAll('.cbi-section > legend').forEach(function(el) {
+            if (!el.parentNode.querySelector('.panel-title')) {
+                var span = document.createElement('span');
+                span.className = 'panel-title';
+                span.textContent = el.textContent;
+                el.parentNode.insertBefore(span, el.nextSibling);
+            }
+        });
+        // Signal parent shell that this iframe page is loaded
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'iframe-loaded',
+                title: document.title || '',
+                url: window.location.href
+            }, '*');
+        }
+    </script>
+<% end %>
+</body>
+</html>
