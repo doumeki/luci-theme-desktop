@@ -1,0 +1,583 @@
+# LuCI Desktop Theme — Simplified Chinese Translation
+# Copyright 2026 DMKLIGHT
+#
+msgid "CPU usage may be inaccurate on this build"
+msgstr "此固件上 CPU 占用率可能不准"
+msgid "Do not show again"
+msgstr "不再提醒"
+
+msgid "Missing luci-lua-runtime — install to enable theme features"
+msgstr "缺少 luci-lua-runtime — 安装后主题功能可用"
+
+msgid "Max instances warning"
+msgstr "实例数量上限提示"
+
+msgid "Online wallpaper unavailable (curl missing)"
+msgstr "在线壁纸不可用（缺少 curl）"
+msgid "Physical RAM shown as estimate (dmidecode missing)"
+msgstr "物理内存显示为估算值（缺少 dmidecode）"
+msgid "Picsum unreachable"
+msgstr "Picsum 无法访问"
+
+msgid "Platform compatibility"
+msgstr "平台兼容性提示"
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "App"
+msgstr "色系"
+
+msgid "Colors"
+msgstr "颜色"
+
+msgid "Icons"
+msgstr "图标"
+
+msgid "Login"
+msgstr "登录"
+
+msgid "Hide background at 0% opacity"
+msgstr "透明度 0% 时隐藏背景"
+
+# theme-config.js — field labels
+msgid "Platform compatibility warnings"
+msgstr "平台兼容性警告"
+
+msgid "Titlebar (active)"
+msgstr "标题栏（活动）"
+
+msgid "Titlebar (inactive)"
+msgstr "标题栏（非活动）"
+
+msgid "Titlebar Opacity"
+msgstr "标题栏透明度"
+
+msgid "Taskbar"
+msgstr "任务栏"
+
+msgid "Taskbar Opacity"
+msgstr "任务栏透明度"
+
+msgid "Taskbar Btn (active)"
+msgstr "任务栏按钮（活动）"
+
+msgid "Start Menu"
+msgstr "开始菜单"
+
+msgid "Start Menu Opacity"
+msgstr "开始菜单透明度"
+
+msgid "Menu Selected"
+msgstr "菜单选中项"
+
+msgid "Dark Mode"
+msgstr "深色模式"
+
+msgid "App Primary"
+msgstr "应用主色"
+
+msgid "App Primary (dark)"
+msgstr "应用主色（暗色）"
+
+msgid "Desktop Wallpaper"
+msgstr "桌面壁纸"
+
+msgid "Gradient"
+msgstr "渐变"
+
+msgid "Built-in"
+msgstr "内置"
+
+msgid "Bing Daily"
+msgstr "必应每日"
+
+msgid "Picsum Photos"
+msgstr "Picsum 照片"
+
+msgid "Login Wallpaper"
+msgstr "登录页壁纸"
+
+msgid "Desktop Font Size"
+msgstr "桌面字体大小"
+
+msgid "Desktop Font Color"
+msgstr "桌面字体颜色"
+
+msgid "Bold"
+msgstr "粗体"
+
+msgid "Label Glow"
+msgstr "标签发光"
+
+msgid "Icon Opacity"
+msgstr "图标透明度"
+
+msgid "Icon Background"
+msgstr "图标背景"
+
+msgid "Menu Font Size"
+msgstr "菜单字体大小"
+
+msgid "Menu Font Color"
+msgstr "菜单字体颜色"
+
+msgid "Content Zoom"
+msgstr "内容缩放"
+
+msgid "Bg Base"
+msgstr "背景底色"
+
+msgid "Bg Glow"
+msgstr "背景光晕"
+
+msgid "Glow X"
+msgstr "光晕 X"
+
+msgid "Glow Y"
+msgstr "光晕 Y"
+
+msgid "Spread"
+msgstr "扩散"
+
+msgid "Angle"
+msgstr "角度"
+
+msgid "Menu Hover"
+msgstr "菜单悬停切换"
+
+msgid "Auto Refresh"
+msgstr "自动刷新"
+
+msgid "Picsum Auto Refresh"
+msgstr "登录刷新"
+
+# theme-config.js — layout section labels
+msgid "Titlebar"
+msgstr "标题栏"
+
+msgid "Desktop"
+msgstr "桌面"
+
+msgid "Menu"
+msgstr "菜单"
+
+# themesettings.js
+msgid "Apply"
+msgstr "应用"
+
+msgid "Apply *"
+msgstr "应用 *"
+
+msgid "Opacity"
+msgstr "透明度"
+
+msgid "Manage"
+msgstr "管理"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Fonts"
+msgstr "字体"
+
+msgid "Bg"
+msgstr "背景"
+
+msgid "Theme"
+msgstr "主题"
+
+msgid "Save to Built-in"
+msgstr "保存到内置"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "then refresh"
+msgstr "然后刷新页面"
+
+msgid "Theme Settings"
+msgstr "主题设置"
+
+msgid "OK"
+msgstr "确定"
+
+msgid "Defaults"
+msgstr "默认值"
+
+msgid "Diagnostics"
+msgstr "诊断信息"
+
+msgid "Diagnostics copied"
+msgstr "诊断信息已复制"
+
+msgid "Saved"
+msgstr "已保存"
+
+msgid "Refresh failed (server error)"
+msgstr "刷新失败（服务器错误）"
+
+msgid "Picsum unreachable, showing cached image"
+msgstr "Picsum 不可达，显示缓存图片"
+
+msgid "Network error, check connection"
+msgstr "网络错误，请检查连接"
+
+msgid "Downloading preview…"
+msgstr "正在下载预览…"
+
+msgid "Preview ready"
+msgstr "预览已就绪"
+
+msgid "Preview download failed"
+msgstr "预览下载失败"
+
+msgid "Saved: "
+msgstr "已保存: "
+
+msgid "Error"
+msgstr "错误"
+
+msgid "Already in Built-in: "
+msgstr "已在内置中: "
+
+msgid "Wallpaper refresh failed"
+msgstr "壁纸刷新失败"
+
+msgid "Wallpaper saved to built-in"
+msgstr "壁纸已保存到内置图库"
+
+msgid "✓ Saved"
+msgstr "✓ 已保存"
+
+# widget.js
+msgid "Desktop Widgets"
+msgstr "桌面组件"
+
+msgid "No widgets registered."
+msgstr "没有注册的组件。"
+
+msgid "Click-through"
+msgstr "点击穿透"
+
+msgid "Close"
+msgstr "关闭"
+
+msgid "Permanently delete all content in this note"
+msgstr "永久删除此便签中的所有内容"
+
+msgid "Clear"
+msgstr "清空"
+
+msgid "Clear data"
+msgstr "清空数据"
+
+msgid "PERMANENTLY DELETE all content in "
+msgstr "永久删除 "
+
+msgid "?\n\nThis cannot be undone."
+msgstr " 中的所有内容？\n\n此操作不可撤销。"
+
+msgid "Max "
+msgstr "已达最大实例数 "
+
+msgid " instances of "
+msgstr "："
+
+msgid "Widget requires an id"
+msgstr "组件需要 id"
+
+msgid "Widget requires a render function"
+msgstr "组件需要 render 函数"
+
+msgid "Widget \""
+msgstr "组件 \""
+
+msgid "\" already registered"
+msgstr "\" 已注册"
+
+msgid "\" not registered"
+msgstr "\" 未注册"
+
+# wallpaper-settings.js
+msgid "Wallpapers"
+msgstr "壁纸管理"
+
+msgid "Browse"
+msgstr "浏览"
+
+msgid "Upload"
+msgstr "上传"
+
+msgid "Check all"
+msgstr "全选"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Select a file"
+msgstr "选择一个文件"
+
+msgid "Uploading..."
+msgstr "上传中..."
+
+msgid "Done: "
+msgstr "完成: "
+
+msgid "Failed"
+msgstr "失败"
+
+msgid "Loading..."
+msgstr "加载中..."
+
+msgid "No images"
+msgstr "没有图片"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "Include in wallpaper rotation"
+msgstr "包含在壁纸轮播中"
+
+msgid "Delete "
+msgstr "删除 "
+
+msgid "?"
+msgstr "？"
+
+msgid "Error loading files"
+msgstr "加载文件出错"
+
+msgid "Click anywhere to close"
+msgstr "点击任意位置关闭"
+
+# desktop.js
+msgid "Status"
+msgstr "状态"
+
+msgid "Terminal"
+msgstr "终端"
+
+msgid "System"
+msgstr "系统"
+
+msgid "Firewall"
+msgstr "防火墙"
+
+msgid "Open"
+msgstr "打开"
+
+msgid "Hide"
+msgstr "隐藏"
+
+msgid "Install"
+msgstr "安装"
+
+msgid "Install failed"
+msgstr "安装失败"
+
+msgid "Installing Terminal…"
+msgstr "正在安装终端…"
+
+msgid "Not installed"
+msgstr "未安装"
+
+msgid "Hide this icon?"
+msgstr "隐藏此图标？"
+
+msgid "Rename"
+msgstr "重命名"
+
+msgid "Unpin"
+msgstr "取消固定"
+
+msgid "New name:"
+msgstr "新名称："
+
+msgid "Widgets"
+msgstr "组件"
+
+msgid "Theme settings loading..."
+msgstr "主题设置加载中..."
+
+# wm.js
+msgid "Untitled"
+msgstr "无标题"
+
+msgid "Applying…"
+msgstr "正在应用…"
+
+msgid "Minimize"
+msgstr "最小化"
+
+msgid "Maximize"
+msgstr "最大化"
+
+# startmenu.js
+msgid "No menu items"
+msgstr "没有菜单项"
+
+msgid "Search..."
+msgstr "搜索..."
+
+msgid "Desktop Theme v"
+msgstr "Desktop 主题 v"
+
+msgid "Exit"
+msgstr "退出"
+
+msgid "Logout"
+msgstr "退出登录"
+
+msgid "Are you sure you want to logout?"
+msgstr "确定要退出吗？"
+
+msgid "Pin to Desktop"
+msgstr "固定到桌面"
+
+msgid "Desktop label:"
+msgstr "桌面标签："
+
+# taskbar.js
+msgid "Auto Refresh: ON"
+msgstr "自动刷新：开"
+
+msgid "Auto Refresh: OFF"
+msgstr "自动刷新：关"
+
+msgid "Window"
+msgstr "窗口"
+
+msgid "Unsaved Changes"
+msgstr "未保存的配置"
+
+msgid "No password set!"
+msgstr "未设置密码！"
+
+msgid "Go to password configuration..."
+msgstr "前往密码配置..."
+
+msgid "There is no password set on this router. Please configure a root password to protect the web interface."
+msgstr "路由器尚未设置密码。请配置 root 密码以保护 Web 界面。"
+
+msgid "Password"
+msgstr "密码"
+
+msgid "Please log in."
+msgstr "请登录。"
+
+msgid "Username"
+msgstr "用户名"
+
+msgid "Invalid username and/or password! Please try again."
+msgstr "用户名或密码错误！请重试。"
+
+msgid "Security"
+msgstr "安全"
+
+msgid "View"
+msgstr "查看"
+
+msgid "Set password"
+msgstr "设置密码"
+
+msgid "Configuration"
+msgstr "配置"
+
+msgid "Reverted"
+msgstr "已放弃"
+
+# widgets/stickynote.js
+msgid "Yellow"
+msgstr "黄色"
+
+msgid "Sticky Note"
+msgstr "便签"
+
+msgid "Coral"
+msgstr "珊瑚色"
+
+msgid "Green"
+msgstr "绿色"
+
+msgid "Blue"
+msgstr "蓝色"
+
+msgid "Purple"
+msgstr "紫色"
+
+msgid "Pink"
+msgstr "粉色"
+
+msgid "White"
+msgstr "白色"
+
+msgid "Sticky "
+msgstr "便签 "
+
+# widgets/clock.js
+msgid "Analog"
+msgstr "指针"
+
+msgid "Desktop Clock"
+msgstr "桌面时钟"
+
+msgid "Digital"
+msgstr "数字"
+
+# widgets/system-info.js
+msgid "CPU"
+msgstr "处理器"
+
+msgid "System Info"
+msgstr "系统信息"
+
+msgid "Mem"
+msgstr "内存"
+
+msgid "Temp"
+msgstr "温度"
+
+msgid "Show temperature"
+msgstr "显示温度"
+
+msgid "Accent color"
+msgstr "强调色"
+
+msgid "Font color"
+msgstr "字体颜色"
+
+msgid "Card background"
+msgstr "卡片背景"
+
+msgid "Refresh interval (s)"
+msgstr "刷新间隔（秒）"
+
+msgid "Resize"
+msgstr "调整大小"
+
+msgid "Up"
+msgstr "运行"
+
+msgid "d "
+msgstr "天 "
+
+msgid "h"
+msgstr "时"
+
+# widgets/net-traffic.js
+msgid "Network Traffic"
+msgstr "网络流量"
+
+msgid "Interface"
+msgstr "接口"
+
+msgid "Download"
+msgstr "下载"
+
+# taskbar.js
+msgid "Tray item \""
+msgstr "托盘项 \""
+
+msgid "Tray item requires an id"
+msgstr "托盘项需要 id"
+

@@ -1,0 +1,770 @@
+{#
+    Desktop Theme - Header (ucode-native)
+    Copyright 2026 DMKLIGHT
+    Licensed under the Apache License v2.0
+
+    Dual-mode: ?embed=1 → minimal chrome; otherwise → full desktop shell
+    Ported from files/templates/header.htm (Lua) — keep both in sync.
+-#}
+
+{%
+    import { readfile, access, glob, basename, writefile } from 'fs';
+    import { cursor } from 'uci';
+    import { getuid, getspnam } from 'luci.core';
+
+    let uci = cursor();
+
+    const boardinfo = ubus.call("system", "board");
+    let request_path = ctx.request_path ?? [];
+    let category = request_path[0] ?? '';
+
+    // Embed mode detection. Only an explicit ?embed=1 (WM app windows) or
+    // an unauthenticated visit render the page embedded. Direct navigation
+    // (bookmark, URL bar) to any page — DESKTOP or MOBILE — gets the full
+    // shell, and a boot-app URL is injected below so the front end opens
+    // the requested page as an app window.
+    let is_embedded = (http.formvalue("embed") ?? "") == "1";
+
+    // Not logged in → skip desktop shell, let LuCI render login form
+    if (!ctx.authsession && !is_embedded)
+        is_embedded = true;
+
+    // Direct visit to a non-landing page (already authenticated): the
+    // shell renders and the front end auto-opens this path as an app
+    // window (e.g. visiting /admin/status/overview opens the status app).
+    let boot_app = "";
+    if (!is_embedded && ctx.authsession && length(request_path) > 0)
+        boot_app = "/cgi-bin/luci/" + join("/", request_path);
+
+    // Embedded theme: read individual UCI keys for app colors
+    let embed_dark_attr = '';
+    let embed_primary_light = '';
+    let embed_primary_dark = '';
+    let embed_dark_css = '';     // dark.css content (like argon)
+    if (is_embedded) {
+        if ((uci.get("desktop", "settings", "app_dark_mode") ?? "") == "1") {
+            embed_dark_attr = ' data-theme="dark"';
+            embed_dark_css = readfile('/www/luci-static/desktop/css/dark.css') ?? '';
+        }
+        embed_primary_light = uci.get("desktop", "settings", "app_primary_color") ?? '';
+        embed_primary_dark  = uci.get("desktop", "settings", "app_primary_color_dark") ?? '';
+    }
+
+    // No-password security warning (argon master convention: getuid() +
+    // getspnam() check; show an alert when root has no password set)
+    let no_pw = (getuid() == 0 && getspnam('root')?.pwdp === '');
+    let can_admin = dispatcher.lookup && dispatcher.lookup("admin/system/admin");
+
+    // Static resource version: read version.txt written by postinst.
+    // Without a query version browsers cache theme JS/CSS indefinitely —
+    // a stale iframe-bridge.js survives package upgrades (e.g. the old
+    // capture-phase tab-click interceptor that killed tab switching).
+    // Every install bumps version.txt, so all asset URLs change and the
+    // browser is forced to refetch.
+    // NOTE: ucode has no string .trim() — postinst writes the file
+    // without a trailing newline; sprintf() coerces readfile's blob to a
+    // string (readfile returns a blob, not a string, on this ucode).
+    let theme_ver = sprintf("%s", readfile('/www/luci-static/desktop/version.txt') || '0');
+
+    // send as HTML5
+    http.prepare_content("text/html; charset=UTF-8");
+
+    // ===== Menu JSON for the start menu (LuCIMenuData format) =====
+    function sorted_children(node) {
+        let items = [];
+        for (let name, child in node.children ?? {}) {
+            if (child.satisfied == false || !child.title || child.title == "")
+                continue;
+            push(items, { name: name, node: child });
+        }
+        sort(items, (a, b) => (a.node.order ?? 100) - (b.node.order ?? 100));
+        return items;
+    }
+
+    function tree_url(cat, parent_name, child_name) {
+        if (child_name) return dispatcher.build_url(cat, parent_name, child_name);
+        if (parent_name) return dispatcher.build_url(cat, parent_name);
+        return null;
+    }
+
+    function build_menu_json() {
+        let tree = dispatcher.menu_json();
+        // Root page (login redirect lands on /cgi-bin/luci/ → empty
+        // request path, category lookup misses). Flattening the whole
+        // tree degenerates the menu into one flat "admin" category with
+        // every page as a direct link (logout included — its filter only
+        // runs on the outer loop). Drill into the single top-level node
+        // (normally "admin"), mirroring compat.lua render_lua. cat_name
+        // follows the drill-in so generated URLs keep the admin segment.
+        let cat_node = tree.children?.[category];
+        let cat_name = category;
+        if (!cat_node) {
+            let top = sorted_children(tree);
+            if (length(top) == 1) {
+                cat_node = top[0].node;
+                cat_name = top[0].name;
+            } else {
+                cat_node = tree;
+            }
+        }
+        let menu = [];
+        for (let item in sorted_children(cat_node)) {
+            if (item.name == "logout") continue;
+            // admin/desktop is an API-only container (controller sets
+            // page.hidden = true). ucode dispatchers drop the hidden flag
+            // in build_pagetree, so it would surface here as a dead
+            // firstchild link (no page under it — the settings UI lives
+            // in the right-click/tray panel). Skip it explicitly.
+            if (item.name == "desktop") continue;
+            let entry = { title: striptags(_(item.node.title)), id: item.name };
+            let subs = [];
+            for (let si in sorted_children(item.node)) {
+                let href = tree_url(cat_name, item.name, si.name);
+                if (href)
+                    push(subs, { title: striptags(_(si.node.title)), href: href });
+            }
+            if (length(subs) > 0)
+                entry.subs = subs;
+            else {
+                // Skip empty categories (firstchild nodes with no children):
+                // they would surface as a dead start-menu entry — clicking
+                // opens a LuCI shell page with nothing under it. Leaf pages
+                // (view action, e.g. netwizard) keep their direct href.
+                let action = item.node.action ?? {};
+                if (action.type == "firstchild") continue;
+                let href = tree_url(cat_name, item.name, null);
+                if (href) entry.href = href;
+            }
+            push(menu, entry);
+        }
+        return menu;
+    }
+
+    // ===== Sibling tabs (embedded mode) =====
+    function render_sibling_tabs() {
+        if (length(request_path) < 4) return '';
+        let tree = dispatcher.menu_json();
+        let parent = tree;
+        for (let i = 0; i < length(request_path) - 1; i++) {
+            if (parent.children && parent.children[request_path[i]])
+                parent = parent.children[request_path[i]];
+            else
+                return '';
+        }
+        let current = request_path[length(request_path) - 1];
+        let siblings = [];
+        for (let name, child in parent.children ?? {}) {
+            if (child.satisfied != false && child.title && child.title != "")
+                push(siblings, { name: name, title: child.title, order: child.order ?? 100 });
+        }
+        if (length(siblings) <= 1) return '';
+        sort(siblings, (a, b) => a.order - b.order);
+        let segs = [];
+        for (let i = 0; i < length(request_path) - 1; i++)
+            push(segs, request_path[i]);
+        let parts = ['<ul class="tabs">'];
+        for (let sib in siblings) {
+            let active = (sib.name == current) ? ' active' : '';
+            let href = dispatcher.build_url(...segs, sib.name);
+            push(parts, sprintf('<li class="tabmenu-item-%s%s"><a href="%s">%s</a></li>',
+                sib.name, active, entityencode(href), striptags(_(sib.title))));
+        }
+        push(parts, '</ul>');
+        return join('', parts);
+    }
+
+    // ===== Theme list (switchable LuCI themes, start menu) =====
+    function build_theme_list() {
+        let themes_cfg = uci.get_all('luci', 'themes') ?? {};
+        let tnames = [];
+        for (let name in themes_cfg)
+            if (name != "Desktop" && substr(name, 0, 1) != ".")
+                push(tnames, name);
+        sort(tnames);
+        return tnames;
+    }
+
+    // ===== Desktop settings from UCI =====
+    let widget_json = {};
+    let pins_json = [];
+    let hidden_json = [];
+    let mobile_widget_json = {};
+    let mobile_pins_json = [];
+    let mobile_hidden_json = [];
+
+    // Read all individual UCI keys at once
+    // (.prefixed keys are uci cursor metadata — the Lua version's
+    // `uci show` output only contained real options)
+    let theme = {};
+    for (let k, v in uci.get_all('desktop', 'settings') ?? {})
+        if (k != "theme_color" && k != "config_version" && substr(k, 0, 1) != ".")
+            theme[k] = v ?? '';
+
+    try {
+        let w = uci.get('desktop', 'widgets', 'config');
+        if (w && w != '' && w != '{}') widget_json = json(w);
+    } catch (e) {}
+
+    try {
+        let p = uci.get('desktop', 'pins', 'items');
+        if (p && p != '' && p != '[]') pins_json = json(p);
+    } catch (e) {}
+
+    try {
+        let h = uci.get('desktop', 'hidden', 'items');
+        if (h && h != '' && h != '[]') hidden_json = json(h);
+    } catch (e) {}
+
+    // Mobile-view widget layout + pinned shortcuts + hidden icons —
+    // SEPARATE sections from the desktop ones (desktop/mobile layouts are
+    // incompatible by design). These were MISSING from the ucode template
+    // until 0.1.0-129: mobile widget saves went to UCI but the injected
+    // config had no mobile_widgets key, so loadConfig found nothing and a
+    // widget enabled on mobile VANISHED after F5 (real bug, fixed 2026-08).
+    try {
+        let mw = uci.get('desktop', 'mobile_widgets', 'config');
+        if (mw && mw != '' && mw != '{}') mobile_widget_json = json(mw);
+    } catch (e) {}
+
+    try {
+        let mp = uci.get('desktop', 'mobile_pins', 'items');
+        if (mp && mp != '' && mp != '[]') mobile_pins_json = json(mp);
+    } catch (e) {}
+
+    try {
+        let mh = uci.get('desktop', 'mobile_hidden', 'items');
+        if (mh && mh != '' && mh != '[]') mobile_hidden_json = json(mh);
+    } catch (e) {}
+
+    // Shared sticky-note content map (device-independent). Stored as a
+    // JSON file (keystroke-frequency writes; see controller). Fall back to
+    // the legacy UCI option so a pre-file install keeps its notes.
+    let stickysync_json = {};
+    try {
+        let ss = readfile('/etc/luci-theme-desktop/stickysync.json');
+        if (ss && ss != '' && ss != '{}') stickysync_json = json(ss);
+        else {
+            let su = uci.get('desktop', 'stickysync', 'config');
+            if (su && su != '' && su != '{}') stickysync_json = json(su);
+        }
+    } catch (e) {}
+
+    // Desktop wallpaper (server collects URLs, client picks randomly via crypto.getRandomValues)
+    let wp_mode = theme["desktop_wallpaper"] ?? "gradient";
+    let wp_url = null;
+    let wp_builtin = [ media + '/img/bg1.jpg' ];
+    let wp_builtin_disabled = [];
+
+    // Always scan builtin wallpapers (needed for switching to builtin in settings)
+    // Read disabled list from UCI: filter out images user has hidden
+    try {
+        let bd = uci.get('desktop', 'settings', 'builtin_disabled');
+        if (bd && bd != '' && bd != '[]') wp_builtin_disabled = json(bd);
+    } catch (e) {}
+
+    let disabled_map = {};
+    for (let d in wp_builtin_disabled)
+        disabled_map[d] = true;
+
+    let bg_dir = '/www' + media + '/background/';
+    let imgs = [];
+    // NOTE: ucode fs.glob() returns an ARRAY of paths (not an iterator
+    // function) on this LuCI/ucode version — iterate directly.
+    let bg_files = glob(bg_dir + '*');
+    if (bg_files)
+        for (let f in bg_files) {
+            let bn = basename(f);
+            if (!bn || !match(bn, /\.(jpg|jpeg|png|gif|webp)$/i))
+                continue;
+            if (!(bn in disabled_map))
+                push(imgs, media + '/background/' + bn);
+        }
+    if (length(imgs) > 0)
+        wp_builtin = imgs;
+
+    // bing/picsum: read cached wallpaper URL
+    if (wp_mode == "bing" || wp_mode == "picsum") {
+        let raw = readfile('/var/run/desktop_' + wp_mode + '.url');
+        if (raw != null) {
+            let picurl = replace(raw, /\s+/g, '');
+            if (picurl != '') wp_url = picurl;
+        }
+    }
+
+    // For bing/picsum: use confirmed desktop file if available (set by Apply/OK),
+    // otherwise fall back to cache file. This way Refresh/F5 won't change the desktop.
+    let wp_local_url = "";
+    // Ensure both bing and picsum have _desktop baselines (not just active mode)
+    for (let m in ['bing', 'picsum']) {
+        let desktop_img = '/www' + media + '/cache/wallpaper_' + m + '_desktop.jpg';
+        let cache_img = '/www' + media + '/cache/wallpaper_' + m + '.jpg';
+        if (!access(desktop_img)) {
+            let data = readfile(cache_img);
+            if (data != null) writefile(desktop_img, data);
+        }
+        if (m == wp_mode && access(desktop_img)) {
+            wp_local_url = media + '/cache/wallpaper_' + wp_mode + '_desktop.jpg';
+            wp_url = wp_local_url;
+        }
+    }
+%}
+<!DOCTYPE html>
+<html lang="{{ dispatcher.lang }}"{{ embed_dark_attr }}>
+<head>
+    <meta charset="utf-8">
+    <title>{{ striptags(dispatched?.title ? _(dispatched.title) : (boardinfo?.hostname ?? 'OpenWrt')) }}</title>
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"/>
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1a1a2e">
+
+<body class="lang_{{ dispatcher.lang }} shell{% if (ctx.authsession): %} logged-in{% endif %}">
+    <!-- Poll status indicator. Old LuCI apps (legacy interface
+         overview, ...) bind to $('xhr_poll_status').onclick and xhr.js
+         flips it while polling; without the element their inline JS dies
+         (TypeError on null) and polling never starts. Rendered in BOTH
+         shell and embedded mode (embedded pages run inside the WM iframe
+         — exactly where the legacy apps live); visually hidden by
+         embedded.css (#xhr_poll_status { display:none !important }). -->
+    <span id="xhr_poll_status" style="display:none"
+        onclick="XHR.running() ? XHR.halt() : XHR.run()">
+        <span class="label success" id="xhr_poll_status_on"><span class="mobile-hide">{{ _('Auto Refresh') }}</span> {{ _('on') }}</span>
+        <span class="label" id="xhr_poll_status_off" style="display:none"><span class="mobile-hide">{{ _('Auto Refresh') }}</span> {{ _('off') }}</span>
+    </span>
+{% if (!is_embedded): %}
+    <!-- ===== DESKTOP SHELL MODE ===== -->
+    <script>
+    /* LuCI redirects after form submit can lose embed=1, so this shell
+       page may be loaded inside an app iframe. Bounce back to embed mode
+       immediately — before the shell gets a chance to render.
+       The check parses the query: substring tests miss malformed URLs like
+       '?embed=1?tab.x=y' where 'embed' is present but not a clean param —
+       those pages must bounce too. */
+    (function() {
+        if (window.top === window) return;
+        var q = location.search;
+        var params = q.length > 1 ? q.substring(1).split('&') : [];
+        var kept = [];
+        var embedIsOne = false;
+        for (var i = 0; i < params.length; i++) {
+            var p = params[i];
+            if (!p) continue;
+            var eq = p.indexOf('=');
+            var key = eq === -1 ? p : p.substring(0, eq);
+            var val = eq === -1 ? '' : p.substring(eq + 1);
+            if (key === 'embed') { if (val === '1') embedIsOne = true; continue; }
+            if (p.indexOf('?') !== -1) continue; /* mangled leftover — drop */
+            kept.push(p);
+        }
+        if (embedIsOne) return;
+        location.replace(location.pathname +
+            (kept.length ? '?' + kept.join('&') + '&embed=1' : '?embed=1') +
+            location.hash);
+    })();
+    </script>
+    <link rel="stylesheet" href="{{ media }}/css/shell.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/window.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/taskbar.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/startmenu.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/widget.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/mobile.css?v={{ theme_ver }}">
+    <link rel="icon" type="image/png" href="{{ media }}/favorit.png">
+    <link rel="shortcut icon" href="{{ media }}/favicon.ico">
+
+    {# Apply argon-config settings as CSS variables #}
+    {% if (dispatched?.css): %}
+        <link rel="stylesheet" href="{{ resource }}/{{ dispatched.css }}">
+    {% endif %}
+    {% if (css): %}
+        <style title="text/css">{{ css }}</style>
+    {% endif %}
+    <!-- LuCI compat: format polyfill (both versions) + cbi.js (ucode only) -->
+    <script>
+    if(!String.prototype.format)String.prototype.format=function(){var a=[].slice.call(arguments);return this.replace(/%[sd%]/g,function(m){if(m==='%%')return'%';return a.length?a.shift():m;});};
+    if(!String.format)String.format=function(f){var a=[].slice.call(arguments,1);return f.replace(/%[sd%]/g,function(m){if(m==='%%')return'%';return a.length?a.shift():m;});};
+    </script>
+    {% if (dispatcher.menu_json): %}
+    <!-- LuCI JS translation dictionary (window.TR) — stock themes load this
+         before cbi.js; without it every client-side L() call falls back to
+         the English msgid (tab titles, buttons, table actions all English). -->
+    <script src="{{ dispatcher.build_url('admin/translations', dispatcher.lang) }}"></script>
+    <script src="{{ resource }}/cbi.js"></script>
+    {% endif %}
+    <script src="{{ resource }}/xhr.js"></script>
+    <script>
+        // Shell mode: prevent controller JS from XHR polling (content is hidden)
+        if (typeof XHR !== 'undefined') XHR.poll = function() {};
+    </script>
+</head>
+
+    <!-- Menu data for start menu -->
+    <script id="menu-data" type="application/json">
+    {{ replace(sprintf('%J', build_menu_json()), '/', '\\/') }}
+    </script>
+
+    <script id="theme-list" type="application/json">
+    {{ sprintf('%J', build_theme_list()) }}
+    </script>
+
+    <!-- Desktop settings from UCI -->
+    <script id="desktop-config" type="application/json">
+    {{ replace(sprintf('%J', {
+        widgets: widget_json,
+        pins: pins_json,
+        hidden_icons: hidden_json,
+        mobile_widgets: mobile_widget_json,
+        mobile_pins: mobile_pins_json,
+        mobile_hidden: mobile_hidden_json,
+        stickysync: stickysync_json,
+        theme: theme,
+        wallpaper: {
+            mode: wp_mode,
+            url: wp_url,
+            builtin: wp_builtin,
+            builtin_disabled: wp_builtin_disabled
+        }
+    }), '/', '\\/') }}
+    </script>
+
+    {% if (no_pw): %}
+    <!-- No-password security banner (argon master convention).
+         Session-level dismiss via click; re-appears after reload
+         until a root password is set. -->
+    <div id="desktop-pw-alert" onclick="this.style.display='none'">
+        <span>{{ _('No password set!') }}</span>
+        {% if (can_admin): %}
+        <a class="pw-alert-btn" href="{{ dispatcher.build_url("admin/system/admin") }}">{{ _('Go to password configuration...') }}</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Desktop background -->
+    <div id="desktop">
+        {% if (wp_local_url != ''): %}
+        <div id="desktop-wallpaper" style="background-image:url('{{ wp_local_url }}');background-size:cover;background-position:center"></div>
+        {% else %}
+        <div id="desktop-wallpaper"></div>
+        {% endif %}
+        <div id="desktop-icons"></div>
+    </div>
+
+    <!-- Window container (all iframe windows go here) -->
+    <div id="window-container"></div>
+
+    <!-- Start menu (hidden by default) -->
+    <div id="start-menu" style="display:none;" data-version="0.1.0"></div>
+
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <div id="taskbar-start">
+            <button id="btn-start" title="{{ _('Start') }}">●</button>
+        </div>
+        <div id="taskbar-windows"></div>
+        <button id="btn-home" title="{{ _('Home') }}" style="display:none;background:none;border:none;color:var(--taskbar-fg);font-size:15px;cursor:pointer;padding:0 10px;line-height:1;">&#8962;</button>
+        <div id="taskbar-tray">
+            <button id="btn-switcher" title="{{ _('Recent Apps') }}" style="background:none;border:none;color:var(--taskbar-fg);opacity:0.7;font-size:14px;cursor:pointer;padding:0 8px;line-height:1;">▣</button>
+            <button id="btn-notifications" title="Notifications" style="background:none;border:none;color:var(--taskbar-fg);opacity:0.5;font-size:12px;cursor:pointer;padding:0 6px;line-height:1;"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v7A1.5 1.5 0 0 1 12.5 11H7.3L4.1 13.7a.5.5 0 0 1-.8-.4V11h-.1A1.5 1.5 0 0 1 2 9.5v-7z"/><rect x="4.5" y="4" width="7" height="1" rx="0.5"/><rect x="4.5" y="6.2" width="7" height="1" rx="0.5"/><rect x="4.5" y="8.4" width="4.5" height="1" rx="0.5"/></svg><span id="btn-notifications-badge" class="notif-badge" hidden></span></button>
+            <span id="taskbar-clock"></span>
+            <button id="btn-auto-refresh" class="toggle-switch on" title="Auto Refresh"></button>
+            <button id="btn-show-desktop" title="{{ _('Show Desktop') }}">▌</button>
+        </div>
+    </div>
+
+    <!-- JS modules (load order matters) -->
+    <script src="{{ media }}/js/i18n.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/shell.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/wm.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/iframe-bridge.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/taskbar.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/startmenu.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/desktop.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/widget.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/widgets/clock.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/widgets/stickynote.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/widgets/system-info.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/widgets/net-traffic.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/tray.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/mobile.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/theme-config.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/panel-helper.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/themesettings.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/wallpaper-settings.js?v={{ theme_ver }}"></script>
+
+    <!-- Hide controller output (overview page content etc.) behind desktop -->
+    <div style="display:none;" id="luci-content-wrapper">
+
+    {% if (!ctx.authsession): %}
+    <noscript>
+        <div class="alert-message warning">
+            <strong>{{ _('JavaScript required!') }}</strong><br />
+            {{ _('You must enable JavaScript in your browser or LuCI will not work properly.') }}
+        </div>
+    </noscript>
+    {% endif %}
+
+{% else %}
+    <!-- ===== EMBEDDED MODE (iframe content) ===== -->
+    <link rel="stylesheet" href="{{ media }}/css/cascade.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/fonts.css?v={{ theme_ver }}">
+    {# Inject primary color overrides (both --primary and --dark-primary) #}
+    <style id="__desktop-primary-override">
+    {% if (embed_primary_light != ''): %}
+    :root { --primary: {{ embed_primary_light }}; }
+    {% endif %}
+    {% if (embed_dark_attr != ''): %}
+    [data-theme="dark"] {
+    {% if (embed_primary_dark != ''): %}
+    --primary: {{ embed_primary_dark }};--dark-primary: {{ embed_primary_dark }};
+    {% endif %}
+    }
+    {% endif %}
+    </style>
+    {# Inject dark.css inline with ID so it can be toggled at runtime #}
+    {% if (embed_dark_css != ''): %}
+    <style id="__desktop-dark-style">{{ embed_dark_css }}</style>
+    {% endif %}
+    {# Store dark.css content for runtime toggling (theme-change listener) #}
+    {% if (embed_dark_css != ''): %}
+    <script type="text/plain" id="__desktop-dark-data">{{ embed_dark_css }}</script>
+    {% endif %}
+    <link rel="stylesheet" href="{{ media }}/css/embedded.css?v={{ theme_ver }}">
+    <script src="{{ media }}/js/color_calc-argon.js?v={{ theme_ver }}"></script>
+    <link rel="icon" type="image/png" href="{{ media }}/favorit.png">
+    <link rel="shortcut icon" href="{{ media }}/favicon.ico">
+    {% if (dispatched?.css): %}
+        <link rel="stylesheet" href="{{ resource }}/{{ dispatched.css }}">
+    {% endif %}
+    {% if (css): %}
+        <style title="text/css">{{ css }}</style>
+    {% endif %}
+    <script src="{{ media }}/js/i18n.js?v={{ theme_ver }}"></script>
+    <!-- LuCI JS translation dictionary (window.TR) — stock themes load this
+         before cbi.js; without it every client-side L() call falls back to
+         the English msgid (tab titles, buttons, table actions all English). -->
+    <script src="{{ dispatcher.build_url('admin/translations', dispatcher.lang) }}"></script>
+    <!-- Shell tray "View" clicks (unsaved-changes toast) open the official
+         uci-changes modal here — /admin/uci/changes was removed in LuCI 26,
+         so the shell postMessages this type and we fetch fresh data first
+         (ui.changes is a baseclass singleton: init() only runs once, so we
+         fill .changes manually before displayChanges). -->
+    <script>
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'show-uci-changes') return;
+        if (typeof L === 'undefined') return;
+        L.require('ui').then(function(ui) {
+            L.require('uci').then(function(uci) {
+                uci.changes().then(function(c) {
+                    ui.changes.changes = c;
+                    ui.changes.displayChanges();
+                });
+            });
+        });
+    });
+    </script>
+    <!-- LuCI ucode compat: globals normally defined by cbi.js -->
+    <script>
+    if(!String.prototype.format)String.prototype.format=function(){var a=[].slice.call(arguments);return this.replace(/%[sd%]/g,function(m){if(m==='%%')return'%';return a.length?a.shift():m;});};
+    if(!String.format)String.format=function(f){var a=[].slice.call(arguments,1);return f.replace(/%[sd%]/g,function(m){if(m==='%%')return'%';return a.length?a.shift():m;});};
+    window.E=function(){return L.dom.create.apply(L.dom,arguments);};
+    window.findParent=function(node,sel){return L.dom.parent(node,sel);};
+    window.matchesElem=function(node,sel){return L.dom.matches(node,sel);};
+    window.isElem=function(e){return L.dom.elem(e);};
+    window.cbi_init=window.cbi_init||function(){};
+    window.N_=window.N_||function(s,p,n){return n===1?s:p;};
+    window._desktop_shell_mode=true;
+    /* Shell mode: suppress errors from hidden content view loading.
+       L.init renders the status overview into #luci-content-wrapper (hidden).
+       Missing DSL files, UCI resources etc. are expected on minimal systems. */
+    window.addEventListener('unhandledrejection',function(e){
+        if(e.reason&&e.reason.message&&/404|Resource not found/.test(e.reason.message)){e.preventDefault();}
+    });
+    /* Save & Apply feedback (Lua LuCI submits natively with no visual cue):
+       disable the button and show 'Applying…' while the server applies.
+       The native cbi apply_xhr fieldset ('Applying changes') renders in
+       the POST response — no custom overlay needed.
+       Only the real Save & Apply button (name="cbi.apply") is intercepted —
+       cbi Button options (cert download, diagnostics…) share the same
+       cbi-button-apply class but must submit natively. */
+    var _isApplyBtn = function(btn) {
+        return btn && btn.name === 'cbi.apply';
+    };
+    var _disableApplyBtn = function(form) {
+        var btn = form.querySelector ? form.querySelector('input[name="cbi.apply"]') : null;
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        btn.value = _('Applying…');
+    };
+    /* form.submit() drops the triggering button's name/value, so the
+       server would not see cbi.apply. Replay it as a hidden input.
+       `applyValue` is the ORIGINAL button value captured before the
+       button label was changed to 'Applying…' — replaying the mutated
+       label would send garbage to the server. Also force embed=1 into
+       the action so the POST response renders in embedded mode (not the
+       desktop shell, whose bounce script would abort the apply XHR). */
+    var _submitWithApply = function(form, btn, applyValue) {
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'cbi.apply';
+        hidden.value = applyValue || (btn && btn.value) || 'Save & Apply';
+        form.appendChild(hidden);
+        var action = form.getAttribute('action') || '';
+        if (action.indexOf('embed=') === -1) {
+            form.action = action + (action.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
+        }
+        form.submit();
+    };
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest ? e.target.closest('.cbi-button-apply') : null;
+        if (!btn || btn.disabled || !_isApplyBtn(btn)) return;
+        e.preventDefault();
+        var applyValue = btn.value; /* capture BEFORE _disableApplyBtn mutates it */
+        _disableApplyBtn(btn.form);
+        setTimeout(function() {
+            if (btn.form) _submitWithApply(btn.form, btn, applyValue);
+        }, 120);
+    }, true);
+    document.addEventListener('submit', function(e) {
+        var form = e.target;
+        if (e.defaultPrevented || !form || form.tagName !== 'FORM') return;
+        var sub = e.submitter;
+        // Notify the desktop shell immediately so it re-checks status
+        // (save/apply feedback without waiting for the poll)
+        try {
+            var msg = {type: 'desktop-app-save'};
+            var btnCls = e.submitter ? (e.submitter.className || '') : '';
+            if (/reset/.test(btnCls)) msg.submitType = 'revert';
+            else if (/save/.test(btnCls)) msg.submitType = 'save';
+            else if (/apply/.test(btnCls)) msg.submitType = 'apply';
+            // uci apply/revert pages: shell should close this window after submit
+            if (location.pathname.indexOf('/uci/') !== -1) msg.isUci = true;
+            window.parent.postMessage(msg, location.origin);
+        } catch(err) {}
+        // Fill empty redir fields so LuCI redirects back here after
+        // apply/revert instead of navigating to a blank URL
+        var redir = form.querySelector('input[name="redir"]');
+        if (redir && !redir.value) redir.value = window.location.href;
+        // Force embed=1 into the action for ANY submit from an embedded
+        // page (native submits like cbi 'Save' or uci 'Save & Apply').
+        // Without it the POST response renders the desktop shell, whose
+        // bounce script aborts the apply_xhr flow (KMS never restarts).
+        var action = form.getAttribute('action') || '';
+        if (action.indexOf('embed=') === -1) {
+            form.action = action + (action.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
+        }
+        if (!sub || !_isApplyBtn(sub)) return;
+        e.preventDefault();
+        var applyValue = sub.value; /* capture BEFORE _disableApplyBtn mutates it */
+        _disableApplyBtn(form);
+        setTimeout(function() {
+            _submitWithApply(form, sub, applyValue);
+        }, 120);
+    }, true);
+    </script>
+    <script src="{{ resource }}/xhr.js"></script>
+    <script>
+    /* LuCI compatibility: when luci-lua-runtime misses XHR statics
+       (XHR.poll/run/halt), the wrapper keeps them intact. */
+    (function() {
+        var _Orig = window.XHR;
+        if (!_Orig) return;
+        var W = function() { return new _Orig(); };
+        W.prototype = _Orig.prototype;
+        for (var k in _Orig) {
+            if (k !== 'prototype' && typeof W[k] === 'undefined') {
+                W[k] = _Orig[k];
+            }
+        }
+        window.XHR = W;
+    })();
+    </script>
+    <script>
+    /* Auto-refresh control: wrap XHR.run so parent can block/resume.
+       Default unblocked — page initializes normally. Parent sends command after load. */
+    (function(){
+        if (window.parent === window || typeof XHR === 'undefined') return;
+        var _origRun = XHR.run;
+        var _origHalt = XHR.halt;
+        var _blocked = false;
+        XHR.run = function() {
+            if (_blocked) return;
+            if (typeof _origRun === 'function') _origRun.call(XHR);
+        };
+        /* Page-local halt must only stop polling — NOT latch _blocked.
+           Old LuCI apps toggle via their own pause/resume
+           button; if halt latched the flag, resume would be dead until the
+           parent re-sends set-auto-refresh. Blocking is exclusively the
+           parent's job (taskbar switch → set-auto-refresh message). */
+        XHR.halt = function() {
+            if (typeof _origHalt === 'function') _origHalt.call(XHR);
+        };
+        window.addEventListener('message', function(e) {
+            if (!e.data || e.data.type !== 'set-auto-refresh') return;
+            if (e.data.on) {
+                _blocked = false;
+                _origRun.call(XHR);
+            } else {
+                _blocked = true;
+                _origHalt.call(XHR);
+            }
+        });
+    })();
+    /* Theme-change listener: parent broadcasts when theme settings are saved.
+       Dynamically injects/removes dark.css and updates primary colors live. */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'theme-changed') return;
+        var t = e.data;
+        // Toggle dark mode: set/remove data-theme + inject/remove dark.css
+        if (t.darkMode !== undefined) {
+            if (t.darkMode) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                // Inject dark.css if not already present
+                if (!document.getElementById('__desktop-dark-style')) {
+                    var darkData = document.getElementById('__desktop-dark-data');
+                    if (darkData) {
+                        var ds = document.createElement('style');
+                        ds.id = '__desktop-dark-style';
+                        ds.textContent = darkData.textContent;
+                        document.head.appendChild(ds);
+                    }
+                }
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                // Remove dark.css
+                var darkStyle = document.getElementById('__desktop-dark-style');
+                if (darkStyle) darkStyle.remove();
+            }
+        }
+        // Update primary color overrides
+        var css = '';
+        if (t.primary) css += ':root{--primary:' + t.primary + '}';
+        if (t.primaryDark) css += '[data-theme="dark"]{--primary:' + t.primaryDark + ';--dark-primary:' + t.primaryDark + '}';
+        var style = document.getElementById('__desktop-primary-override');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = '__desktop-primary-override';
+            document.head.appendChild(style);
+        }
+        style.textContent = css;
+    });
+    </script>
+    <script src="{{ resource }}/cbi.js"></script>
+</head>
+<body class="lang_{{ dispatcher.lang }} embedded{% if (ctx.authsession): %} logged-in{% endif %}">
+    <!-- LuCI 26 Unsaved-Changes indicator deliberately NOT mounted here:
+         the desktop tray already surfaces unsaved changes via its bell +
+         toast, so an in-app top-right indicator would be redundant. ui.js
+         showIndicator() silently gives up without the #indicators mount. -->
+    <div class="main"><div class="main-left"></div><div class="main-right"><div id="maincontent"><div class="container">
+    {% if (no_pw): %}
+    <!-- No-password security alert (argon master convention) -->
+    <div class="alert-message error">
+        <h4>{{ _('No password set!') }}</h4>
+        <p>{{ _('There is no password set on this router. Please configure a root password to protect the web interface.') }}</p>
+        {% if (can_admin): %}
+        <div class="right"><a class="btn" href="{{ dispatcher.build_url("admin/system/admin") }}">{{ _('Go to password configuration...') }}</a></div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {{ render_sibling_tabs() }}
+{% endif %}

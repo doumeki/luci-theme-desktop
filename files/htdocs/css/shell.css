@@ -1,0 +1,620 @@
+/* Desktop Theme - Shell CSS
+ *
+ * Desktop background, full-viewport layout, wallpaper,
+ * z-index layers, and base reset.
+ */
+
+/* ===== CSS Custom Properties ===== */
+:root {
+    /* Window chrome */
+    --win-titlebar-bg: #1a1a2e;
+    --win-titlebar-fg: #e0e0e0;
+    --win-titlebar-active-bg: #16213e;
+    --win-titlebar-height: 34px;
+    --win-border-radius: 8px;
+    --win-border: 1px solid rgba(255, 255, 255, 0.08);
+    --win-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --win-shadow-active: 0 12px 48px rgba(0, 0, 0, 0.6);
+    --win-body-bg: #f0f2f5;
+
+    /* Taskbar */
+    --taskbar-height: 44px;
+    --taskbar-bg: rgba(13, 13, 28, 0.94);
+    --taskbar-fg: #ccc;
+    --taskbar-blur: blur(12px);
+
+    /* Desktop */
+    --desktop-bg: #0d1117;
+    --accent-color: #5e72e4;
+    --icon-label-color: rgba(255, 255, 255, 0.85);
+    --icon-label-shadow: 0 0 1.4px rgba(0,0,0,0.56), 0 1px 2.1px rgba(0,0,0,0.35);
+    --icon-font-weight: 700;
+
+    /* Start menu */
+    --startmenu-bg: rgba(22, 22, 42, 0.97);
+    --startmenu-fg: #e0e0e0;
+    --startmenu-width: 420px;
+    --startmenu-height: 560px;
+    --startmenu-blur: blur(16px);
+
+    /* Context menu */
+    --contextmenu-bg: rgba(30, 30, 50, 0.96);
+    --contextmenu-fg: #e0e0e0;
+    --contextmenu-hover: rgba(255, 255, 255, 0.08);
+
+    /* Theme settings panel */
+    --theme-panel-bg: #1e1e30;
+    --theme-panel-fg: #ccc;
+    --theme-panel-muted: #999;
+    --theme-panel-border: rgba(255,255,255,0.08);
+    --theme-panel-input-bg: #333;
+    --theme-panel-input-border: #555;
+    --theme-panel-input-fg: #ccc;
+    --theme-panel-tab-active-bg: rgba(74,144,217,0.25);
+    --theme-panel-tab-active-fg: #fff;
+    --theme-panel-tab-inactive-fg: #888;
+    --theme-panel-section-label: #888;
+
+    /* Widget content. The background is split into an rgb triple +
+       alpha: the widget opacity slider writes --widget-bg-alpha, so it
+       controls the CARD BACKGROUND's opacity only (never the text —
+       text stays fully readable). --widget-bg stays as a plain fallback
+       for browsers without color-mix(). */
+    --widget-fg: rgba(255, 255, 255, 0.9);
+    --widget-bg-rgb: 10, 14, 20;
+    --widget-bg-alpha: 0.55;
+    --widget-bg: rgba(10, 14, 20, 0.55);
+    --widget-border: rgba(255, 255, 255, 0.08);
+    --widget-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    --widget-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.55);
+    /* Shadows split into position + color: widget.css re-composes them
+       with color-mix so the border/shadow fade together with the card
+       background (--widget-bg-alpha) — at alpha 0 nothing of the card
+       shell remains, only the text. */
+    --widget-shadow-pos: 0 2px 10px;
+    --widget-shadow-color: rgba(0, 0, 0, 0.45);
+    --widget-shadow-hover-pos: 0 8px 24px;
+    --widget-shadow-hover-color: rgba(0, 0, 0, 0.55);
+}
+
+/* ===== Light mode overrides ===== */
+html:not([data-theme="dark"]) {
+    --win-titlebar-bg: #e8e8ec;
+    --win-titlebar-fg: #333;
+    --win-titlebar-active-bg: #d0d0d8;
+    --taskbar-bg: rgba(240, 240, 245, 0.94);
+    --taskbar-fg: #333;
+    --desktop-bg: #e8eaed;
+    --icon-label-color: rgba(0, 0, 0, 0.75);
+    --icon-label-shadow: 0 0 1.4px rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.12);
+    --startmenu-bg: rgba(255, 255, 255, 0.97);
+    --startmenu-fg: #333;
+    --contextmenu-bg: rgba(255, 255, 255, 0.96);
+    --contextmenu-fg: #333;
+    --contextmenu-hover: rgba(0, 0, 0, 0.06);
+
+    /* Theme settings panel */
+    --theme-panel-bg: #f8f9fa;
+    --theme-panel-fg: #333;
+    --theme-panel-muted: #666;
+    --theme-panel-border: rgba(0,0,0,0.08);
+    --theme-panel-input-bg: #fff;
+    --theme-panel-input-border: #ccc;
+    --theme-panel-input-fg: #333;
+    --theme-panel-tab-active-bg: rgba(74,144,217,0.15);
+    --theme-panel-tab-active-fg: #333;
+    --theme-panel-tab-inactive-fg: #666;
+    --theme-panel-section-label: #777;
+
+    /* Widget content */
+    --widget-fg: rgba(0, 0, 0, 0.8);
+    --widget-bg-rgb: 255, 255, 255;
+    --widget-bg-alpha: 0.55;
+    --widget-bg: rgba(255, 255, 255, 0.55);
+    --widget-border: rgba(0, 0, 0, 0.08);
+    --widget-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    --widget-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.22);
+    --widget-shadow-pos: 0 2px 8px;
+    --widget-shadow-color: rgba(0, 0, 0, 0.12);
+    --widget-shadow-hover-pos: 0 8px 24px;
+    --widget-shadow-hover-color: rgba(0, 0, 0, 0.22);
+}
+
+/* ===== Reset ===== */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    background: var(--desktop-bg);
+    color: #e0e0e0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ===== Z-index stacking layers ===== */
+#desktop              { z-index: 0; }
+#desktop-icons        { z-index: 1; }
+#window-container     { z-index: 100; }
+.window               { z-index: auto; } /* managed by JS */
+#start-menu           { z-index: 500; }
+#taskbar              { z-index: 1000; }
+#desktop-context-menu { z-index: 2000; }
+
+/* ===== Desktop area ===== */
+#desktop {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    /* Gradient lives on parent — #desktop-wallpaper overlays transparently while image loads */
+    background: var(--desktop-wallpaper,
+        radial-gradient(ellipse at 30% 20%, #1a3a5c 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, #1a1a3e 0%, transparent 60%),
+        linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%));
+}
+
+/* Settings panel: hide gradient dots when showing remote wallpaper preview */
+.wp-remote #bg-glow-dot,
+.wp-remote #bg-handle-dot { display: none !important; }
+
+/* Fake download progress shimmer on preview */
+@keyframes wp-shimmer {
+    0%   { opacity: 0.4; }
+    50%  { opacity: 0.15; }
+    100% { opacity: 0.4; }
+}
+#wp-preview-img.wp-loading {
+    animation: wp-shimmer 0.8s ease-in-out infinite;
+}
+
+#desktop-wallpaper {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+}
+
+/* ===== Taskbar ===== */
+#taskbar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: var(--taskbar-height);
+    background: var(--taskbar-bg);
+    color: var(--taskbar-fg);
+    backdrop-filter: var(--taskbar-blur);
+    -webkit-backdrop-filter: var(--taskbar-blur);
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#taskbar-start {
+    flex-shrink: 0;
+    padding: 0 4px;
+}
+
+#btn-start {
+    width: 38px;
+    height: 34px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--taskbar-fg);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+#btn-start:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#taskbar-windows {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    gap: 2px;
+    padding: 0 4px;
+}
+
+.taskbar-window-btn {
+    height: 34px;
+    min-width: 40px;
+    max-width: 200px;
+    border: none;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--taskbar-fg);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 10px;
+    transition: background 0.15s;
+}
+.taskbar-window-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+.taskbar-window-btn.active {
+    background: var(--accent-btn, rgba(74, 144, 217, 0.35));
+    color: #fff;
+    box-shadow: inset 0 -2px 0 var(--accent-color, rgba(74, 144, 217, 0.8));
+}
+.taskbar-window-btn.minimized {
+    opacity: 0.5;
+}
+
+#taskbar-tray {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 8px;
+}
+
+#taskbar-clock {
+    font-size: 12px;
+    color: var(--taskbar-fg);
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: default;
+}
+#taskbar-clock:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+#btn-show-desktop {
+    width: 8px;
+    height: 34px;
+    border: none;
+    border-left: 1px solid rgba(255,255,255,0.15);
+    background: transparent;
+    color: var(--taskbar-fg);
+    cursor: pointer;
+    padding: 0 6px 0 4px;
+    font-size: 14px;
+    line-height: 34px;
+    transition: background 0.1s;
+    margin-left: 2px;
+}
+#btn-show-desktop:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== Auto-refresh toggle switch ===== */
+#btn-auto-refresh {
+    width: 34px; height: 18px;
+    border-radius: 9px;
+    border: none;
+    background: rgba(255,255,255,0.15);
+    cursor: pointer;
+    position: relative;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+#btn-auto-refresh.on {
+    background: rgba(0, 255, 4, 0.64);
+}
+#btn-auto-refresh::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: left 0.2s;
+}
+#btn-auto-refresh.on::after {
+    left: 18px;
+}
+
+/* ===== Tray items ===== */
+.tray-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 0.1s;
+    flex-shrink: 0;
+}
+.tray-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+.tray-item-icon {
+    pointer-events: none;
+}
+
+/* ===== Notification tray button ===== */
+#btn-notifications { position: relative; }
+#btn-notifications.has-changes {
+    opacity: 1;
+    color: #f0ad4e;
+}
+#btn-notifications.has-warning {
+    opacity: 1;
+    color: #e74c3c;
+}
+#btn-notifications:hover { opacity: 1; }
+
+/* Pending-changes count badge (Win10 style corner dot) */
+.notif-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e81123;   /* Win10 notification red */
+    color: #fff;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 10px;
+    text-align: center;
+    padding: 0 2px;
+    box-sizing: border-box;
+}
+.notif-badge[hidden] { display: none; }
+
+/* ===== Toast notifications (Win10/11 style) ===== */
+.desktop-toast {
+    position: fixed;
+    bottom: calc(var(--taskbar-height) + 12px);
+    right: 16px;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    color: #fff;
+    background: rgba(38, 40, 46, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    opacity: 0;
+    transform: translateX(48px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: auto;
+    cursor: pointer;
+}
+.desktop-toast.toast-visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+.desktop-toast.toast-hiding {
+    opacity: 0;
+    transform: translateX(48px);
+}
+.desktop-toast:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.desktop-toast.toast-info  { background: rgba(38, 40, 46, 0.97); }
+.desktop-toast.toast-warn  { background: rgba(90, 64, 12, 0.97); }
+.desktop-toast.toast-error { background: rgba(110, 30, 30, 0.97); }
+
+.toast-icon {
+    font-size: 24px;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
+/* ===== No-password security banner (argon master convention) ===== */
+#desktop-pw-alert {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3000;
+    background: #d9534f;
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.pw-alert-btn {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-weight: bold;
+    text-decoration: none;
+}
+.pw-alert-btn:hover { background: rgba(255, 255, 255, 0.3); }
+.toast-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.toast-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+}
+.toast-msg {
+    font-size: 13px;
+    line-height: 1.45;
+    word-wrap: break-word;
+}
+.toast-action-row { margin-top: 6px; }
+.toast-action {
+    padding: 4px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    background: transparent;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.toast-action:hover { background: rgba(255, 255, 255, 0.15); }
+.toast-close {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 22px; height: 22px; border: none; border-radius: 5px;
+    background: transparent; color: rgba(255,255,255,0.6);
+    font-size: 13px; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+}
+.toast-close:hover { background: rgba(255,255,255,0.15); }
+
+/* "Do not show again" — per-notice suppression checkbox (theme-level
+ * notices only; system warnings never render it) */
+.toast-snooze {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.75);
+    cursor: pointer;
+    user-select: none;
+}
+.toast-snooze input { cursor: pointer; }
+
+/* ===== Desktop icon grid ===== */
+#desktop-icons {
+    position: absolute;
+    inset: 0;
+    padding: 16px;
+}
+
+.desktop-icon {
+    position: absolute;
+    width: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.desktop-icon:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+.desktop-icon.selected {
+    background: rgba(74, 144, 217, 0.2);
+}
+
+.desktop-icon-img {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: var(--icon-bg, rgba(255,255,255,0.9));
+    border-radius: 10px;
+    opacity: var(--icon-opacity, 1);
+    color: var(--icon-font-color, #fff);
+}
+
+.desktop-icon-label {
+    font-size: var(--icon-font-size, 11px);
+    font-weight: var(--icon-font-weight, 400);
+    color: var(--icon-font-color, #fff);
+    text-align: center;
+    word-wrap: break-word;
+    max-width: 80px;
+    text-shadow: var(--icon-font-shadow, none);
+    pointer-events: none;
+    line-height: 1.4;
+}
+
+/* ===== Installable (missing component, e.g. Terminal without ttyd) ===== */
+.desktop-icon.installable .desktop-icon-img {
+    opacity: 0.45;
+    filter: grayscale(0.7);
+}
+.desktop-icon.installable .desktop-icon-label {
+    opacity: 0.75;
+}
+/* Corner "+" badge */
+.desktop-icon.installable .desktop-icon-img {
+    position: relative;
+}
+.install-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #2dce89;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    pointer-events: none;
+}
+
+/* ===== Right-click context menu ===== */
+#desktop-context-menu,
+.context-menu {
+    position: fixed;
+    min-width: 160px;
+    background: var(--contextmenu-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    padding: 4px;
+    z-index: 2000;
+    animation: ctx-in 0.1s ease-out;
+}
+@keyframes ctx-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.context-item {
+    padding: 7px 14px;
+    font-size: 12px;
+    color: var(--contextmenu-fg);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.1s;
+}
+.context-item:hover {
+    background: var(--contextmenu-hover);
+}
+.context-separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 4px 8px;
+}
+
+
+
+/* ===== Theme settings panel: light mode adapts via --theme-panel-* vars ===== */
+

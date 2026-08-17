@@ -1,0 +1,214 @@
+/* Desktop Theme — Embedded Overrides
+ *
+ * Mirror theme provides content styling (forms, tables, inputs).
+ * This file enforces structural consistency regardless of theme.
+ */
+
+body { padding: 8px 12px; }
+
+/* Remove sidebar spacing — there's no sidebar in embed mode */
+.main { display: block !important; }
+/* Fill the viewport: LuCI pages use html,body{height:100%} but .main is
+   natural-height — on short pages (system/firewall/etc.) the content
+   stops early and the rest of the iframe is blank (user report 2026-08-16:
+   "app 下面非常宽"). min-height:calc(100vh - body padding) stretches the
+   content container to the bottom so the page background fills the view. */
+.main { min-height: calc(100vh - 16px); }
+
+/* ttyd terminal page: the app iframe carries inline min-height:500px and
+   never fills the window — below it there is a large empty band (user
+   report 2026-08-16: "shell 输入框下面空白"). Make .main-right a flex
+   column so #view (and its iframe) flex-fill the remaining height after
+   the alert/tabs above — independent of whether the no-password alert is
+   present. */
+/* #view is only rendered by the ttyd terminal page (body carries no
+   node-specific class on LuCI 26 — it's "lang_zh-cn shell logged-in"),
+   so these selectors are scoped to #view alone. */
+/* ttyd terminal iframe height is fitted via JS
+   (IframeBridge.fitTtydIframe in onIframeLoad) — CSS :has()/flex were
+   tried but the embedded Firefox is too old for :has() and flex
+   collapses the iframe; JS sizing is reliable. */
+
+/* Node-list tables (third-party apps): long remarks (pw-remark) wrap
+   instead of spilling over the ping/tcping columns on narrow viewports
+   (full text visible, the cell grows in height). */
+.pw-remark {
+    white-space: normal !important;
+    word-break: break-all !important;
+    overflow-wrap: anywhere !important;
+    max-width: 45vw !important;
+    line-height: 1.3 !important;
+}
+/* Test-result columns (ping/tcping/urltest) must fit every real value
+   ("1000ms"=60px, "1000 ms"=63px, "2000 ms"=65px — measured in-cell)
+   without ellipsis or wrap. Width is a measured trade-off on node-list
+   tables whose rows are display:flex + flex-wrap:wrap: at 390px the LAST
+   test column wraps to line 2 once columns exceed ~70px (70px fits,
+   78px wraps). min+max pin the width so the flex line always fits. */
+td.pw-ping, td.pw-tcping, td.pw-urltest {
+    min-width: 4.375rem !important;
+    max-width: 4.375rem !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+}
+
+/* New-LuCI status overview "Port status" cards (OpenWrt 25.x luci-mod-status):
+   the port name (.ifacebox-head) renders left-aligned by default (old LuCI
+   centered it). Center the name — the zone-badge row is display:flex so
+   text-align has no effect there (user report 2026-08-17). */
+.ifacebox-head {
+    text-align: center !important;
+}
+
+/* Same cards, second layer: the grid stretches each column (1fr) but the
+   .ifacebox card itself is capped at 100px — cards hug the column's left
+   edge with a wide gap on the right ("第一个在最左边", user report
+   2026-08-17). Center each card in its column; !important beats the
+   inline margin:.25em. */
+.ifacebox {
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* Keep .main-left in layout flow (flex calc, adjacent selectors) */
+.main-left { width: 0 !important; min-width: 0 !important; overflow: hidden !important; visibility: hidden; }
+.main-right { margin-left: 0 !important; padding-left: 0 !important; width: 100% !important; max-width: 100% !important; }
+#maincontent { margin-left: 0 !important; }
+#maincontent > .container { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+
+.main > .loading { display: none !important; }
+
+/* Poll status indicator — old LuCI apps bind to it
+   ($('xhr_poll_status').onclick) and xhr.js flips its inline
+   display while polling, so the element MUST exist. The visual
+   on/off switch is redundant though: auto-refresh is driven by the
+   taskbar toggle (btn-auto-refresh → set-auto-refresh broadcast),
+   so keep the element but hide it permanently. !important is
+   required — xhr.js clears the inline display:none, which would
+   otherwise reveal the switch again. */
+#xhr_poll_status {
+    display: none !important;
+}
+
+/* Force horizontal tabs + fallback styling when mirror theme lacks tab CSS */
+ul.tabs {
+    display: flex !important; flex-direction: row !important; gap: 0 !important;
+    list-style: none; padding: 0; margin: 0 0 16px;
+    border-bottom: 2px solid #e0e0e0;
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+ul.tabs li {
+    display: inline-flex !important; float: none !important;
+    padding: 8px 16px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    font-size: 13px; color: #666;
+    flex-shrink: 0; white-space: nowrap;
+}
+ul.tabs li a { color: inherit; text-decoration: none; }
+ul.tabs li:hover { color: #333; border-bottom-color: #bbb; }
+ul.tabs li.active { color: var(--accent-color, #4a90d9); border-bottom-color: var(--accent-color, #4a90d9); font-weight: 600; }
+ul.tabs li.tabmenu-item- { color: inherit; }
+
+/* Thin scrollbar for tab bars (visible when tabs overflow) */
+.tabs::-webkit-scrollbar,
+.cbi-tabmenu::-webkit-scrollbar { height: 4px; }
+.tabs::-webkit-scrollbar-thumb,
+.cbi-tabmenu::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.15); border-radius: 2px;
+}
+.tabs, .cbi-tabmenu { scrollbar-width: thin; }
+
+/* LuCI 26 CBI tab panes: ui.js/cbi.js only toggle data-tab-active; the
+ * show/hide itself is CSS. argon 1.8.4's cascade.css predates this
+ * mechanism and has no rules for it, so every pane rendered visible and
+ * tab switching appeared dead. Rules mirror luci-base bootstrap's
+ * cascade.css.
+ */
+[data-tab-title] { height: 0; opacity: 0; overflow: hidden; }
+[data-tab-active="true"],
+.cbi-filebrowser.open { height: auto; opacity: 1; overflow: visible; transition: opacity .25s ease-in; }
+
+/* LuCI 26 modal (ui.js showModal): argon 1.8.4 predates it and has NO
+ * #modal_overlay / body.modal-overlay-active / .modal rules — without them
+ * the overlay renders as static content at the bottom of the page. These
+ * are the stock bootstrap cascade rules with fixed light values (argon
+ * defines none of the --background-color-* / --border-color-* variables).
+ */
+#modal_overlay {
+    position: fixed; top: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 900; overflow: auto;
+    transition: opacity .125s ease-in;
+    opacity: 0; visibility: hidden;
+}
+body.modal-overlay-active #modal_overlay { left: 0; right: 0; opacity: 1; visibility: visible; }
+body.modal-overlay-active { overflow: hidden; height: 100vh; }
+.modal {
+    width: 90%; min-height: 32px; max-width: 600px;
+    border-radius: 3px;
+    background: #fff;
+    border: 1px solid #d0d0d0;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+    min-width: 270px; margin: 5em auto; padding: 1em 1em .5em;
+}
+#modal_overlay > .modal.uci-dialog,
+#modal_overlay > .modal.cbi-modal { max-width: 900px; }
+
+/* Changes modal diff list (ui.js displayChanges) — stock themes style
+ * these; argon 1.8.4 has nothing for them either. */
+.uci-change-list {
+    max-height: 50vh; overflow: auto;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    margin: .8em 0;
+}
+.uci-change-list h5 {
+    margin: 1em 0 .4em; padding-top: .5em;
+    border-top: 1px solid #eee; font-size: 13px; color: #888;
+}
+.uci-change-list ins {
+    background: #e8f5e9; color: #2e7d32; text-decoration: none;
+    display: block; padding: 2px 6px; margin: 1px 0; border-radius: 2px;
+}
+.uci-change-list del {
+    background: #ffebee; color: #c62828; text-decoration: none;
+    display: block; padding: 2px 6px; margin: 1px 0; border-radius: 2px;
+}
+.uci-change-list var { font-style: normal; }
+.uci-change-legend { color: #888; font-size: 12px; }
+.uci-change-legend-label { display: inline-flex; align-items: center; margin-right: 12px; }
+.uci-change-legend-label ins, .uci-change-legend-label del { padding: 0 4px; margin: 0; display: inline; }
+
+/* LuCI 26 status-page progress bars (memory / storage / swap). argon's
+ * cascade.css styles .cbi-progressbar; desktop ships no such rules, so
+ * the bars rendered 0px high and transparent — "no memory data" on the
+ * status overview. Mirror argon's layout with desktop's palette. */
+.cbi-progressbar {
+  position: relative;
+  display: flex;
+  width: 100%;
+  font-size: 0.75rem;
+  background-color: #e9ecef;
+  border-radius: 0.5rem;
+  height: 1rem;
+  overflow: hidden;
+}
+.cbi-progressbar > div {
+  display: block;
+  position: absolute;
+  height: 100%;
+  background-color: var(--primary, #286d31);
+  border-radius: 0.5rem;
+  transition: width 0.3s;
+}
+.cbi-progressbar::after {
+  content: attr(title);
+  position: absolute;
+  font-size: 0.75rem;
+  color: #333;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  line-height: 1rem;
+  z-index: 2;
+}

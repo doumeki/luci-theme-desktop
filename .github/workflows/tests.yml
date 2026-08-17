@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Firefox (Mozilla official build)
+        run: |
+          wget -q "https://download.mozilla.org/?product=firefox-latest&os=linux64&lang=en-US" -O /tmp/firefox.tar.xz
+          sudo tar -xJf /tmp/firefox.tar.xz -C /opt
+          sudo ln -sf /opt/firefox/firefox /usr/local/bin/firefox
+          firefox --version
+
+      - name: Install geckodriver
+        run: |
+          wget -q "https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz" -O /tmp/geckodriver.tar.gz
+          tar -xzf /tmp/geckodriver.tar.gz -C /tmp
+          sudo mv /tmp/geckodriver /usr/local/bin/
+          geckodriver --version | head -1
+
+      - name: Run Level 1 tests (headless browser unit tests)
+        run: node tests/run-headless.js
