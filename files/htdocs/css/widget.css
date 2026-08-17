@@ -1,0 +1,389 @@
+/* Desktop Theme - Widget CSS */
+
+/* ===== Widget layer ===== */
+#widget-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none; /* layer itself doesn't block clicks */
+}
+
+/* ===== Widget instance ===== */
+.widget-instance {
+    position: absolute;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+}
+
+/* 0% opacity policy (per-widget option "Hide background at 0%"):
+ * opacity 0 means the card background alpha is 0 — the shell (background/
+ * border/shadow) fades with --widget-bg-alpha. The backdrop blur is NOT
+ * alpha-faded, so by default a 0% card leaves a frosted-glass chip.
+ * With the option on, the widget's render sets data-hide-bg="1" on its
+ * instance element and a 0% background also kills the blur: nothing but
+ * text remains. It is per-widget — system-info and net-traffic have
+ * their own toggle; pure-color widgets (sticky-note, clock face) have
+ * no backdrop-filter and are unaffected. data-opacity is mirrored by
+ * WM.setOpacity alongside --widget-bg-alpha. */
+.widget-instance[data-opacity="0"][data-hide-bg="1"] .widget-sysinfo,
+.widget-instance[data-opacity="0"][data-hide-bg="1"] .widget-card,
+.widget-instance[data-opacity="0"][data-hide-bg="1"] .widget-clock-face {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* ===== Resize handle (opt-in: def.resizable) =====
+ * Bottom-right grip that drags the instance's px width/height
+ * (widget.js _makeResizable). pointer-events:auto so it stays grabbable
+ * even when click-through set the instance to pointer-events:none —
+ * the handle is a child, so the none on the parent doesn't apply here.
+ * Fades in on hover; on touch (no hover) it stays faintly visible. */
+.widget-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: se-resize;
+    pointer-events: auto;
+    opacity: 0.25;
+    transition: opacity 0.15s ease;
+}
+.widget-instance[data-resizable]:hover .widget-resize-handle {
+    opacity: 1;
+}
+.widget-resize-handle::after {
+    content: '';
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid var(--widget-fg, rgba(255, 255, 255, 0.9));
+    border-bottom: 2px solid var(--widget-fg, rgba(255, 255, 255, 0.9));
+    opacity: 0.55;
+    border-radius: 0 0 2px 0;
+}
+
+/* Resizable card widgets fill their instance box — width and height
+   both come from the drag, not the content. */
+.widget-instance[data-resizable] .widget-card,
+.widget-instance[data-resizable] .widget-sysinfo {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* ===== Desktop Clock widget =====
+ * Digits follow the theme's default foreground (--widget-fg; the `fg`
+ * option overrides it per-instance). The optional `bg` widget option
+ * supplies ONE card background for the whole digital face — time and
+ * date rows share the same chip (.widget-clock-face) — via the same
+ * color-mix chain as .widget-card (--widget-bg-color), so the opacity
+ * slider fades it too, never the digits. The face is inline-block so
+ * the chip is exactly as wide as the digits; the widget box itself
+ * stays transparent. Analog mode renders a canvas with no face, so
+ * bg/fg only affect digital mode. */
+.widget-clock {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    text-align: center;
+    color: var(--widget-fg);
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    line-height: 1.1;
+    transition: transform 0.15s ease, text-shadow 0.15s ease;
+}
+/* Same hover lift as the info cards — unified widget hover language */
+.widget-clock:hover {
+    transform: translateY(-2px);
+    text-shadow: 0 3px 14px rgba(0, 0, 0, 0.75);
+}
+.widget-clock-face {
+    display: inline-block;
+    /* First line is the no-color-mix fallback for browsers that don't
+       support it (older mobile WebViews): solid custom/theme background,
+       no alpha fade — the color still applies. */
+    background: var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)));
+    background: color-mix(in srgb,
+        var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)))
+        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
+    /* Frosted-glass like the info cards: survives a 0% background unless
+       the widget's hideBgAtZero option is set (rule below). Digital mode
+       only — analog draws a canvas with its own palette. */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--widget-border);
+    border-color: color-mix(in srgb, var(--widget-border)
+        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
+    border-radius: 14px;
+    padding: 6px 16px;
+}
+.widget-clock-time {
+    font-size: 52px;
+    font-weight: 300;
+    letter-spacing: 2px;
+}
+.widget-clock-date {
+    font-size: 16px;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+/* ===== Widget card (shared by System Info / Network Traffic) =====
+ * Both widgets render the same card shell (.widget-card) so their
+ * on-desktop look is identical; System Info keeps the historical
+ * .widget-sysinfo alias.
+ *
+ * Background chain: --widget-bg-color (set by the `bg` widget option,
+ * removed when cleared) falls back to the theme's --widget-bg-rgb; the
+ * opacity slider writes --widget-bg-alpha, so it fades the CARD
+ * BACKGROUND only — text color (--widget-fg) is never affected. The
+ * first line is the no-color-mix fallback for browsers that don't
+ * support it (older mobile WebViews): solid custom/theme background,
+ * no alpha fade — the color still applies. */
+.widget-sysinfo,
+.widget-card {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    color: var(--widget-fg);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    background: var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)));
+    background: color-mix(in srgb,
+        var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)))
+        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
+    /* Border + shadow fade with the background alpha too — at 0 the
+       whole card shell vanishes, leaving only the text. */
+    border: 1px solid var(--widget-border);
+    border-color: color-mix(in srgb, var(--widget-border)
+        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 140px;
+    box-shadow: var(--widget-shadow);
+    box-shadow: var(--widget-shadow-pos) color-mix(in srgb,
+        var(--widget-shadow-color) calc(var(--widget-bg-alpha, 0.55) * 100%),
+        transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.widget-sysinfo:hover,
+.widget-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--widget-shadow-hover);
+    box-shadow: var(--widget-shadow-hover-pos) color-mix(in srgb,
+        var(--widget-shadow-hover-color) calc(var(--widget-bg-alpha, 0.55) * 100%),
+        transparent);
+    border-color: color-mix(in srgb, rgba(128, 160, 255, 0.35)
+        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
+}
+/* Accentable text — title and values follow the --widget-accent CSS
+ * variable (set by WM._applyOptionStyles from the `accent` widget
+ * option; system-info and net-traffic declare it). Unset → the theme's
+ * default foreground (--widget-fg / currentColor). */
+.widget-sysinfo-title,
+.widget-card-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--widget-accent, currentColor);
+    opacity: 0.6;
+    margin-bottom: 6px;
+}
+.widget-sysinfo-row,
+.widget-card-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+    gap: 12px;
+}
+.widget-sysinfo-row .label,
+.widget-card-row .label {
+    opacity: 0.6;
+}
+
+/* Text legibility: a subtle 1px shadow in the background-derived color
+ * (--widget-text-shadow-color, set by WM from the card bg — inverse of
+ * the fg) keeps labels/values readable when the card is semi-transparent
+ * over a light or busy wallpaper. Falls back to a dark shadow. */
+.widget-sysinfo-title,
+.widget-card-title,
+.widget-sysinfo-row .label,
+.widget-sysinfo-row .value,
+.widget-card-row .label,
+.widget-card-row .value,
+.nt-iface,
+.nt-rx-label,
+.nt-tx-label {
+    text-shadow: 0 1px 2px var(--widget-text-shadow-color, rgba(0, 0, 0, 0.45));
+}
+/* System Info VALUES follow the accent like Network Traffic values do
+ * (color: var(--widget-accent, currentColor)). WM derives the accent —
+ * default = the background-aware foreground — so values stay readable
+ * on any card background; the user can still pick a value color. */
+.widget-sysinfo-row .value {
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--widget-accent, currentColor);
+}
+.widget-card-row .value {
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--widget-accent, currentColor);
+}
+/* Network Traffic: tinted rx/tx labels, dim iface tag in the title */
+.nt-rx-label { color: #6eb5f7; opacity: 0.9; }
+.nt-tx-label { color: #7ec8a0; opacity: 0.9; }
+.nt-iface {
+    opacity: 0.55;
+    font-size: 10px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* ===== Settings panel ===== */
+.widget-settings {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* Default size (user report 2026-08-18: 380px/70vh felt cramped —
+       widget lists and instance rows were squeezed, content "folded up".
+       520×85vh shows the full list without scroll-fighting; the panel is
+       resizable via PanelHelper.makeResizable anyway.) */
+    width: 520px;
+    max-height: 85vh;
+    background: var(--theme-panel-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--theme-panel-border);
+    border-radius: 12px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: panel-in 0.15s ease-out;
+}
+@keyframes panel-in {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.widget-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--theme-panel-border);
+    flex-shrink: 0;
+}
+.widget-settings-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--theme-panel-fg);
+}
+.btn-close-settings {
+    width: 28px; height: 28px;
+    border: none; border-radius: 6px;
+    background: transparent; color: var(--theme-panel-muted);
+    font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.btn-close-settings:hover { background: var(--theme-panel-border); }
+
+/* Tab bar: one tab per REGISTERED widget type (generated from the
+   registry, so new widgets get a tab automatically). Colors reuse the
+   theme panel tab vars from shell.css. */
+.widget-settings-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 10px 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--theme-panel-border);
+    overflow-x: auto;
+}
+.widget-settings-tab {
+    padding: 5px 12px;
+    border: none;
+    background: transparent;
+    color: var(--theme-panel-tab-inactive-fg, var(--theme-panel-muted));
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 6px 6px 0 0;
+    border-bottom: 2px solid transparent;
+}
+.widget-settings-tab:hover {
+    color: var(--theme-panel-fg);
+}
+.widget-settings-tab.active {
+    background: var(--theme-panel-tab-active-bg, rgba(74, 144, 217, 0.25));
+    color: var(--theme-panel-tab-active-fg, #fff);
+    border-bottom-color: var(--accent-color, #4a90d9);
+}
+
+.widget-settings-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    color: var(--theme-panel-fg);
+}
+
+.widget-settings-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--theme-panel-muted);
+    font-size: 13px;
+}
+
+.widget-settings-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    transition: background 0.1s;
+}
+.widget-settings-item:hover {
+    background: var(--theme-panel-border);
+}
+
+.widget-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--theme-panel-fg);
+}
+
+.widget-controls {
+    margin-top: 8px;
+    margin-left: 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+}
+.widget-controls label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--theme-panel-muted);
+}
+.widget-controls input[type="range"] {
+    flex: 1;
+    max-width: 140px;
+    accent-color: var(--accent-color, #4a90d9);
+}
+.widget-controls input[type="checkbox"] {
+    accent-color: var(--accent-color, #4a90d9);
+}
+.widget-controls select {
+    background: var(--theme-panel-input-bg);
+    color: var(--theme-panel-input-fg);
+    border: 1px solid var(--theme-panel-input-border);
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 12px;
+}

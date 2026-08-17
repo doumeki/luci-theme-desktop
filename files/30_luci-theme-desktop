@@ -1,0 +1,62 @@
+#!/bin/sh
+# LuCI Desktop Theme — first-install / upgrade defaults
+CONFIG_VERSION=4
+
+# Register theme (always safe to re-apply)
+uci -q get luci.themes.Desktop >/dev/null 2>&1 || {
+	uci set luci.themes.Desktop=/luci-static/desktop
+	uci set luci.main.mediaurlbase=/luci-static/desktop
+	uci commit luci
+}
+
+# Config: only seed if version missing or outdated
+CUR_VER=$(uci -q get desktop.settings.config_version 2>/dev/null)
+if [ "$CUR_VER" != "$CONFIG_VERSION" ]; then
+	touch /etc/config/desktop 2>/dev/null
+	uci set desktop.settings=desktop
+	uci set desktop.settings.config_version="$CONFIG_VERSION"
+	uci set desktop.settings.titlebar_color='#26a269'
+	uci set desktop.settings.titlebar_inactive_color='#8ff0a4'
+	uci set desktop.settings.titlebar_opacity='1'
+	uci set desktop.settings.taskbar_color='#3584e4'
+	uci set desktop.settings.taskbar_opacity='1'
+	uci set desktop.settings.taskbar_btn_color='#4a90d9'
+	uci set desktop.settings.startmenu_color='#1a5fb4'
+	uci set desktop.settings.startmenu_opacity='0.85'
+	uci set desktop.settings.startmenu_sel_color='#4a90d9'
+	uci set desktop.settings.desktop_color1='#62a0ea'
+	uci set desktop.settings.desktop_color2='#57e389'
+	uci set desktop.settings.bg_glow_x='63'
+	uci set desktop.settings.bg_glow_y='51'
+	uci set desktop.settings.bg_spread='62'
+	uci set desktop.settings.bg_angle='186'
+	uci set desktop.settings.icon_font_size='13'
+	uci set desktop.settings.icon_font_color='#ffffff'
+	uci set desktop.settings.icon_font_shadow='1'
+	uci set desktop.settings.icon_font_bold='1'
+	uci set desktop.settings.icon_opacity='1'
+	uci set desktop.settings.icon_bg='0'
+	uci set desktop.settings.menu_font_size='16'
+	uci set desktop.settings.menu_font_color='#e0e0e0'
+	uci set desktop.settings.content_zoom='100'
+	uci set desktop.settings.menu_hover_mode='1'
+	uci set desktop.settings.app_dark_mode='0'
+	uci set desktop.settings.app_primary_color='#286d31'
+	uci set desktop.settings.app_primary_color_dark='#197025'
+	uci set desktop.settings.desktop_wallpaper='gradient'
+	uci set desktop.settings.login_wallpaper='gradient'
+	uci set desktop.settings.auto_refresh='1'
+	uci set desktop.settings.picsum_auto_refresh='0'
+
+	uci set desktop.widgets=widgets
+	uci set desktop.widgets.config='{}'
+
+	uci set desktop.pins=pins
+	uci set desktop.pins.items='[]'
+
+	uci set desktop.hidden=hidden
+	uci set desktop.hidden.items='[]'
+	uci commit desktop
+fi
+
+exit 0

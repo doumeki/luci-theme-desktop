@@ -1,0 +1,276 @@
+<%#
+    Desktop Theme — Login Page
+    Copyright 2026 DMKLIGHT
+    Licensed under the Apache License v2.0
+
+    Wallpaper modes (UCI: desktop.settings.login_wallpaper):
+      - "none"     → CSS gradient (no image)
+      - "builtin"  → built-in bg1.jpg (default)
+      - "bing"     → Bing daily wallpaper
+      - "picsum"   → Picsum random photo
+-%>
+
+<%
+    local sys  = require "luci.sys"
+    local util = require "luci.util"
+    local http = require "luci.http"
+    local fs   = require "nixio.fs"
+    local disp = require "luci.dispatcher"
+    local uci  = require "luci.model.uci".cursor()
+
+    local boardinfo = util.ubus("system", "board")
+
+    -- Determine wallpaper — read individual UCI keys
+    local wp_mode = "gradient"
+    local wp_url = ""
+    local theme_uci = {}
+    pcall(function()
+        local f = io.popen("uci show desktop.settings 2>/dev/null")
+        if f then
+            for line in f:lines() do
+                local k, v = line:match("^desktop%.settings%.([^=]+)=(.+)$")
+                if k and v then
+                    v = v:gsub("^'",""):gsub("'$","")
+                    theme_uci[k] = v
+                end
+            end
+            f:close()
+        end
+    end)
+    if theme_uci["login_wallpaper"] then wp_mode = theme_uci["login_wallpaper"] end
+    local app_dark = theme_uci["app_dark_mode"] or "1"
+    local app_primary = theme_uci["app_primary_color"] or "#286d31"
+
+    if wp_mode == "bing" or wp_mode == "picsum" then
+        local cached = theme_uci["cache_" .. wp_mode .. "_url"] or ""
+        if cached ~= "" then
+            wp_url = cached
+        else
+            wp_mode = "builtin"  -- no cache yet, fallback to builtin
+        end
+    end
+
+    -- Helper: list all builtin background images (client picks randomly via crypto.getRandomValues)
+    local function list_builtin()
+        local bg_dir = "/www" .. media .. "/background/"
+        local imgs = {}
+        pcall(function()
+            local iter = fs.glob(bg_dir .. "*")
+            if iter then
+                while true do
+                    local f = iter()
+                    if not f then break end
+                    local bn = fs.basename(f)
+                    if bn then
+                        local ext = bn:match("%.([%w]+)$")
+                        if ext and (ext == "jpg" or ext == "jpeg" or ext == "png" or ext == "gif" or ext == "webp") then
+                            imgs[#imgs + 1] = media .. "/background/" .. bn
+                        end
+                    end
+                end
+            end
+        end)
+        if #imgs == 0 then
+            imgs[1] = media .. "/img/bg1.jpg"
+        end
+        return imgs
+    end
+
+    -- Build wallpaper config JSON for client-side random selection
+    local wp_builtin_list = list_builtin()
+    local wp_builtin_json = '['
+    for i, p in ipairs(wp_builtin_list) do
+        if i > 1 then wp_builtin_json = wp_builtin_json .. ',' end
+        wp_builtin_json = wp_builtin_json .. '"' .. p .. '"'
+    end
+    wp_builtin_json = wp_builtin_json .. ']'
+
+    -- "gradient" mode: build gradient from individual UCI keys
+    local desktop_gradient = ""
+    if wp_mode == "gradient" then
+        local dc1 = theme_uci["desktop_color1"] or '#0d1117'
+        local dc2 = theme_uci["desktop_color2"] or '#1a3a5c'
+        local gx  = theme_uci["bg_glow_x"] or '30'
+        local gy  = theme_uci["bg_glow_y"] or '20'
+        local sp  = theme_uci["bg_spread"] or '60'
+        local ag  = theme_uci["bg_angle"] or '135'
+        local ox  = math.floor(100 - tonumber(gx) + 0.5)
+        local oy  = math.floor(100 - tonumber(gy) + 0.5)
+        desktop_gradient = 'radial-gradient(ellipse at ' .. gx .. '% ' .. gy .. '%, ' .. dc2 .. ' 0%, transparent ' .. sp .. '%),' ..
+                          'radial-gradient(ellipse at ' .. ox .. '% ' .. oy .. '%, ' .. dc1 .. ' 0%, transparent ' .. sp .. '%),' ..
+                          'linear-gradient(' .. ag .. 'deg, ' .. dc1 .. ' 0%, ' .. dc1 .. ' 50%, ' .. dc1 .. ' 100%)'
+    end
+
+    http.prepare_content("text/html")
+-%>
+<!DOCTYPE html>
+<html lang="<%=luci.i18n.context.lang%>"<% if app_dark == "1" then %> data-theme="dark"<% end %>>
+<head>
+    <meta charset="utf-8">
+    <title><%=boardinfo.hostname or "OpenWrt"%> — <%:Login%></title>
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"/>
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="stylesheet" href="<%=media%>/css/shell.css">
+    <style>
+        html, body {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; overflow: auto;
+        }
+        #desktop {
+            position: fixed; inset: 0; z-index: 0;
+        }
+        #desktop-wallpaper {
+            background-size: cover !important;
+            background-position: center !important;
+        }
+        <% if wp_mode == "gradient" and desktop_gradient ~= "" then %>
+        #desktop-wallpaper {
+            background: <%=desktop_gradient%> !important;
+        }
+        <% end %>
+        :root {
+            --login-card-bg: rgba(255,255,255,0.85);
+            --login-card-border: rgba(0,0,0,0.08);
+            --login-card-fg: #333;
+            --login-card-sub: #666;
+            --login-input-bg: rgba(0,0,0,0.04);
+            --login-input-border: rgba(0,0,0,0.15);
+            --login-input-fg: #333;
+            --login-btn-bg: <%=app_primary%>;
+            --login-btn-fg: #fff;
+        }
+        [data-theme="dark"] {
+            --login-card-bg: rgba(22, 22, 42, 0.85);
+            --login-card-border: rgba(255,255,255,0.08);
+            --login-card-fg: #e0e0e0;
+            --login-card-sub: #888;
+            --login-input-bg: rgba(255,255,255,0.06);
+            --login-input-border: rgba(255,255,255,0.1);
+            --login-input-fg: #e0e0e0;
+            --login-btn-bg: rgba(74,144,217,0.8);
+            --login-btn-fg: #fff;
+        }
+        .login-card {
+            position: relative; z-index: 1;
+            width: 380px; max-width: 90vw;
+            color: var(--login-card-fg);
+            background: var(--login-card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 12px;
+            border: 1px solid var(--login-card-border);
+            box-shadow: 0 16px 64px rgba(0,0,0,0.3);
+            padding: 32px 28px;
+            text-align: center;
+        }
+        .login-card .hostname {
+            font-size: 18px; font-weight: 600; color: var(--login-card-fg); margin-bottom: 4px;
+        }
+        .login-card .subtitle {
+            font-size: 12px; color: var(--login-card-sub); margin-bottom: 24px;
+        }
+        .login-card .errorbox {
+            background: rgba(200,40,40,0.2); color: #f66;
+            border: 1px solid rgba(200,40,40,0.3);
+            border-radius: 6px; padding: 8px 12px;
+            font-size: 13px; margin-bottom: 16px;
+        }
+        .login-card input[type="text"],
+        .login-card input[type="password"] {
+            width: 100%; padding: 10px 12px; margin-bottom: 12px;
+            border: 1px solid var(--login-input-border); border-radius: 6px;
+            background: var(--login-input-bg);
+            color: var(--login-input-fg); font-size: 14px;
+            outline: none; box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .login-card input[type="text"]:focus,
+        .login-card input[type="password"]:focus {
+            border-color: rgba(74,144,217,0.5);
+        }
+        .login-card .btn-login {
+            width: 100%; padding: 10px; margin-top: 4px;
+            border: none; border-radius: 6px;
+            background: var(--login-btn-bg);
+            color: var(--login-btn-fg); font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: background 0.15s;
+        }
+        .login-card .btn-login:hover { filter: brightness(1.1); }
+    </style>
+    <link rel="shortcut icon" href="<%=media%>/favicon.ico">
+</head>
+<body>
+    <div id="desktop"><div id="desktop-wallpaper"></div></div>
+    <div class="login-card">
+        <div class="hostname"><%=boardinfo.hostname or "OpenWrt"%></div>
+        <div class="subtitle"><%:Please log in.%></div>
+        <%- if fuser then %>
+        <div class="errorbox"><%:Invalid username and/or password! Please try again.%></div>
+        <% end -%>
+        <form method="post" action="<%=pcdata(luci.http.getenv("REQUEST_URI"))%>">
+            <input class="cbi-input-user" type="text" name="luci_username" placeholder="<%:Username%>" value="<%=duser%>" />
+            <input class="cbi-input-password" type="password" name="luci_password" placeholder="<%:Password%>" />
+            <input type="submit" value="<%:Login%>" class="btn-login" />
+        </form>
+    </div>
+    <script id="login-wallpaper-config" type="application/json">{"mode":"<%=wp_mode%>","url":"<%=wp_url%>","builtin":<%=wp_builtin_json%>,"gradient":"<%=desktop_gradient%>"}</script>
+    <script type="text/javascript">//<![CDATA[
+        (function(){
+            var wp = document.getElementById('desktop-wallpaper');
+            if (!wp) return;
+            try {
+                var cfg = JSON.parse(document.getElementById('login-wallpaper-config').textContent);
+                if (cfg.mode === 'gradient') return; // CSS handles gradient
+
+                var randomIndex = function(max) {
+                    if (max <= 1) return 0;
+                    if (window.crypto && crypto.getRandomValues) {
+                        var buf = new Uint32Array(1);
+                        crypto.getRandomValues(buf);
+                        return buf[0] % max;
+                    }
+                    return Math.floor(Math.random() * max);
+                };
+
+                var applyUrl = function(url) {
+                    if (!url) return;
+                    wp.style.backgroundImage = 'url("' + url + '")';
+                    wp.style.backgroundSize = 'cover';
+                    wp.style.backgroundPosition = 'center';
+                    // Add overlay for readability
+                    var overlay = document.createElement('div');
+                    overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.3);pointer-events:none;';
+                    wp.appendChild(overlay);
+                };
+
+                if (cfg.mode === 'builtin' && cfg.builtin && cfg.builtin.length > 0) {
+                    applyUrl(cfg.builtin[randomIndex(cfg.builtin.length)]);
+                } else if (cfg.url) {
+                    applyUrl(cfg.url);
+                }
+            } catch(e) {}
+        })();
+        var input = document.getElementsByName('luci_password')[0];
+        if (input) input.focus();
+    //]]></script>
+    <%
+    local https_key = uci:get("uhttpd", "main", "key")
+    local https_port = uci:get("uhttpd", "main", "listen_https")
+    if type(https_port) == "table" then https_port = https_port[1] end
+    if https_port and fs.access(https_key) then
+        https_port = https_port:match("(%d+)$")
+    %>
+    <script type="text/javascript">//<![CDATA[
+        if (document.location.protocol != 'https:') {
+            var url = 'https://' + window.location.hostname + ':' + '<%=https_port%>' + window.location.pathname;
+            var img = new Image;
+            img.onload = function () { window.location = url };
+            img.src = 'https://' + window.location.hostname + ':' + '<%=https_port%>' + '<%=resource%>/cbi/up.gif?' + Math.random();
+            setTimeout(function () { img.src = '' }, 5000);
+        }
+    //]]></script>
+    <% end %>
+</body>
+</html>

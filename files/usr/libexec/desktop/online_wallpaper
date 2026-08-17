@@ -1,0 +1,85 @@
+#!/bin/sh
+# adapted from luci-theme-argon for luci-theme-desktop
+
+# Source: passed as $1, or read from desktop UCI, fallback to argon UCI
+WEB_PIC_SRC="${1:-}"
+[ -z "$WEB_PIC_SRC" ] && WEB_PIC_SRC=$(uci -q get desktop.settings.login_wallpaper 2>/dev/null)
+[ -z "$WEB_PIC_SRC" ] && WEB_PIC_SRC=$(uci -q get argon.@global[0].online_wallpaper 2>/dev/null)
+[ -z "$WEB_PIC_SRC" ] && WEB_PIC_SRC='bing'
+CACHE=/var/run/desktop_${WEB_PIC_SRC}.url
+CACHE_TS=/var/run/desktop_${WEB_PIC_SRC}.ts
+WRLOCK=/var/lock/desktop_${WEB_PIC_SRC}.lock
+
+fetch_pic_url() {
+    case $WEB_PIC_SRC in
+    bing)
+        local picpath=$(curl -fks --max-time 3 \
+            "https://www.bing.com/HPImageArchive.aspx?format=js&n=1" |
+            jsonfilter -q -e '@.images[0].url')
+        [ -n "${picpath}" ] && echo "//www.bing.com${picpath}"
+        ;;
+    picsum)
+        curl -fksL --max-time 3 -o /dev/null -w '%{url_effective}' \
+            "https://picsum.photos/1920/1080"
+        ;;
+    esac
+}
+
+try_update() {
+    local lock="$WRLOCK"
+    exec 200>$lock
+
+    if flock -n 200 >/dev/null 2>&1; then
+        local picurl=$(fetch_pic_url)
+        if [ -n "$picurl" ]; then
+            echo "${picurl}" | tee "$CACHE"
+            date '+%s' > "$CACHE_TS"
+        else
+            if [ -s "$CACHE" ]; then
+                cat "$CACHE"
+            else
+                touch "$CACHE"
+            fi
+        fi
+        flock -u 200 >/dev/null 2>&1
+    elif [ -s "$CACHE" ]; then
+        cat "$CACHE"
+    fi
+}
+
+get_cache_ts() {
+    # Try stat -c %Y (BusyBox), fallback to date -r (GNU), fallback to 0
+    stat -c %Y "$1" 2>/dev/null || date -r "$1" '+%s' 2>/dev/null || echo '0'
+}
+
+get_url() {
+    local max_age=43200  # 12h default
+    # bing: 24h; picsum: 1h
+    case "$WEB_PIC_SRC" in
+        bing) max_age=86400 ;;
+        picsum) max_age=3600 ;;
+    esac
+
+    if [ -f "$CACHE" ] && [ -s "$CACHE" ]; then
+        local cache_ts=$(get_cache_ts "$CACHE")
+        if [ "$cache_ts" != '0' ]; then
+            local idle_t=$(($(date '+%s') - cache_ts))
+            if [ $idle_t -le $max_age ]; then
+                cat "$CACHE"
+                return
+            fi
+        fi
+    elif [ -f "$CACHE" ] && [ ! -s "$CACHE" ]; then
+        # Empty cache (previous fetch failed) — don't retry for 120s
+        local cache_ts=$(get_cache_ts "$CACHE")
+        if [ "$cache_ts" != '0' ]; then
+            local idle_t=$(($(date '+%s') - cache_ts))
+            if [ $idle_t -le 120 ]; then
+                return
+            fi
+        fi
+    fi
+    try_update
+}
+
+get_url

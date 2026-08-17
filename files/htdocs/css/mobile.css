@@ -1,0 +1,408 @@
+/* Desktop Theme — Mobile Adaptation
+ *
+ * Applies below 768px (phones / narrow tablets). Desktop mode is
+ * completely untouched — no media query matches on wide screens.
+ *
+ * Design: mobile = single fullscreen window, bottom taskbar,
+ * fullscreen start menu drawer, fullscreen settings sheets,
+ * app switcher with live thumbnails.
+ * See theme-mobile-spec（记忆库）.
+ */
+
+/* App switcher button: mobile-only (hidden by default on desktop) */
+#btn-switcher { display: none; }
+
+@media (max-width: 768px) {
+
+    html.touch { touch-action: manipulation; }
+
+    /* ===== Windows: fullscreen (viewport minus taskbar), no chrome ===== */
+    .window {
+        inset: 0 0 48px 0 !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    .window-body { overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+    .window-titlebar {
+        cursor: default !important;
+        height: 44px;
+        flex-shrink: 0;
+    }
+    /* Hide button (minimize) stays — it hides the window; the app
+       switcher restores it. Maximize is meaningless on fullscreen. */
+    .btn-minimize { display: block !important; }
+    .btn-maximize { display: none !important; }
+
+    /* ===== Taskbar: bottom, compact ===== */
+    #taskbar { height: 48px; }
+    #taskbar-tray #btn-notifications,
+    #btn-auto-refresh,
+    #btn-show-desktop { display: none !important; }
+    #btn-switcher {
+        display: block !important;
+        font-size: 22px !important;   /* beats the inline 14px on the button */
+        opacity: 0.9 !important;      /* inline 0.7 is too dim */
+    }
+    #taskbar-clock { display: none !important; }   /* mobile: no clock */
+    /* No window buttons/indicators on mobile — switching goes through
+       the app switcher. Taskbar: start left, HOME center, tray right. */
+    #taskbar-windows { display: none !important; }
+    #taskbar-tray { margin-left: auto; }
+    #btn-home {
+        display: block !important;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 0;
+        height: 100%;
+        font-size: 24px !important;   /* beats the inline 15px on the button */
+        opacity: 0.9;
+    }
+    #btn-home:active { opacity: 1; transform: translateX(-50%) scale(0.92); }
+
+    /* ===== App switcher (iOS-style horizontal card carousel) ===== */
+    #app-switcher {
+        position: fixed;
+        inset: 0;
+        z-index: 9000;
+        background: linear-gradient(175deg, rgba(18, 22, 32, 0.92), rgba(8, 10, 16, 0.88));
+        backdrop-filter: blur(18px) saturate(1.2);
+        -webkit-backdrop-filter: blur(18px) saturate(1.2);
+        display: flex;
+        flex-direction: column;
+        animation: switcher-fade 0.28s ease-out;
+    }
+    @keyframes switcher-fade {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    #app-switcher.switcher-closing { animation: switcher-fade 0.18s ease-in reverse forwards; }
+
+    #app-switcher .switcher-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;   /* no close button up here anymore */
+        padding: 16px 20px 10px;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
+    /* 🔔 Notifications replay — the tray bell is hidden on mobile, so the
+       switcher header is the entry point. Top-right, out of the title way. */
+    #app-switcher .switcher-bell {
+        position: absolute;
+        top: 14px; right: 16px;
+        background: transparent;
+        border: none;
+        color: #fff;
+        font-size: 20px;
+        line-height: 1;
+        padding: 6px;
+        cursor: pointer;
+        opacity: 0.85;
+    }
+    #app-switcher .switcher-bell:active { opacity: 1; transform: scale(0.92); }
+
+    /* ===== Auto-refresh toggle (mobile entry in the switcher) =====
+       Same visual language as the desktop #btn-auto-refresh switch —
+       the desktop button is hidden on mobile, so the switcher row is
+       the only place to control auto-refresh on a phone. */
+    #app-switcher .switcher-options {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 20px 10px;
+        color: rgba(255,255,255,0.85);
+        font-size: 13px;
+    }
+    #app-switcher .switcher-ar-toggle {
+        width: 40px; height: 22px;
+        border-radius: 11px;
+        border: none;
+        background: rgba(255,255,255,0.2);
+        cursor: pointer;
+        position: relative;
+        padding: 0;
+        flex-shrink: 0;
+        transition: background 0.2s;
+        -webkit-tap-highlight-color: transparent;
+    }
+    #app-switcher .switcher-ar-toggle.on {
+        background: rgba(0, 255, 4, 0.64);
+    }
+    #app-switcher .switcher-ar-toggle::after {
+        content: '';
+        position: absolute;
+        top: 2px; left: 2px;
+        width: 18px; height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        transition: left 0.2s;
+    }
+    #app-switcher .switcher-ar-toggle.on::after {
+        left: 20px;
+    }
+    /* Notification count badge on the 🔔 (same number as the desktop tray
+       bell: max of on-screen toasts and unsaved-changes count). */
+    #app-switcher .switcher-bell-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 8px;
+        background: #e81123;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
+        box-sizing: border-box;
+    }
+    #app-switcher .switcher-bell-badge[hidden] { display: none; }
+    /* Close-all button: floats bottom-center, above the taskbar (48px).
+       Big touch target — it's a thumb-reach zone. */
+    #app-switcher .switcher-close {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 64px;
+        z-index: 9999;
+        background: rgba(255,255,255,0.14);
+        border: none;
+        color: #fff;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+        transition: background 0.15s, transform 0.15s;
+    }
+    #app-switcher .switcher-close:active { background: rgba(255,255,255,0.3); transform: translateX(-50%) scale(0.9); }
+
+    /* Horizontal snap carousel — iOS app switcher style */
+    #app-switcher .switcher-scroll {
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        padding: 12px 24px 28px;
+        scrollbar-width: none;
+    }
+    #app-switcher .switcher-scroll::-webkit-scrollbar { display: none; }
+
+    #app-switcher .switcher-empty {
+        margin: auto;
+        color: rgba(255,255,255,0.45);
+        font-size: 15px;
+    }
+
+    #app-switcher .switcher-card {
+        position: relative;
+        flex: 0 0 74vw;
+        max-width: 300px;
+        scroll-snap-align: center;
+        border-radius: 22px;
+        overflow: hidden;
+        background: linear-gradient(160deg, #242833, #161a22);
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 20px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.35);
+        cursor: pointer;
+        transform-origin: center bottom;
+        will-change: transform, opacity;
+        /* entrance: slide in from the right with spring-ish overshoot */
+        animation: card-in 0.42s cubic-bezier(0.22, 1.2, 0.36, 1) backwards;
+    }
+    @keyframes card-in {
+        from { opacity: 0; transform: translateX(60px) scale(0.9); }
+        to   { opacity: 1; transform: translateX(0) scale(1); }
+    }
+
+    /* Live thumbnail: the app page scaled down inside a clipped frame */
+    #app-switcher .switcher-thumb {
+        position: relative;
+        width: 100%;
+        height: 42vh;
+        min-height: 160px;
+        overflow: hidden;
+        background: #0d1117;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    #app-switcher .switcher-thumb iframe {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        transform-origin: 0 0;
+        pointer-events: none;
+    }
+    #app-switcher .switcher-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 13px 16px;
+        background: rgba(255,255,255,0.05);
+        backdrop-filter: blur(4px);
+    }
+    /* Kill button: big touch target, floats above the card corner so
+       scaled neighbouring cards can never cover it */
+    #app-switcher .switcher-kill {
+        position: absolute !important;
+        top: 10px;
+        right: 10px;
+        width: 44px;
+        height: 44px;
+        z-index: 9999;
+    }
+    #app-switcher .switcher-name {
+        color: #f0f2f6;
+        font-size: 15px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    #app-switcher .switcher-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    #app-switcher .switcher-hide {
+        position: relative;
+        z-index: 2;
+        background: rgba(255,255,255,0.1);
+        border: none;
+        color: #ccc;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 15px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s, transform 0.15s;
+    }
+    #app-switcher .switcher-hide:active { background: rgba(255,255,255,0.25); transform: scale(0.9); }
+    #app-switcher .switcher-card.hidden { opacity: 0.55; }
+    #app-switcher .switcher-card.hidden .switcher-thumb { filter: grayscale(0.6); }
+    #app-switcher .switcher-kill {
+        position: relative;
+        z-index: 2;   /* stay tappable above scaled neighbouring cards */
+        background: rgba(255,92,92,0.16);
+        border: none;
+        color: #ff8f8f;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 13px;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s, transform 0.15s;
+    }
+    #app-switcher .switcher-kill:active { background: rgba(255,92,92,0.35); transform: scale(0.9); }
+
+    /* ===== Start menu: fullscreen drawer ===== */
+    #start-menu {
+        inset: 0 0 48px 0 !important;
+        left: 0 !important;
+        bottom: 48px !important;
+        width: auto !important;
+        height: auto !important;
+        border-radius: 0 !important;
+    }
+
+    /* ===== Settings panels: fullscreen sheet ===== */
+    .widget-settings {
+        inset: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: auto !important;
+        max-height: none !important;
+        transform: none !important;
+        border-radius: 0 !important;
+    }
+
+    /* ===== Widgets: touch-draggable on mobile =====
+       touch-action:none keeps the browser from turning the touch-drag
+       into a page scroll, so the mousedown/mousemove drag chain fires. */
+    #widget-layer .widget-instance { touch-action: none; }
+    /* Widgets with click-through set get inline pointer-events:none
+       (widget.js), which also swallows TOUCH events — the long-press
+       drag chain in _makeDraggable would never start. Click-through is
+       a desktop concept (passing clicks to whatever sits beneath); on
+       touch there is nothing hoverable below a widget, so the drag
+       gesture wins and the inline none is overridden. */
+    #widget-layer .widget-instance { pointer-events: auto !important; }
+    /* Resize handle: touch drag must not become a page scroll (the
+       instance rule above doesn't cascade — touch-action isn't
+       inherited). No hover on touch, so keep it always visible. */
+    #widget-layer .widget-resize-handle { touch-action: none; opacity: 0.7; }
+
+    /* ===== Gradient preview dots: touch-draggable =====
+       They use the mousedown/mousemove drag chain, so the browser must
+       not turn the touch into a panel scroll. (Range sliders are native
+       controls — they handle touch themselves, no touch-action needed.) */
+    #bg-glow-dot, #bg-handle-dot { touch-action: none; }
+    #widget-layer .widget-instance.widget-dragging {
+        transform: scale(1.06);
+        box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+        z-index: 10;
+        opacity: 0.92;
+    }
+
+    /* ===== Desktop icons: compact grid layout on mobile ===== */
+    #desktop-icons {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr);   /* fixed 4 per row */
+        grid-auto-rows: 92px;
+        align-content: start;
+        gap: 2px 4px;
+        padding: 10px;
+    }
+    #desktop-icons .desktop-icon {
+        position: relative !important;
+        left: auto !important;
+        top: auto !important;
+        width: auto !important;
+        padding: 4px 2px;
+    }
+    #desktop-icons .desktop-icon-img {
+        width: 52px !important;
+        height: 52px !important;
+        border-radius: 12px !important;
+    }
+    #desktop-icons .desktop-icon-label {
+        /* No fixed font-size — must follow --icon-font-size (theme setting) */
+        line-height: 1.2 !important;
+        max-width: 100%;
+    }
+
+    /* ===== Toasts: bottom, near-full width ===== */
+    .desktop-toast {
+        left: 8px !important;
+        right: 8px !important;
+        max-width: none !important;
+    }
+
+    /* ===== Drag overlay never appears on mobile ===== */
+    #__desktop-drag-overlay { display: none !important; }
+
+    /* ===== No-password banner: desktop-only =====
+     * On mobile the password toast + switcher bell already surface the
+     * warning, and a fixed top banner would cover the single fullscreen
+     * app window (user report 2026-08-15: banner on top of mobile view). */
+    #desktop-pw-alert { display: none !important; }
+}

@@ -1,0 +1,577 @@
+# LuCI Desktop Theme — Translation Template
+# Copyright 2026 DMKLIGHT
+#
+msgid "CPU usage may be inaccurate on this build"
+msgstr ""
+msgid "Do not show again"
+msgstr ""
+
+msgid "Max instances warning"
+msgstr ""
+
+msgid "Online wallpaper unavailable (curl missing)"
+msgstr ""
+msgid "Physical RAM shown as estimate (dmidecode missing)"
+msgstr ""
+msgid "Picsum unreachable"
+msgstr ""
+
+msgid "Platform compatibility"
+msgstr ""
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "App"
+msgstr ""
+
+msgid "Colors"
+msgstr ""
+
+msgid "Icons"
+msgstr ""
+
+msgid "Login"
+msgstr ""
+
+msgid "Hide background at 0% opacity"
+msgstr ""
+
+# theme-config.js — field labels
+msgid "Platform compatibility warnings"
+msgstr ""
+
+msgid "Titlebar (active)"
+msgstr ""
+
+msgid "Titlebar (inactive)"
+msgstr ""
+
+msgid "Titlebar Opacity"
+msgstr ""
+
+msgid "Taskbar"
+msgstr ""
+
+msgid "Taskbar Opacity"
+msgstr ""
+
+msgid "Taskbar Btn (active)"
+msgstr ""
+
+msgid "Start Menu"
+msgstr ""
+
+msgid "Start Menu Opacity"
+msgstr ""
+
+msgid "Menu Selected"
+msgstr ""
+
+msgid "Dark Mode"
+msgstr ""
+
+msgid "App Primary"
+msgstr ""
+
+msgid "App Primary (dark)"
+msgstr ""
+
+msgid "Desktop Wallpaper"
+msgstr ""
+
+msgid "Gradient"
+msgstr ""
+
+msgid "Built-in"
+msgstr ""
+
+msgid "Bing Daily"
+msgstr ""
+
+msgid "Picsum Photos"
+msgstr ""
+
+msgid "Login Wallpaper"
+msgstr ""
+
+msgid "Desktop Font Size"
+msgstr ""
+
+msgid "Desktop Font Color"
+msgstr ""
+
+msgid "Bold"
+msgstr ""
+
+msgid "Label Glow"
+msgstr ""
+
+msgid "Icon Opacity"
+msgstr ""
+
+msgid "Icon Background"
+msgstr ""
+
+msgid "Menu Font Size"
+msgstr ""
+
+msgid "Menu Font Color"
+msgstr ""
+
+msgid "Content Zoom"
+msgstr ""
+
+msgid "Bg Base"
+msgstr ""
+
+msgid "Bg Glow"
+msgstr ""
+
+msgid "Glow X"
+msgstr ""
+
+msgid "Glow Y"
+msgstr ""
+
+msgid "Spread"
+msgstr ""
+
+msgid "Angle"
+msgstr ""
+
+msgid "Menu Hover"
+msgstr ""
+
+msgid "Auto Refresh"
+msgstr ""
+
+msgid "Picsum Auto Refresh"
+msgstr ""
+
+# theme-config.js — layout section labels
+msgid "Titlebar"
+msgstr ""
+
+msgid "Desktop"
+msgstr ""
+
+msgid "Menu"
+msgstr ""
+
+# themesettings.js
+msgid "Apply"
+msgstr ""
+
+msgid "Apply *"
+msgstr ""
+
+msgid "Opacity"
+msgstr ""
+
+msgid "Manage"
+msgstr ""
+
+msgid "Refresh"
+msgstr ""
+
+msgid "Fonts"
+msgstr ""
+
+msgid "Bg"
+msgstr ""
+
+msgid "Theme"
+msgstr ""
+
+msgid "Save to Built-in"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Theme Settings"
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Defaults"
+msgstr ""
+
+msgid "Diagnostics"
+msgstr ""
+
+msgid "Diagnostics copied"
+msgstr ""
+
+msgid "Saved"
+msgstr ""
+
+msgid "Refresh failed (server error)"
+msgstr ""
+
+msgid "Picsum unreachable, showing cached image"
+msgstr ""
+
+msgid "Network error, check connection"
+msgstr ""
+
+msgid "Downloading preview…"
+msgstr ""
+
+msgid "Preview ready"
+msgstr ""
+
+msgid "Preview download failed"
+msgstr ""
+
+msgid "Saved: "
+msgstr ""
+
+msgid "Error"
+msgstr ""
+
+msgid "Already in Built-in: "
+msgstr ""
+
+msgid "Wallpaper refresh failed"
+msgstr ""
+
+msgid "Wallpaper saved to built-in"
+msgstr ""
+
+msgid "✓ Saved"
+msgstr ""
+
+# widget.js
+msgid "Desktop Widgets"
+msgstr ""
+
+msgid "No widgets registered."
+msgstr ""
+
+msgid "Click-through"
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+msgid "Permanently delete all content in this note"
+msgstr ""
+
+msgid "Clear"
+msgstr ""
+
+msgid "Clear data"
+msgstr ""
+
+msgid "PERMANENTLY DELETE all content in "
+msgstr ""
+
+msgid "?\n\nThis cannot be undone."
+msgstr ""
+
+msgid "Max "
+msgstr ""
+
+msgid " instances of "
+msgstr ""
+
+msgid "Widget requires an id"
+msgstr ""
+
+msgid "Widget requires a render function"
+msgstr ""
+
+msgid "Widget \""
+msgstr ""
+
+msgid "\" already registered"
+msgstr ""
+
+msgid "\" not registered"
+msgstr ""
+
+# wallpaper-settings.js
+msgid "Wallpapers"
+msgstr ""
+
+msgid "Browse"
+msgstr ""
+
+msgid "Upload"
+msgstr ""
+
+msgid "Check all"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Select a file"
+msgstr ""
+
+msgid "Uploading..."
+msgstr ""
+
+msgid "Done: "
+msgstr ""
+
+msgid "Failed"
+msgstr ""
+
+msgid "Loading..."
+msgstr ""
+
+msgid "No images"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Include in wallpaper rotation"
+msgstr ""
+
+msgid "Delete "
+msgstr ""
+
+msgid "?"
+msgstr ""
+
+msgid "Error loading files"
+msgstr ""
+
+msgid "Click anywhere to close"
+msgstr ""
+
+# desktop.js
+msgid "Status"
+msgstr ""
+
+msgid "Terminal"
+msgstr ""
+
+msgid "System"
+msgstr ""
+
+msgid "Firewall"
+msgstr ""
+
+msgid "Open"
+msgstr ""
+
+msgid "Hide"
+msgstr ""
+
+msgid "Install"
+msgstr ""
+
+msgid "Install failed"
+msgstr ""
+
+msgid "Installing Terminal…"
+msgstr ""
+
+msgid "Not installed"
+msgstr ""
+
+msgid "Hide this icon?"
+msgstr ""
+
+msgid "Rename"
+msgstr ""
+
+msgid "Unpin"
+msgstr ""
+
+msgid "New name:"
+msgstr ""
+
+msgid "Widgets"
+msgstr ""
+
+msgid "Theme settings loading..."
+msgstr ""
+
+# wm.js
+msgid "Untitled"
+msgstr ""
+
+msgid "Applying…"
+msgstr ""
+
+msgid "Minimize"
+msgstr ""
+
+msgid "Maximize"
+msgstr ""
+
+# startmenu.js
+msgid "No menu items"
+msgstr ""
+
+msgid "Search..."
+msgstr ""
+
+msgid "Desktop Theme v"
+msgstr ""
+
+msgid "Exit"
+msgstr ""
+
+msgid "Logout"
+msgstr ""
+
+msgid "Are you sure you want to logout?"
+msgstr ""
+
+msgid "Pin to Desktop"
+msgstr ""
+
+msgid "Desktop label:"
+msgstr ""
+
+# taskbar.js
+msgid "Auto Refresh: ON"
+msgstr ""
+
+msgid "Auto Refresh: OFF"
+msgstr ""
+
+msgid "Window"
+msgstr ""
+
+msgid "Unsaved Changes"
+msgstr ""
+
+msgid "No password set!"
+msgstr ""
+
+msgid "Go to password configuration..."
+msgstr ""
+
+msgid "There is no password set on this router. Please configure a root password to protect the web interface."
+msgstr ""
+
+msgid "Password"
+msgstr ""
+
+msgid "Please log in."
+msgstr ""
+
+msgid "Username"
+msgstr ""
+
+msgid "Invalid username and/or password! Please try again."
+msgstr ""
+
+msgid "Security"
+msgstr ""
+
+msgid "View"
+msgstr ""
+
+msgid "Set password"
+msgstr ""
+
+msgid "Configuration"
+msgstr ""
+
+msgid "Reverted"
+msgstr ""
+
+# widgets/stickynote.js
+msgid "Yellow"
+msgstr ""
+
+msgid "Sticky Note"
+msgstr ""
+
+msgid "Coral"
+msgstr ""
+
+msgid "Green"
+msgstr ""
+
+msgid "Blue"
+msgstr ""
+
+msgid "Purple"
+msgstr ""
+
+msgid "Pink"
+msgstr ""
+
+msgid "White"
+msgstr ""
+
+msgid "Sticky "
+msgstr ""
+
+# widgets/clock.js
+msgid "Analog"
+msgstr ""
+
+msgid "Desktop Clock"
+msgstr ""
+
+msgid "Digital"
+msgstr ""
+
+# widgets/system-info.js
+msgid "CPU"
+msgstr ""
+
+msgid "System Info"
+msgstr ""
+
+msgid "Mem"
+msgstr ""
+
+msgid "Temp"
+msgstr ""
+
+msgid "Show temperature"
+msgstr ""
+
+msgid "Accent color"
+msgstr ""
+
+msgid "Font color"
+msgstr ""
+
+msgid "Card background"
+msgstr ""
+
+msgid "Refresh interval (s)"
+msgstr ""
+
+msgid "Resize"
+msgstr ""
+
+msgid "Up"
+msgstr ""
+
+msgid "d "
+msgstr ""
+
+msgid "h"
+msgstr ""
+
+# widgets/net-traffic.js
+msgid "Network Traffic"
+msgstr ""
+
+msgid "Interface"
+msgstr ""
+
+msgid "Download"
+msgstr ""
+
+# taskbar.js
+msgid "Tray item \""
+msgstr ""
+
+msgid "Tray item requires an id"
+msgstr ""
+

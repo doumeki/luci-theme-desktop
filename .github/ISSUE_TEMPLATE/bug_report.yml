@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a bug in luci-theme-desktop
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Paste the **diagnostics output** below — it already contains the
+        firmware, LuCI runtime, theme version and save-log tail, so no need
+        to fill in environment fields by hand.
+
+        **How to get it (no terminal needed):**
+        1. Open the **start menu** (bottom-left) → click **Diagnostics**
+           (or: right-click the desktop → Theme → **Diagnostics**)
+        2. The diagnostics are copied to your clipboard automatically
+        3. Paste them in the box below
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics output
+      description: Paste the copied diagnostics here
+      placeholder: |
+        DISTRIB_ID=...
+        DISTRIB_RELEASE=...
+        arch: ...
+        luci_runtime: ...
+        theme_version: ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What happens vs. what you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...

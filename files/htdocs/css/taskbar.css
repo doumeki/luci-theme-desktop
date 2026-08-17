@@ -1,0 +1,8 @@
+/* Desktop Theme - Taskbar CSS
+ * (Most taskbar styles are in shell.css — this file is for additions)
+ */
+
+.taskbar-window-btn {
+    /* Additional touch target */
+    line-height: 34px;
+}
