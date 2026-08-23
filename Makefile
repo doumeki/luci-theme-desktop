@@ -12,7 +12,7 @@ THEME_TITLE:=Desktop
 PKG_NAME:=luci-theme-$(THEME_NAME)
 PKG_VERSION:=0.1.0
 # 125 = merged branch (Lua track + ucode track unified, 2026-08-15)
-PKG_RELEASE:=168
+PKG_RELEASE:=169
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -49,6 +49,14 @@ define Package/luci-theme-$(THEME_NAME)/install
 	$(INSTALL_BIN) ./files/30_luci-theme-$(THEME_NAME) $(1)/etc/uci-defaults/luci-theme-$(THEME_NAME)
 	$(INSTALL_DIR) $(1)/www/luci-static/$(THEME_NAME)
 	$(CP) -a ./files/htdocs/* $(1)/www/luci-static/$(THEME_NAME)/ 2>/dev/null || true
+	# version.txt is part of the package DATA (not postinst) so it also
+	# exists in images with the theme baked in — image builds run postinst
+	# with IPKG_INSTROOT set and the write would be skipped, leaving the
+	# start menu's version fetch with a 404 ("Not found").
+	# No trailing newline: ucode has no string trim(), templates read the
+	# version via sprintf() and a newline would corrupt the ?v= URLs
+	# (the Lua track's template copes either way — one write serves both).
+	printf "0.1.0-$(PKG_RELEASE)" > $(1)/www/luci-static/$(THEME_NAME)/version.txt
 	$(INSTALL_DIR) $(1)/usr/share/ucode/luci/template/themes/$(THEME_NAME)
 	$(CP) -a ./files/usr/share/ucode/luci/template/themes/$(THEME_NAME)/* $(1)/usr/share/ucode/luci/template/themes/$(THEME_NAME)/ 2>/dev/null || true
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/view/themes/$(THEME_NAME)
@@ -72,14 +80,14 @@ endef
 define Package/luci-theme-$(THEME_NAME)/postinst
 #!/bin/sh
 if [ -z "$${IPKG_INSTROOT}" ]; then
+	# version.txt is shipped as package data (see install rule) — the
+	# postinst must not write it: image builds run postinst with
+	# IPKG_INSTROOT set and the guard below would skip the write, leaving
+	# baked-in installs without the file (start menu shows "Not found").
 	if [ -f /etc/uci-defaults/luci-theme-$(THEME_NAME) ]; then
 		( . /etc/uci-defaults/luci-theme-$(THEME_NAME) ) && \
 		rm -f /etc/uci-defaults/luci-theme-$(THEME_NAME)
 	fi
-	# No trailing newline: ucode has no string trim(), templates read the
-	# version via sprintf() and a newline would corrupt the ?v= URLs
-	# (the Lua track's template copes either way — one write serves both).
-	printf "0.1.0-$(PKG_RELEASE)" > /www/luci-static/desktop/version.txt
 	rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
 	# Lua templates are cached in the uhttpd process (luci.template
 	# memory cache) — restart to pick up updated theme templates.
