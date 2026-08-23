@@ -73,7 +73,10 @@ window.LuCIDesktop = (function() {
                 if (!p || typeof p !== 'object') return;
                 self._platform = p;
                 var warns = [];
-                if (p.dmidecode === false) warns.push(_('Physical RAM shown as estimate (dmidecode missing)'));
+                // dmidecode deliberately NOT warned about: absent from most
+                // firmware images (often not even in the package feed) and
+                // the controller falls back to /proc/iomem, which is close
+                // enough — the toast was just noise on every boot.
                 if (p.curl === false) warns.push(_('Online wallpaper unavailable (curl missing)'));
                 if (p.top_cpu_ok === false) warns.push(_('CPU usage may be inaccurate on this build'));
                 // Keep the warning text for the bell's manual review —

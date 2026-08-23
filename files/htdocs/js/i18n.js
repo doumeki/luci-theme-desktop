@@ -180,7 +180,6 @@
 
             // ===== platform compatibility probe (shell.js) =====
             'Platform compatibility': '平台兼容性提示',
-            'Physical RAM shown as estimate (dmidecode missing)': '物理内存显示为估算值（缺少 dmidecode）',
             'Online wallpaper unavailable (curl missing)': '在线壁纸不可用（缺少 curl）',
             'CPU usage may be inaccurate on this build': '此固件上 CPU 占用率可能不准',
             'Password': '密码',

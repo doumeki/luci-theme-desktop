@@ -14,8 +14,6 @@ msgstr "实例数量上限提示"
 
 msgid "Online wallpaper unavailable (curl missing)"
 msgstr "在线壁纸不可用（缺少 curl）"
-msgid "Physical RAM shown as estimate (dmidecode missing)"
-msgstr "物理内存显示为估算值（缺少 dmidecode）"
 msgid "Picsum unreachable"
 msgstr "Picsum 无法访问"
 
