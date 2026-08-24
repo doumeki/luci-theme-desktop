@@ -244,19 +244,35 @@ function action_system_status()
     end
     physmem = load_physical_memory()
 
-    -- Temperature: first readable thermal zone (x86 often only has one)
+    -- Temperature: prefer the CPU package zone — the first readable zone
+    -- is often the board/ACPI sensor (acpitz), which reads well below the
+    -- CPU (e.g. 27.8°C vs 43°C on an Intel box). CPU zones: x86_pkg_temp
+    -- (Intel), cpu-thermal/tsens (ARM SoCs). Fall back to the first
+    -- readable zone when no CPU-named zone exists (AMD k10temp etc.).
     local thermal = {}
+    local temp_first = nil
     for i = 0, 9 do
-        local fp = io.open("/sys/class/thermal/thermal_zone" .. i .. "/temp")
+        local zpath = "/sys/class/thermal/thermal_zone" .. i
+        local fp = io.open(zpath .. "/temp")
         if fp then
             local raw = fp:read("*l")
             fp:close()
             local t = raw and tonumber(raw)
             if t then
-                thermal[1] = { temp = string.format("%.1f", t / 1000) .. "°C" }
-                break
+                if not temp_first then temp_first = t end
+                local tf = io.open(zpath .. "/type")
+                local ztype = tf and (tf:read("*l") or "") or ""
+                if tf then tf:close() end
+                local zl = ztype:lower()
+                if zl:find("pkg") or zl:find("cpu") or zl:find("tsens") then
+                    thermal[1] = { temp = string.format("%.1f", t / 1000) .. "°C" }
+                    break
+                end
             end
         end
+    end
+    if not thermal[1] and temp_first then
+        thermal[1] = { temp = string.format("%.1f", temp_first / 1000) .. "°C" }
     end
 
     luci.http.write_json({
