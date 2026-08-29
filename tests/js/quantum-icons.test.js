@@ -558,5 +558,23 @@ describe('Mobile long-press icon menu (Change Icon entry)', function() {
         icon.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         assert.equal(opened, 1, 'tap opens the app');
     });
+
+    it('mobile reload keeps the chosen icon (icon_layout is shared)', function() {
+        // Regression (0.1.0-202): the mobile loadConfig branch only read
+        // mobile_pins/mobile_hidden — the shared icon_layout (user icon
+        // choice) was skipped, so a chosen icon vanished after refresh.
+        document.getElementById('desktop-config').textContent = JSON.stringify({
+            mobile_pins: [{ url: '/cgi-bin/luci/admin/network/socat', title: 'Socat' }],
+            mobile_hidden: [],
+            icon_layout: { '/cgi-bin/luci/admin/network/socat': { icon: 'gost' } }
+        });
+        window.LuCIMenuData = [{ href: '/cgi-bin/luci/admin/network/socat' }];
+        window.Desktop.init();
+        var icon = document.querySelector('#desktop-icons .desktop-icon[data-url*="socat"]');
+        assert.ok(icon, 'icon rendered');
+        var chip = icon.querySelector('.desktop-icon-emoji');
+        assert.ok(chip, 'emoji chip rendered on mobile');
+        assert.equal(chip.textContent, '⚡', 'chosen icon (gost) survives reload');
+    });
 });
 })();

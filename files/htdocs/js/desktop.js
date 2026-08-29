@@ -63,6 +63,13 @@
             if (LuCIDesktop.isMobile()) {
                 if (c.mobile_pins) pinnedItems = c.mobile_pins;
                 if (c.mobile_hidden) hiddenIcons = c.mobile_hidden;
+                // The icon layout (user icon choice + positions) is SHARED
+                // across desktop and mobile — saved under plain
+                // 'icon_layout' (the mobile slot lives inside each entry).
+                // Without this, a mobile icon choice vanished on reload.
+                if (c.icon_layout && typeof c.icon_layout === 'object') {
+                    iconLayout = normalizeLayout(c.icon_layout);
+                }
             } else {
                 if (c.pins) pinnedItems = c.pins;
                 if (c.hidden_icons) hiddenIcons = c.hidden_icons;
