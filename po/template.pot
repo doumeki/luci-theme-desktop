@@ -175,6 +175,27 @@ msgstr ""
 msgid "Refresh"
 msgstr ""
 
+msgid "Rearrange Icons"
+msgstr ""
+
+msgid "Change Icon"
+msgstr ""
+
+msgid "Reset Icon"
+msgstr ""
+
+msgid "Click an icon to select"
+msgstr ""
+
+msgid "Search icon name or ID..."
+msgstr ""
+
+msgid "Current:"
+msgstr ""
+
+msgid "No matching icons"
+msgstr ""
+
 msgid "Fonts"
 msgstr ""
 
@@ -405,6 +426,9 @@ msgid "Applying…"
 msgstr ""
 
 msgid "Minimize"
+msgstr ""
+
+msgid "Pin to top"
 msgstr ""
 
 msgid "Maximize"

@@ -96,7 +96,12 @@ async function login(sid) {
         const create = execSync(`ssh ${key} root@${host} "ubus call session create '{\\"timeout\\":900}'"`, { encoding: 'utf8' });
         const tok = JSON.parse(create).ubus_rpc_session;
         execSync(`ssh ${key} root@${host} "ubus call session set '{\\"ubus_rpc_session\\":\\"${tok}\\",\\"values\\":{\\"token\\":\\"${tok}\\",\\"username\\":\\"root\\"}}'"`);
-        await nav(sid, `http://${ROUTER}/cgi-bin/luci/`);
+        // NOTE: navigate to the PROBE_SSH host itself — lib.ROUTER may
+        // point at a DIFFERENT device (ROUTER_1), which would register the
+        // cookie on the wrong domain and leave the probe logged out
+        // (2026-08-29: the 253 probe showed the login page because the
+        // cookie was injected on 1.1's domain).
+        await nav(sid, `http://${host}/cgi-bin/luci/`);
         await sleep(1500);
         // Lua runtime (luci-lua-runtime, e.g. 2.253) authenticates via the
         // plain `sysauth` cookie — sysauth_http is the ucode runtime's
@@ -105,7 +110,7 @@ async function login(sid) {
         // Re-navigate WITH the cookie: the first nav rendered the
         // unauthenticated bootstrap page; the shell only renders after a
         // request that carries the session cookie.
-        await nav(sid, `http://${ROUTER}/cgi-bin/luci/`);
+        await nav(sid, `http://${host}/cgi-bin/luci/`);
         await sleep(2500);
         return;
     }
@@ -149,4 +154,4 @@ async function finish(sid) {
     killStale();
 }
 
-module.exports = { sleep, exec, nav, startGecko, newSession, login, theme, assertTheme, finish, ROUTER };
+module.exports = { sleep, exec, nav, wd, startGecko, newSession, login, theme, assertTheme, finish, ROUTER };

@@ -1,0 +1,223 @@
+/* icon-picker.css — desktop icon chooser modal (theme-styled)
+ * Uses theme CSS variables so the picker matches the shell look:
+ *   --startmenu-bg (panel — color + opacity follow the Start Menu
+ *     setting; fully opaque when the user sets opacity 1)
+ *   --startmenu-sel-color (selection accent)
+ *   --titlebar-color (primary button)
+ *   --picker-* (fg/border/tile tones derived from the start menu color's
+ *     luminance — set by theme-config.js for light/dark themes)
+ */
+
+/* ===== Overlay ===== */
+.icon-picker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    animation: iconPickerFade 0.2s ease;
+}
+.icon-picker-overlay.open { display: flex; }
+
+@keyframes iconPickerFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ===== Panel ===== */
+.icon-picker-panel {
+    /* The start menu's own background variable: color + opacity follow
+       the user's Start Menu settings exactly. */
+    background: var(--startmenu-bg, #16162a);
+    border: 1px solid var(--picker-border, rgba(255,255,255,0.08));
+    border-radius: 16px;
+    max-width: 820px;
+    width: 100%;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+    color: var(--picker-fg, var(--startmenu-font-color, #e0e0e0));
+    animation: iconPickerSlide 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    overflow: hidden;
+}
+@keyframes iconPickerSlide {
+    from { transform: translateY(24px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* ===== Header ===== */
+.icon-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--picker-border, rgba(255,255,255,0.06));
+    flex-shrink: 0;
+}
+.icon-picker-title { font-size: 15px; font-weight: 500; }
+.icon-picker-title small {
+    font-weight: 400;
+    font-size: 12px;
+    opacity: 0.5;
+    margin-left: 8px;
+}
+.icon-picker-close {
+    background: none;
+    border: none;
+    color: var(--picker-fg-muted, rgba(255,255,255,0.4));
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 6px;
+    line-height: 1;
+}
+.icon-picker-close:hover { color: #fff; }
+
+/* ===== Search ===== */
+.icon-picker-search { padding: 10px 20px 0; flex-shrink: 0; }
+.icon-picker-search input {
+    width: 100%;
+    background: var(--picker-input-bg, rgba(255,255,255,0.06));
+    border: 1px solid var(--picker-border, rgba(255,255,255,0.08));
+    border-radius: 20px;
+    padding: 7px 16px;
+    color: inherit;
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+}
+.icon-picker-search input::placeholder { opacity: 0.4; }
+.icon-picker-search input:focus { border-color: var(--picker-fg-muted, rgba(255,255,255,0.18)); }
+
+/* ===== Tabs ===== */
+.icon-picker-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px 20px 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--picker-border, rgba(255,255,255,0.04));
+    max-height: 76px;
+    overflow-y: auto;
+}
+.icon-picker-tab {
+    background: none;
+    border: none;
+    color: var(--picker-fg-muted, rgba(255,255,255,0.45));
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+.icon-picker-tab:hover { color: var(--picker-fg, #fff); background: var(--picker-option-hover, rgba(255,255,255,0.07)); }
+.icon-picker-tab.active {
+    color: #fff;
+    background: var(--startmenu-sel-color, rgba(74, 144, 217, 0.6));
+}
+
+/* ===== Grid ===== */
+.icon-picker-grid-wrap {
+    padding: 14px 16px 16px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 200px;
+}
+.icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 8px;
+}
+.icon-picker-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 6px 8px;
+    background: var(--picker-option-bg, rgba(255,255,255,0.03));
+    border: 2px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    gap: 2px;
+    transition: all 0.15s;
+}
+.icon-picker-option:hover {
+    background: var(--picker-option-hover, rgba(255,255,255,0.07));
+    border-color: var(--picker-border, rgba(255,255,255,0.1));
+    transform: translateY(-2px);
+}
+.icon-picker-option.selected {
+    border-color: var(--startmenu-sel-color, var(--picker-border, rgba(255,255,255,0.5)));
+    background: var(--picker-option-hover, rgba(255,255,255,0.07));
+}
+.icon-picker-option .icon-picker-emoji { font-size: 28px; line-height: 1.3; }
+.icon-picker-option .icon-picker-title {
+    font-size: 10px;
+    opacity: 0.75;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.icon-picker-option .icon-picker-id {
+    font-size: 9px;
+    opacity: 0.3;
+    max-width: 68px;
+    word-break: break-all;
+    line-height: 1.2;
+    text-align: center;
+}
+.icon-picker-empty {
+    text-align: center;
+    padding: 40px 0;
+    opacity: 0.3;
+    font-size: 14px;
+}
+
+/* ===== Footer ===== */
+.icon-picker-footer {
+    padding: 10px 20px 14px;
+    border-top: 1px solid var(--picker-border, rgba(255,255,255,0.06));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.icon-picker-current { font-size: 13px; opacity: 0.7; }
+.icon-picker-current strong { opacity: 1; font-weight: 500; }
+.icon-picker-actions { display: flex; gap: 8px; }
+.icon-picker-btn {
+    background: var(--picker-btn-bg, rgba(255,255,255,0.08));
+    border: none;
+    padding: 6px 18px;
+    border-radius: 18px;
+    color: var(--picker-fg, rgba(255,255,255,0.8));
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.icon-picker-btn:hover { background: var(--picker-option-hover, rgba(255,255,255,0.14)); color: var(--picker-fg, #fff); }
+.icon-picker-btn.icon-picker-primary {
+    background: var(--titlebar-color, rgba(74, 144, 217, 0.7));
+    color: #fff;
+}
+.icon-picker-btn.icon-picker-primary:hover { filter: brightness(1.15); }
+
+/* ===== Small screens ===== */
+@media (max-width: 640px) {
+    .icon-picker-overlay { padding: 16px 10px; }
+    .icon-picker-grid { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+    .icon-picker-option .icon-picker-emoji { font-size: 22px; }
+    .icon-picker-footer { flex-direction: column; align-items: stretch; }
+    .icon-picker-actions { justify-content: stretch; }
+    .icon-picker-actions .icon-picker-btn { flex: 1; text-align: center; }
+}

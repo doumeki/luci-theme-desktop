@@ -85,6 +85,30 @@ describe('Taskbar window button management', function() {
         assert.ok(!btn.classList.contains('minimized'), 'button restored');
     });
 
+    it('should keep pinned window tab at the front of the taskbar', function() {
+        LuCIDesktop.windows = LuCIDesktop.windows || {};
+        LuCIDesktop.emit('window-opened', {id: 'win-1', title: 'One'});
+        LuCIDesktop.emit('window-opened', {id: 'win-2', title: 'Two'});
+        LuCIDesktop.windows['win-1'] = { pinned: false };
+        LuCIDesktop.windows['win-2'] = { pinned: true };
+        LuCIDesktop.emit('window-pinned', {id: 'win-2', pinned: true});
+
+        var list = document.getElementById('taskbar-windows');
+        var btns = list.querySelectorAll('.taskbar-window-btn');
+        assert.equal(btns[0].getAttribute('data-window-id'), 'win-2', 'pinned tab first');
+        assert.equal(btns[1].getAttribute('data-window-id'), 'win-1', 'normal tab second');
+
+        // a new window opening must NOT push the pinned tab back
+        LuCIDesktop.emit('window-opened', {id: 'win-3', title: 'Three'});
+        LuCIDesktop.windows['win-3'] = { pinned: false };
+        btns = list.querySelectorAll('.taskbar-window-btn');
+        assert.equal(btns[0].getAttribute('data-window-id'), 'win-2', 'pinned stays first after new window');
+
+        delete LuCIDesktop.windows['win-1'];
+        delete LuCIDesktop.windows['win-2'];
+        delete LuCIDesktop.windows['win-3'];
+    });
+
     it('button click on active window should minimize', function() {
         LuCIDesktop.emit('window-opened', {id: 'win-f', title: 'Focused'});
         LuCIDesktop.emit('window-focused', {id: 'win-f'});

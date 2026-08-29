@@ -206,6 +206,12 @@
                 self.updateWindowTitle(data.id, data.title);
             });
 
+            // Pinned windows keep their tab at the FRONT of the taskbar —
+            // re-sort so the pinned tabs always lead the list.
+            DESKTOP.on('window-pinned', function() {
+                self.renderWindowButtons();
+            });
+
             // Auto-refresh toggle: broadcast to all open iframes via bridge
             DESKTOP.on('auto-refresh-toggled', function(data) {
                 if (window.IframeBridge && IframeBridge.broadcastAutoRefresh) {
@@ -228,6 +234,28 @@
             }
             btn.textContent = title || _('Window');
             list.appendChild(btn);
+            // A pinned window already open keeps its tab in front
+            this.renderWindowButtons();
+        },
+
+        // Sort taskbar tabs: pinned windows first (in pin order), then the
+        // normal windows in open order. Stable sort keeps both groups in
+        // their existing DOM order.
+        renderWindowButtons: function() {
+            var list = document.getElementById('taskbar-windows');
+            if (!list) return;
+            var btns = Array.prototype.slice.call(list.querySelectorAll('.taskbar-window-btn'));
+            if (btns.length < 2) return;
+            btns.sort(function(a, b) {
+                var wa = DESKTOP.windows && DESKTOP.windows[a.getAttribute('data-window-id')];
+                var wb = DESKTOP.windows && DESKTOP.windows[b.getAttribute('data-window-id')];
+                var pa = !!(wa && wa.pinned);
+                var pb = !!(wb && wb.pinned);
+                return (pb ? 1 : 0) - (pa ? 1 : 0);
+            });
+            var frag = document.createDocumentFragment();
+            btns.forEach(function(b) { frag.appendChild(b); });
+            list.appendChild(frag);
         },
 
         removeWindowButton: function(winId) {

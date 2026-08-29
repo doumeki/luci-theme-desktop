@@ -2203,7 +2203,7 @@ table > thead > tr > td {
   color: #525f7f;
   line-height: 1.4em;
   vertical-align: middle !important;
-  padding: 0.8rem 1.5rem;
+  /* padding: 0.8rem 1.5rem; */
   border-top: 1px solid #ddd;
 }
 table > tbody > tr > th,

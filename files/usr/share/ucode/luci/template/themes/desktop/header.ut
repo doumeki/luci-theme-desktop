@@ -191,6 +191,7 @@
     let mobile_widget_json = {};
     let mobile_pins_json = [];
     let mobile_hidden_json = [];
+    let icon_layout_json = {};
 
     // Read all individual UCI keys at once
     // (.prefixed keys are uci cursor metadata — the Lua version's
@@ -234,6 +235,29 @@
     try {
         let mh = uci.get('desktop', 'mobile_hidden', 'items');
         if (mh && mh != '' && mh != '[]') mobile_hidden_json = json(mh);
+    } catch (e) {}
+
+    // Icon layout (desktop only): map url -> {col,row,icon} — drag
+    // position and user icon choice together. Legacy icon_positions /
+    // icon_choices sections are merged here once for migration.
+    try {
+        let il = uci.get('desktop', 'icon_layout', 'items');
+        if (il && il != '' && il != '{}') {
+            icon_layout_json = json(il);
+        } else {
+            let merged = {};
+            let p = uci.get('desktop', 'icon_positions', 'items');
+            if (p && p != '' && p != '{}') {
+                let pp = json(p);
+                for (let u, v in pp) merged[u] = { desktop: { col: v.col, row: v.row } };
+            }
+            let c = uci.get('desktop', 'icon_choices', 'items');
+            if (c && c != '' && c != '{}') {
+                let cc = json(c);
+                for (let u, v in cc) { merged[u] = merged[u] || {}; merged[u].icon = v; }
+            }
+            icon_layout_json = merged;
+        }
     } catch (e) {}
 
     // Shared sticky-note content map (device-independent). Stored as a
@@ -367,6 +391,7 @@
     <link rel="stylesheet" href="{{ media }}/css/window.css?v={{ theme_ver }}">
     <link rel="stylesheet" href="{{ media }}/css/taskbar.css?v={{ theme_ver }}">
     <link rel="stylesheet" href="{{ media }}/css/startmenu.css?v={{ theme_ver }}">
+    <link rel="stylesheet" href="{{ media }}/css/icon-picker.css?v={{ theme_ver }}">
     <link rel="stylesheet" href="{{ media }}/css/widget.css?v={{ theme_ver }}">
     <link rel="stylesheet" href="{{ media }}/css/mobile.css?v={{ theme_ver }}">
     <link rel="icon" type="image/png" href="{{ media }}/favorit.png">
@@ -416,6 +441,7 @@
         mobile_widgets: mobile_widget_json,
         mobile_pins: mobile_pins_json,
         mobile_hidden: mobile_hidden_json,
+        icon_layout: icon_layout_json,
         stickysync: stickysync_json,
         theme: theme,
         wallpaper: {
@@ -478,6 +504,15 @@
     <script src="{{ media }}/js/iframe-bridge.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/taskbar.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/startmenu.js?v={{ theme_ver }}"></script>
+    <!-- icon-url-map + icon-config + quantum-icons BEFORE desktop.js:
+         desktop.js registers and runs Desktop.init() immediately, and
+         _initQuantumDrag / renderShortcuts need the engine + catalog
+         present. icon-config parses the url->icon table from
+         icon-url-map.js, so the map loads first. -->
+    <script src="{{ media }}/js/icon-url-map.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/icon-config.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/quantum-icons.js?v={{ theme_ver }}"></script>
+    <script src="{{ media }}/js/icon-picker.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/desktop.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/widget.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/widgets/clock.js?v={{ theme_ver }}"></script>

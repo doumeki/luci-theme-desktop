@@ -62,6 +62,23 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 | i18n 报错/缺翻译 | dict/pot/po 三方对齐后再跑 |
 | ttyd 页面 iframe 不撑满 | 新版 luci-app-ttyd 的 iframe 是 JS 延迟注入——`fitTtydIframe` 有重试 |
 
+## 第三方应用样式修补（壳内）
+
+桌面壳内嵌的第三方应用（passwall2 等）自带**内联 `<style>`**，在壳内可能渲染错乱
+（如 passwall2 分流规则表 ≤1152px 变 flex 卡片、表头消失）。修补约定：
+
+1. **默认方式 = 主题动态注入**：
+   - 样式写成独立文件：`files/htdocs/css/apps/<app>-<fix>.css`
+   - 在 `iframe-bridge.js` 的 `APP_CSS` 表注册（URL 子串匹配 + 文件路径 + style id）
+   - 页面加载后 `injectAppCss()` fetch 注入——**晚于应用内联样式**，且选择器加 `body` 前缀
+     提高 specificity，可压过应用的 `!important`
+   - **删除文件 = 静默回退**（fetch 404 直接跳过），绝不报错
+2. **不要直改 feed 文件**：会被 feed 更新冲掉，且影响所有主题。
+   只有当"所有主题都必须修"时才考虑直改，并说明理由。
+3. 注入规则尽量限定在应用自己的断点内（同款 `@media`），避免影响无关页面。
+4. 注意：老 LuCI（Lua 调度器）不解析 menu.d JSON 路由——纯 JS 应用页面 404 时
+   （如 lienol socat main 分支），CSS 注入救不了路由，需 Lua 控制器/换分支。
+
 ## 测试分层
 
 - **L1**：`node tests/run-headless.js` — 浏览器单元测试（无需路由器，CI 跑）

@@ -465,6 +465,14 @@ function action_save()
             check(uci:set("desktop", "mobile_pins", "mobile_pins"), nil, "mobile_pins.section")
         end
         check(uci:set("desktop", "mobile_pins", "items", data), nil, "mobile_pins.items")
+    elseif section == "icon_layout" then
+        -- Icon layout (desktop only): JSON map url -> {icon, desktop:
+        -- {col,row}, mobile:{col,row}} — position + icon choice together,
+        -- mobile slot reserved for a future mobile layout.
+        if not uci:get("desktop", "icon_layout") then
+            check(uci:set("desktop", "icon_layout", "icon_layout"), nil, "icon_layout.section")
+        end
+        check(uci:set("desktop", "icon_layout", "items", data), nil, "icon_layout.items")
     elseif section == "stickysync" then
         check(stickysync_write(data), "stickysync write", "stickysync")
     else

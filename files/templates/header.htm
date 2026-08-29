@@ -152,6 +152,7 @@
     <link rel="stylesheet" href="<%=media%>/css/window.css">
     <link rel="stylesheet" href="<%=media%>/css/taskbar.css">
     <link rel="stylesheet" href="<%=media%>/css/startmenu.css">
+    <link rel="stylesheet" href="<%=media%>/css/icon-picker.css">
     <link rel="stylesheet" href="<%=media%>/css/widget.css">
     <link rel="stylesheet" href="<%=media%>/css/mobile.css">
     <link rel="icon" type="image/png" href="<%=media%>/favorit.png">
@@ -227,6 +228,7 @@
         local mobile_widget_json = '{}'
         local mobile_pins_json = '[]'
         local mobile_hidden_json = '[]'
+        local icon_layout_json = '{}'
         local stickysync_json = '{}'
         local wallpaper_json = 'null'
 
@@ -258,6 +260,42 @@
             if f then local v = f:read("*a"):gsub("%s+",""); f:close(); if v and v~="" and v~="[]" then mobile_pins_json = v end end
             f = io.popen("uci get desktop.mobile_hidden.items 2>/dev/null")
             if f then local v = f:read("*a"):gsub("%s+",""); f:close(); if v and v~="" and v~="[]" then mobile_hidden_json = v end end
+            f = io.popen("uci get desktop.icon_layout.items 2>/dev/null")
+            if f then local v = f:read("*a"):gsub("%s+",""); f:close(); if v and v~="" and v~="{}" then icon_layout_json = v end end
+            if icon_layout_json == '{}' then
+                -- Migration: merge legacy icon_positions + icon_choices
+                local merged = {}
+                local function merge_map(opt, key)
+                    local g = io.popen("uci get desktop." .. opt .. ".items 2>/dev/null")
+                    if g then
+                        local raw = g:read("*a"):gsub("%s+",""); g:close()
+                        if raw and raw ~= "" and raw ~= "{}" then
+                            local ok, tbl = pcall(function() return luci.jsonc and luci.jsonc.parse(raw) or luci.json.parse(raw) end)
+                            if ok and type(tbl) == "table" then
+                                for u, val in pairs(tbl) do
+                                    if not merged[u] then merged[u] = {} end
+                                    if key == "icon" then merged[u].icon = val
+                                    elseif type(val) == "table" then
+                                        merged[u].desktop = { col = val.col, row = val.row }
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                merge_map("icon_positions")
+                merge_map("icon_choices", "icon")
+                local first = true
+                local buf = {"{"}
+                for u, v in pairs(merged) do
+                    if not first then buf[#buf+1] = "," end
+                    first = false
+                    buf[#buf+1] = '"' .. json_escape(u) .. '":{"col":' .. tostring(v.col or 0) .. ',"row":' .. tostring(v.row or 0) ..
+                        (v.icon and (',"icon":"' .. json_escape(v.icon) .. '"') or "") .. "}"
+                end
+                buf[#buf+1] = "}"
+                icon_layout_json = table.concat(buf)
+            end
             -- Stickysync lives in a JSON FILE (keystroke-frequency writes;
             -- see controller). Fall back to the legacy UCI option so a
             -- pre-file install keeps its notes until the first save.
@@ -374,7 +412,7 @@
         local wallpaper_json = '{"mode":"' .. wp_mode .. '","url":' .. wp_url .. ',"builtin":' .. wp_builtin .. ',"builtin_disabled":' .. builtin_disabled_json .. '}'
         write('{"widgets":' .. widget_json .. ',"pins":' .. pins_json .. ',"hidden_icons":' .. hidden_json ..
               ',"mobile_widgets":' .. mobile_widget_json .. ',"mobile_pins":' .. mobile_pins_json .. ',"mobile_hidden":' .. mobile_hidden_json ..
-              ',"stickysync":' .. stickysync_json .. ',"theme":')
+              ',"icon_layout":' .. icon_layout_json .. ',"stickysync":' .. stickysync_json .. ',"theme":')
         theme_json()
         write(',"wallpaper":' .. wallpaper_json .. '}')
     %>
@@ -429,6 +467,15 @@
     <script src="<%=media%>/js/iframe-bridge.js"></script>
     <script src="<%=media%>/js/taskbar.js"></script>
     <script src="<%=media%>/js/startmenu.js"></script>
+    <!-- icon-url-map + icon-config + quantum-icons BEFORE desktop.js:
+         desktop.js registers and runs Desktop.init() immediately, and
+         _initQuantumDrag / renderShortcuts need the engine + catalog
+         present. icon-config parses the url->icon table from
+         icon-url-map.js, so the map loads first. -->
+    <script src="<%=media%>/js/icon-url-map.js"></script>
+    <script src="<%=media%>/js/icon-config.js"></script>
+    <script src="<%=media%>/js/quantum-icons.js"></script>
+    <script src="<%=media%>/js/icon-picker.js"></script>
     <script src="<%=media%>/js/desktop.js"></script>
     <script src="<%=media%>/js/widget.js"></script>
     <script src="<%=media%>/js/widgets/clock.js"></script>

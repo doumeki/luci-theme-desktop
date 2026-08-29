@@ -230,6 +230,10 @@
             var yiq = (tbRgb[0]*299 + tbRgb[1]*587 + tbRgb[2]*114) / 1000;
             r.setProperty('--win-titlebar-fg', yiq >= 150 ? '#222' : '#f0f0f0');
 
+            // Titlebar opacity (active + inactive windows follow it)
+            var tbOpacity = parseFloat(vals.titlebar_opacity);
+            r.setProperty('--titlebar-opacity', (isFinite(tbOpacity) && tbOpacity > 0) ? String(tbOpacity) : '1');
+
             // Taskbar foreground: clock, start button (●) and tray icons
             // must contrast against the user's taskbar color
             var tkRgb = hexToRgb(vals.taskbar_color) || [13,17,28];
@@ -245,6 +249,17 @@
             r.setProperty('--startmenu-sel-fg', smSelYiq >= 150 ? '#222' : '#fff');
             // Muted fg for empty-state / footer / logout (light or dark start menu)
             r.setProperty('--startmenu-fg-muted', smYiq >= 150 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.4)');
+
+            // Icon picker modal: derive every tone from the start menu
+            // color's luminance so the chooser matches light or dark
+            // themes (text, borders, option tiles, buttons, input).
+            r.setProperty('--picker-fg', smYiq >= 150 ? '#222' : '#f0f0f0');
+            r.setProperty('--picker-fg-muted', smYiq >= 150 ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.45)');
+            r.setProperty('--picker-border', smYiq >= 150 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)');
+            r.setProperty('--picker-option-bg', smYiq >= 150 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)');
+            r.setProperty('--picker-option-hover', smYiq >= 150 ? 'rgba(0,0,0,0.09)' : 'rgba(255,255,255,0.09)');
+            r.setProperty('--picker-btn-bg', smYiq >= 150 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)');
+            r.setProperty('--picker-input-bg', smYiq >= 150 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)');
 
             // Log actual CSS vars after apply
             console.log('[theme] after apply: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +

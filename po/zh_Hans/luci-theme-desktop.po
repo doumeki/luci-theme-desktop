@@ -175,6 +175,27 @@ msgstr "管理"
 msgid "Refresh"
 msgstr "刷新"
 
+msgid "Rearrange Icons"
+msgstr "重排图标"
+
+msgid "Change Icon"
+msgstr "更改图标"
+
+msgid "Reset Icon"
+msgstr "恢复默认图标"
+
+msgid "Click an icon to select"
+msgstr "点击选中，再次点击确认"
+
+msgid "Search icon name or ID..."
+msgstr "搜索图标名称或 ID..."
+
+msgid "Current:"
+msgstr "当前:"
+
+msgid "No matching icons"
+msgstr "没有匹配的图标"
+
 msgid "Fonts"
 msgstr "字体"
 
@@ -406,6 +427,9 @@ msgstr "正在应用…"
 
 msgid "Minimize"
 msgstr "最小化"
+
+msgid "Pin to top"
+msgstr "窗口置顶"
 
 msgid "Maximize"
 msgstr "最大化"

@@ -102,6 +102,22 @@ describe('IframeBridge CSS injection', function() {
         IframeBridge.injectChromeHider(proxy);
         assert.equal(proxy.querySelectorAll('style#__desktop-chrome-hider').length, 1, 'only one');
     });
+
+    it('only the first top tab bar sticks; later tab bars are de-sticked', function() {
+        // Pages can carry a page-level tab menu AND tab bars inside
+        // forms (both ul.cbi-tabmenu). Sticking all of them piles them
+        // at top:0 — only the first (the page's main tab menu) may stick.
+        var proxy = createProxyDoc();
+        IframeBridge.injectChromeHider(proxy);
+        var menus = proxy.querySelectorAll('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs');
+        assert.ok(menus.length >= 2, 'fixture has multiple tab bars, got ' + menus.length);
+        assert.equal(menus[0].style.getPropertyValue('position'), '',
+            'first tab bar keeps sticky (no inline override)');
+        for (var i = 1; i < menus.length; i++) {
+            assert.equal(menus[i].style.getPropertyValue('position'), 'static',
+                'tab bar #' + i + ' de-sticked');
+        }
+    });
 });
 
 describe('IframeBridge link interception', function() {

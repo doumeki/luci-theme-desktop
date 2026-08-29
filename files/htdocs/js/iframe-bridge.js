@@ -46,6 +46,43 @@
 
     var messageRegistered = false;
 
+    // Per-app CSS fixes for third-party apps rendered inside the shell.
+    // Apps ship their own inline <style> blocks that can break inside the
+    // desktop (e.g. a table flips to flex cards and hides its header row
+    // below a breakpoint). These files are injected AFTER the page loads,
+    // so they win the cascade over the app's inline styles (later
+    // document order + the `body` prefix raises specificity above the
+    // app's bare selectors — needed to beat its !important).
+    // Convention: one file per app under files/htdocs/css/apps/; register
+    // it here with a URL substring to match. See AGENTS.md.
+    // Per-app CSS fixes live on the local (merge-plan) branch only —
+    // the public release ships the injection mechanism with an empty
+    // table (injectAppCss loops over APP_CSS, no entries = no-op).
+    var APP_CSS = [];
+
+    // Universal top-tab-bar rule injected into EVERY iframe (no per-app
+    // adaptation): LuCI apps render their top tabs as ul.nav-tabs (old
+    // CBI), ul.cbi-tabmenu (new CBI) or ul.tabs (custom apps) — pin them
+    // so they stay visible while the page scrolls in a short shell
+    // window. Each bar keeps its OWN background (custom apps usually
+    // have one; CBI tabmenus carry theirs), so scrolled content does
+    // not show through.
+    var TOP_TAB_CSS = [
+        'body ul.nav-tabs,',
+        'body ul.cbi-tabmenu,',
+        'body ul.tabs {',
+        '    position: sticky !important;',
+        '    top: 0 !important;',
+        '    z-index: 60 !important;',
+        '}',
+        '/* new-CBI tabmenu is transparent — back it with the page',
+        '   background (LuCI variable, follows light/dark themes) so',
+        '   scrolled content never shows through while stuck */',
+        'body ul.cbi-tabmenu {',
+        '    background-color: var(--background-color, #f4f5f7) !important;',
+        '}'
+    ].join('\n');
+
     // CSS rules injected into each iframe to suppress its own chrome
     var CHROME_HIDER_CSS = [
         'body > header { display: none !important; }',
@@ -70,7 +107,8 @@
             }
         },
 
-        // Inject CSS to hide the iframe page's internal chrome
+        // Inject CSS to hide the iframe page's internal chrome + pin the
+        // app's top tab bar (universal, every iframe).
         injectChromeHider: function(doc) {
             // Prevent duplicate injection
             if (doc.querySelector('style#__desktop-chrome-hider')) return;
@@ -78,7 +116,7 @@
             // Use document.createElement (works for both Document and Element proxies)
             var style = document.createElement('style');
             style.id = '__desktop-chrome-hider';
-            style.textContent = CHROME_HIDER_CSS;
+            style.textContent = CHROME_HIDER_CSS + '\n\n' + TOP_TAB_CSS;
 
             // doc.head works for Document; doc.querySelector('head') for Element proxies
             var head = doc.head || doc.querySelector('head');
@@ -87,6 +125,47 @@
             } else {
                 // Fallback: append to the element itself
                 doc.appendChild(style);
+            }
+
+            // Only the FIRST top tab bar (the page's main tab menu) may
+            // stick: pages can carry additional ul.cbi-tabmenu/ul.tabs
+            // inside forms — sticking all of them piles them on top of
+            // each other at top:0 (2026-08-29: cbi-tabmenu appeared over
+            // the main tabs). De-stick every later match.
+            var cands = doc.querySelectorAll('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs');
+            if (cands.length > 1) {
+                for (var i = 1; i < cands.length; i++) {
+                    if (cands[i].style) {
+                        cands[i].style.setProperty('position', 'static', 'important');
+                        cands[i].style.setProperty('top', 'auto', 'important');
+                    }
+                }
+            }
+        },
+
+        // Inject app-specific CSS fixes (see APP_CSS above). Dynamic:
+        // the css file is fetched at runtime — if it is missing the fetch
+        // fails silently and the page keeps the app's own styles (i.e.
+        // deleting a file only reverts the fix, never breaks the page).
+        injectAppCss: function(doc) {
+            var href = '';
+            try { href = doc.location ? doc.location.href : ''; } catch (e) {}
+            for (var i = 0; i < APP_CSS.length; i++) {
+                var entry = APP_CSS[i];
+                // case-insensitive: app urls may use mixed case
+                if (!entry || href.toLowerCase().indexOf(entry.match.toLowerCase()) === -1) continue;
+                if (doc.getElementById(entry.id)) return;
+                fetch(entry.file).then(function(r) {
+                    return r.ok ? r.text() : null;
+                }).then(function(css) {
+                    if (!css) return;
+                    var style = doc.createElement('style');
+                    style.id = entry.id;
+                    style.textContent = css;
+                    var head = doc.head || doc.querySelector('head');
+                    if (head) head.appendChild(style);
+                }).catch(function() {});
+                return;
             }
         },
 
@@ -314,6 +393,7 @@
                 }
 
                 this.injectChromeHider(doc);
+                this.injectAppCss(doc);
                 this.injectLinkInterceptor(doc, winId);
                 this.injectFormInterceptor(doc);
                 this.injectFocusNotifier(doc, winId);

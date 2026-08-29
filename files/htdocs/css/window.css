@@ -65,10 +65,37 @@
 }
 .window.focused .window-titlebar {
     background: var(--win-titlebar-active-bg);
+    opacity: var(--titlebar-opacity, 1);
 }
 .window:not(.focused) .window-titlebar {
     background: var(--win-titlebar-inactive-bg, var(--win-titlebar-bg));
-    opacity: 0.75;
+    /* Follow the user's Titlebar Opacity setting exactly — opacity 1
+       means FULLY opaque for inactive windows too (no extra dimming). */
+    opacity: var(--titlebar-opacity, 1);
+}
+
+/* Pin-to-top button at the FAR LEFT of the titlebar (small). */
+.window-titlebar > .btn-pin {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-right: 2px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--win-titlebar-fg);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.1s;
+}
+.window-titlebar > .btn-pin:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+.window-titlebar > .btn-pin.active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffd866;
 }
 
 .window-title {
@@ -112,6 +139,16 @@
     color: #fff;
 }
 .window-controls .btn-maximize {
+    font-size: 12px;
+}
+
+/* Pin-to-top control: active pin is highlighted; a pinned window's
+   titlebar gets an accent so it is recognizable on top of everything. */
+.window.pinned .window-titlebar {
+    box-shadow: inset 0 2px 0 var(--win-titlebar-accent, #ffd866);
+}
+.window.pinned .window-title::before {
+    content: '\1F4CC ';
     font-size: 12px;
 }
 

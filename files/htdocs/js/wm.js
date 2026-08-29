@@ -19,6 +19,10 @@
     var DEFAULT_LEFT = 80;
     var DEFAULT_TOP = 40;
     var WINDOW_BOTTOM_GAP = 12;   // gap between a window and the taskbar
+    var PIN_BASE = 10000;         // pinned windows live in a high z-index
+                                 // band (PIN_BASE + pinSeq) so they always
+                                 // stay above every normal window
+    var pinSeq = 0;
 
     // Cascade slot for a NEW window, derived from how many windows are
     // currently on screen — closing windows naturally moves the next
@@ -110,6 +114,7 @@
             var titlebar = document.createElement('div');
             titlebar.className = 'window-titlebar';
             titlebar.innerHTML =
+                '<button class="btn-pin" title="' + _('Pin to top') + '">&#x1F4CC;</button>' +
                 '<span class="window-title">' + escapeHTML(title) + '</span>' +
                 '<div class="window-controls">' +
                 '<button class="btn-minimize" title="' + _('Minimize') + '">&minus;</button>' +
@@ -186,6 +191,9 @@
             win.querySelector('.btn-maximize').addEventListener('click', function() {
                 WM.toggleMaximize(id);
             });
+            win.querySelector('.btn-pin').addEventListener('click', function() {
+                WM.togglePin(id);
+            });
 
             // Focus on mousedown anywhere in window
             win.addEventListener('mousedown', function() {
@@ -201,6 +209,7 @@
                 title: title,
                 icon: icon || null,
                 minimized: false,
+                pinned: false,
                 el: win
             };
 
@@ -262,10 +271,33 @@
             });
 
             w.el.classList.add('focused');
-            w.el.style.zIndex = DESKTOP.nextZIndex++;
+            // Pinned windows live in the high z-index band and always stay
+            // above every normal window; normal windows keep ascending.
+            w.el.style.zIndex = w.pinned ? (PIN_BASE + (++pinSeq)) : (DESKTOP.nextZIndex++);
             DESKTOP.activeWindowId = id;
 
             if (DESKTOP.emit) DESKTOP.emit('window-focused', {id: id});
+        },
+
+        // Pin / unpin a window: it stays on top of every other window and
+        // its taskbar tab stays at the front of the taskbar.
+        togglePin: function(id) {
+            var w = DESKTOP.windows[id];
+            if (!w) return;
+            this.setPinned(id, !w.pinned);
+        },
+
+        setPinned: function(id, pinned) {
+            var w = DESKTOP.windows[id];
+            if (!w || !!w.pinned === !!pinned) return;
+            w.pinned = !!pinned;
+            if (w.el) {
+                w.el.classList.toggle('pinned', w.pinned);
+                var btn = w.el.querySelector('.btn-pin');
+                if (btn) btn.classList.toggle('active', w.pinned);
+            }
+            this.focus(id);
+            if (DESKTOP.emit) DESKTOP.emit('window-pinned', {id: id, pinned: w.pinned});
         },
 
         minimize: function(id) {

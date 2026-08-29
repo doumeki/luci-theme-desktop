@@ -79,6 +79,13 @@
             'Opacity': '透明度',
             'Manage': '管理',
             'Refresh': '刷新',
+            'Rearrange Icons': '重排图标',
+            'Change Icon': '更改图标',
+            'Reset Icon': '恢复默认图标',
+            'Click an icon to select': '点击选中，再次点击确认',
+            'Search icon name or ID...': '搜索图标名称或 ID...',
+            'Current:': '当前:',
+            'No matching icons': '没有匹配的图标',
             'Colors': '颜色',
             'Fonts': '字体',
             'Bg': '背景',
@@ -157,6 +164,7 @@
             'Untitled': '无标题',
             'Applying…': '正在应用…',
             'Minimize': '最小化',
+            'Pin to top': '窗口置顶',
             'Maximize': '最大化',
 
             // ===== startmenu.js =====
