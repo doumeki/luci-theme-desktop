@@ -146,12 +146,12 @@ end
 function action_uci_changes()
     local Runtime = require "luci.desktop.runtime"
     -- Lua CBI / client-side pending changes are keyed by the login
-    -- session — the anonymous cursor cannot see them (1.1 实锤 2026-08-31:
-    -- plain Save leaves the delta in the rpcd session, anonymous
-    -- `uci changes` returns {}). Query with the session first; fall back
-    -- to the anonymous cursor if the session query is denied (official
-    -- 25.x sessions lack the uci ACL; 26.159 without set_session_id
-    -- behaves anonymously either way — 253 unaffected).
+    -- session — the anonymous cursor cannot see them (verified on-device
+    -- 2026-08-31: plain Save leaves the delta in the rpcd session,
+    -- anonymous `uci changes` returns {}). Query with the session first;
+    -- fall back to the anonymous cursor if the session query is denied
+    -- (official 25.x sessions lack the uci ACL; uci.lua builds without
+    -- set_session_id behave anonymously either way).
     local rows
     local sid = (luci.http.getcookie(Runtime.cookieName()) or ""):gsub("[^%x]", "")
     local ok, sessRows = pcall(function()
