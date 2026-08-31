@@ -229,6 +229,43 @@ function i18nConsistencyCheck() {
         }
     } catch (e) {}
 
+    // Lua-CBI Save&Apply compat contract (0.1.0-205..208): both header
+    // branches must ship the IDENTICAL interceptor + apply-pending JS and
+    // keep the invariants that make legacy Lua CBI saves work inside the
+    // embed shell — without them old-style buttons submit embed-less and
+    // the pending apply never fires (config silently not saved).
+    const applyExtract = src => {
+        const i = src.indexOf('/* Save & Apply feedback');
+        if (i < 0) return null;
+        const j = src.indexOf('</script>', i);
+        return src.slice(i, j);
+    };
+    const applySections = headerRels.map(rel => {
+        try { return applyExtract(readFile(rel)); } catch (e) { return null; }
+    });
+    if (applySections.some(s => s === null)) {
+        problems.push('header template missing the Save & Apply feedback section:\n  → ' + headerRels.join(', '));
+    }
+    else if (applySections[0] !== applySections[1]) {
+        problems.push('header.htm / header.ut Save&Apply JS drifted apart — keep both branches in sync:\n  → ' + headerRels.join(', '));
+    }
+    else {
+        const js = applySections[0];
+        const need = [
+            ['old-style button recognition (onclick contains cbi.apply)', /oc\.indexOf\('cbi\.apply'\)/],
+            ['native onclick suppression (stopPropagation gated on nameless buttons)', /if \(!btn\.name\)[\s\S]{0,200}e\.stopPropagation\(\)/],
+            ['apply-pending flag (sessionStorage)', /sessionStorage\.setItem\('desktop-apply-pending'[^)]*\)/],
+            ['apply-pending trigger (luci-loaded + poll fallback)', /document\.addEventListener\('luci-loaded'[\s\S]{0,200}setInterval/],
+            ['apply dedupe wrapper (concurrent apply_rollback → Permission denied)', /__desktopDeduped/],
+            ['apply dedupe window (8s)', /now - _last < 8000/],
+        ];
+        for (const [what, re] of need) {
+            if (!re.test(js)) {
+                problems.push('header Save&Apply JS missing: ' + what + '\n  → header.htm / header.ut');
+            }
+        }
+    }
+
     if (problems.length) {
         console.log('❌ i18n consistency failed:\n\n' + problems.join('\n\n'));
         process.exit(1);
