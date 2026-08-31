@@ -604,6 +604,20 @@
         var btn = e.target.closest ? e.target.closest('.cbi-button-apply') : null;
         if (!btn || btn.disabled || !_isApplyBtn(btn)) return;
         e.preventDefault();
+        /* Old-style Lua CBI buttons (no name) carry their submit in an
+           onclick attribute handler — preventDefault does not stop
+           attribute handlers, so the native cbi_submit() would fire a
+           second, embed-less submit whose shell response bounces the
+           iframe. Stop propagation so only our controlled submit
+           (embed=1 + cbi.apply) happens. */
+        if (!btn.name) {
+            e.stopPropagation();
+            /* Remember the pending save&apply so the response page can
+               fire L.ui.changes.apply() itself — the compat footer's
+               luci-loaded listener reliably misses the event on
+               fast-boot embed pages (see apply-pending trigger below). */
+            try { sessionStorage.setItem('desktop-apply-pending', '1'); } catch (err) {}
+        }
         var applyValue = btn.value; /* capture BEFORE _disableApplyBtn mutates it */
         _disableApplyBtn(btn.form, btn);
         setTimeout(function() {
@@ -646,6 +660,64 @@
             _submitWithApply(form, sub, applyValue);
         }, 120);
     }, true);
+    /* Lua CBI compat footer schedules the apply via a luci-loaded
+       listener in the page body; on fast-boot embed pages the client
+       fires luci-loaded before that listener attaches, leaving the
+       pending changes unapplied. When our interceptor submitted an
+       old-style save&apply (flag set above), replicate the trigger here
+       once the LuCI client is ready. */
+    (function() {
+        var pending = false;
+        try { pending = sessionStorage.getItem('desktop-apply-pending') === '1'; } catch (err) {}
+        if (!pending) return;
+        var done = false;
+        /* Dedupe: on slower boots the compat footer's luci-loaded
+           listener can fire AFTER ours and start a second, concurrent
+           apply_rollback (rpcd rejects it with Permission denied). The
+           wrapper is only installed while the apply-pending flag is set
+           (old-style Lua CBI save&apply response pages), so new-style
+           pages are unaffected. */
+        function wrapApply() {
+            try {
+                if (!window.L || !L.ui || !L.ui.changes || typeof L.ui.changes.apply !== 'function') return;
+                if (L.ui.changes.apply.__desktopDeduped) return;
+                var _orig = L.ui.changes.apply;
+                var _last = 0;
+                L.ui.changes.apply = function() {
+                    var now = Date.now();
+                    if (now - _last < 8000) return;
+                    _last = now;
+                    return _orig.apply(this, arguments);
+                };
+                L.ui.changes.apply.__desktopDeduped = true;
+            } catch (err) {}
+        }
+        function maybeApply() {
+            if (done) return;
+            try {
+                if (window.L && L.ui && L.ui.changes && typeof L.ui.changes.apply === 'function') {
+                    done = true;
+                    try { sessionStorage.removeItem('desktop-apply-pending'); } catch (err) {}
+                    wrapApply();
+                    L.ui.changes.apply(true);
+                }
+            } catch (err) {}
+        }
+        document.addEventListener('luci-loaded', maybeApply);
+        var tries = 0;
+        var iv = setInterval(function() {
+            tries++;
+            if (window.L && L.loaded) {
+                clearInterval(iv);
+                maybeApply();
+            }
+            else if (tries > 100) {
+                clearInterval(iv);
+                done = true;
+                try { sessionStorage.removeItem('desktop-apply-pending'); } catch (err) {}
+            }
+        }, 100);
+    })();
     </script>
     <script src="<%=resource%>/xhr.js"></script>
     <script>
