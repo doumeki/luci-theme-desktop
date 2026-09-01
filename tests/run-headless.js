@@ -229,28 +229,26 @@ function i18nConsistencyCheck() {
         }
     } catch (e) {}
 
-    // Lua-CBI Save&Apply compat contract (0.1.0-205..208): both header
-    // branches must ship the IDENTICAL interceptor + apply-pending JS and
-    // keep the invariants that make legacy Lua CBI saves work inside the
-    // embed shell — without them old-style buttons submit embed-less and
-    // the pending apply never fires (config silently not saved).
-    const applyExtract = src => {
-        const i = src.indexOf('/* Save & Apply feedback');
-        if (i < 0) return null;
-        const j = src.indexOf('</script>', i);
-        return src.slice(i, j);
-    };
-    const applySections = headerRels.map(rel => {
-        try { return applyExtract(readFile(rel)); } catch (e) { return null; }
-    });
-    if (applySections.some(s => s === null)) {
-        problems.push('header template missing the Save & Apply feedback section:\n  → ' + headerRels.join(', '));
+    // Lua-CBI Save&Apply compat contract (0.1.0-210+): the interceptor +
+    // apply-pending logic lives in files/htdocs/js/cbi-compat.js (single
+    // source — both header branches must include it) and must keep the
+    // invariants that make legacy Lua CBI saves work inside the embed
+    // shell — without them old-style buttons submit embed-less and the
+    // pending apply never fires (config silently not saved).
+    const compatRel = 'files/htdocs/js/cbi-compat.js';
+    let compatSrc = null;
+    try { compatSrc = readFile(compatRel); } catch (e) {}
+    for (const rel of headerRels) {
+        let src = '';
+        try { src = readFile(rel); } catch (e) { continue; }
+        if (!src.includes('js/cbi-compat.js')) {
+            problems.push('header must include cbi-compat.js (Lua CBI Save&Apply compat):\n  → ' + rel);
+        }
     }
-    else if (applySections[0] !== applySections[1]) {
-        problems.push('header.htm / header.ut Save&Apply JS drifted apart — keep both branches in sync:\n  → ' + headerRels.join(', '));
+    if (!compatSrc) {
+        problems.push('missing ' + compatRel);
     }
     else {
-        const js = applySections[0];
         const need = [
             ['old-style button recognition (onclick contains cbi.apply)', /oc\.indexOf\('cbi\.apply'\)/],
             ['native onclick suppression (stopPropagation gated on nameless buttons)', /if \(!btn\.name\)[\s\S]{0,200}e\.stopPropagation\(\)/],
@@ -260,8 +258,8 @@ function i18nConsistencyCheck() {
             ['apply dedupe window (8s)', /now - _last < 8000/],
         ];
         for (const [what, re] of need) {
-            if (!re.test(js)) {
-                problems.push('header Save&Apply JS missing: ' + what + '\n  → header.htm / header.ut');
+            if (!re.test(compatSrc)) {
+                problems.push('cbi-compat.js missing: ' + what + '\n  → ' + compatRel);
             }
         }
     }
