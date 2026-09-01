@@ -265,6 +265,44 @@ function i18nConsistencyCheck() {
         }
     }
 
+    // Shipped-file permission contract (0.1.0-212): the build copies
+    // files/ as-is (CP -a) — a 0600 file (or 0700 dir) ships to the router
+    // and uhttpd refuses to serve it (403) with NO page error (JS silently
+    // missing → interceptor dead → old-style Lua CBI saves break). Every
+    // shipped regular file must be group/other-readable and every shipped
+    // directory group/other-searchable (uhttpd serves as a non-owner
+    // identity; owner-only bits still 403 — 0.1.0-212 实锤).
+    (function walkShipped(dir) {
+        let st;
+        try { st = fs.statSync(path.join(THEME_DIR, dir)); } catch (e) { return; }
+        if ((st.mode & 0o011) === 0) {
+            problems.push('shipped dir not group/other-searchable (uhttpd 403 on device, silent JS loss):\n  → ' + dir + ' (mode ' + (st.mode & 0o777).toString(8) + ')');
+        }
+        let entries;
+        try { entries = fs.readdirSync(path.join(THEME_DIR, dir), { withFileTypes: true }); } catch (e) { return; }
+        for (const en of entries) {
+            const rel = dir + '/' + en.name;
+            let mode;
+            try { mode = fs.statSync(path.join(THEME_DIR, rel)).mode; } catch (e) { continue; }
+            if (en.isDirectory()) walkShipped(rel);
+            else if (en.isFile() && (mode & 0o044) === 0) {
+                problems.push('shipped file not group/other-readable (uhttpd 403 on device, silent JS loss):\n  → ' + rel + ' (mode ' + (mode & 0o777).toString(8) + ')');
+            }
+        }
+    })('files');
+
+    // uci_changes session-first contract (0.1.0-208): Lua CBI / client
+    // saves key their pending deltas by the login session — an anonymous
+    // query returns count 0 and the tray never shows "Unsaved Changes".
+    // The endpoint must query with the session from the cookie and only
+    // fall back to the anonymous cursor when denied.
+    try {
+        const ctlSrc = readFile('files/controller/desktop.lua');
+        if (!ctlSrc.includes('set_session_id') || !ctlSrc.includes('getcookie(Runtime.cookieName())')) {
+            problems.push('action_uci_changes must query with the session (session-keyed pending — see HANDOVER §9.6):\n  → files/controller/desktop.lua');
+        }
+    } catch (e) {}
+
     if (problems.length) {
         console.log('❌ i18n consistency failed:\n\n' + problems.join('\n\n'));
         process.exit(1);

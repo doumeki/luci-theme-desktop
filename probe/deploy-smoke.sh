@@ -71,6 +71,19 @@ else
     FAIL=1
 fi
 
+# ===== 1c. 关键静态资源必须 200（2026-08-31 实锤：0600 权限 → uhttpd 403 →
+# cbi-compat.js 静默不加载 → 旧式 Lua CBI Save&Apply 全挂，但其他冒烟项全 PASS）
+# 部署后必须确认 JS 真的可被浏览器加载，否则拦截器/触发器是死代码。=====
+for JS in js/cbi-compat.js js/iframe-bridge.js js/shell.js js/i18n.js; do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://$HOST/luci-static/desktop/$JS")
+    if [ "$CODE" = "200" ]; then
+        say "OK   static $JS → 200"
+    else
+        say "FAIL static $JS → $CODE（检查文件权限：构建 cp -a 会原样带上 0600）"
+        FAIL=1
+    fi
+done
+
 # ===== 2. changes apply/revert 端点返回 JSON =====
 # SAFETY (0.1.0-127+): apply/revert 是真实配置操作——ucode track 的 apply
 # 执行 ubus uci apply（90s rollback 窗口，冒烟不 confirm）。若设备上存在
