@@ -93,6 +93,52 @@ describe('cbi-compat: Lua CBI Save&Apply compat', function() {
         });
     });
 
+    it('intercepts an apply button WITHOUT the cbi-button-apply class (attribute fallback)', function() {
+        var form = document.createElement('form');
+        form.setAttribute('action', '/cgi-bin/luci/admin/services/AdGuardHome/base');
+        var btn = document.createElement('input');
+        btn.type = 'button';
+        btn.value = 'Save & Apply';
+        /* No cbi-button-apply class — a future luci-compat could drop it. */
+        btn.setAttribute('onclick', "cbi_submit(this, 'cbi.apply')");
+        form.appendChild(btn);
+        document.body.appendChild(form);
+        var submitted = [];
+        form.submit = function() { submitted.push(1); };
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        return new Promise(function(resolve) {
+            setTimeout(function() {
+                assert.equal(submitted.length, 1, 'class-less apply button still intercepted and submitted');
+                cleanupDom(form);
+                resolve();
+            }, 300);
+        });
+    });
+
+    it('class-less button that merely mentions cbi.apply is NOT hijacked', function() {
+        var form = document.createElement('form');
+        form.setAttribute('action', '/cgi-bin/luci/admin/x');
+        var btn = document.createElement('input');
+        btn.type = 'button';
+        btn.value = 'Custom';
+        /* No class; cbi.apply appears only in a comment — a custom
+           button that must keep submitting natively. */
+        btn.setAttribute('onclick', "window.__nativeFired = true; /* cbi.apply */");
+        form.appendChild(btn);
+        document.body.appendChild(form);
+        var submitted = [];
+        form.submit = function() { submitted.push(1); };
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        assert.ok(window.__nativeFired, 'custom button native onclick still runs');
+        return new Promise(function(resolve) {
+            setTimeout(function() {
+                assert.equal(submitted.length, 0, 'custom button NOT intercepted');
+                cleanupDom(form);
+                resolve();
+            }, 300);
+        });
+    });
+
     it('new-style button click: intercepted but no apply-pending flag', function() {
         var form = document.createElement('form');
         form.setAttribute('action', '/cgi-bin/luci/admin/services/AdGuardHome/base');

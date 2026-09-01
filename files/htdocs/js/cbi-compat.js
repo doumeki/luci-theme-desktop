@@ -60,8 +60,29 @@ function submitWithApply(form, btn, applyValue) {
     form.submit();
 }
 
+/* Find the Save & Apply button for a click target — two cases:
+ *   1. the standard luci-compat class (.cbi-button-apply) is the primary
+ *      signal; isApplyBtn disambiguates (name / onclick markers)
+ *   2. class absent (a future luci-compat may drop it): only unambiguous
+ *      markers count — the exact name, or the EXACT compat footer call
+ *      pattern cbi_submit(this, 'cbi.apply') — so custom buttons that
+ *      merely mention cbi.apply are never hijacked
+ * cbi Button options (cert download, diagnostics…) match neither case's
+ * markers and keep submitting natively. */
+function findApplyButton(target) {
+    if (!target || !target.closest) return null;
+    var byClass = target.closest('.cbi-button-apply');
+    if (byClass && isApplyBtn(byClass)) return byClass;
+    var byMarker = target.closest(
+        'input[name="cbi.apply"], button[name="cbi.apply"], ' +
+        'input[onclick*="cbi_submit(this, \'cbi.apply\')"], ' +
+        'button[onclick*="cbi_submit(this, \'cbi.apply\')"]'
+    );
+    return (byMarker && isApplyBtn(byMarker)) ? byMarker : null;
+}
+
 document.addEventListener('click', function(e) {
-    var btn = e.target.closest ? e.target.closest('.cbi-button-apply') : null;
+    var btn = findApplyButton(e.target);
     if (!btn || btn.disabled || !isApplyBtn(btn)) return;
     e.preventDefault();
     /* Old-style Lua CBI buttons (no name) carry their submit in an

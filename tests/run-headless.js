@@ -251,6 +251,7 @@ function i18nConsistencyCheck() {
     else {
         const need = [
             ['old-style button recognition (onclick contains cbi.apply)', /oc\.indexOf\('cbi\.apply'\)/],
+            ['class-independent fallback uses the EXACT compat call pattern (no hijack)', /cbi_submit\(this, 'cbi\.apply'\)/],
             ['native onclick suppression (stopPropagation gated on nameless buttons)', /if \(!btn\.name\)[\s\S]{0,200}e\.stopPropagation\(\)/],
             ['apply-pending flag (sessionStorage)', /sessionStorage\.setItem\('desktop-apply-pending'[^)]*\)/],
             ['apply-pending trigger (luci-loaded + poll fallback)', /document\.addEventListener\('luci-loaded'[\s\S]{0,200}setInterval/],
