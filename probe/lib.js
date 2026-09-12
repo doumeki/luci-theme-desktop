@@ -34,6 +34,11 @@ try {
     }
 } catch (e) {}
 const ROUTER = process.env.PROBE_ROUTER || localEnv.ROUTER_1 || '127.0.0.1';
+// ssh-forged-session target (Lua track box with a root password). Explicit
+// PROBE_SSH wins; the key falls back to SSH_KEY_2 from probe/.local-env so
+// `PROBE_ROUTER=<253> PROBE_SSH=<253>` is enough on this machine.
+const SSH_HOST = process.env.PROBE_SSH || '';
+const SSH_KEY = process.env.PROBE_SSH_KEY || localEnv.SSH_KEY_2 || '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // rgb of --primary (light mode) per theme, for assertion
@@ -94,16 +99,47 @@ async function newSession() {
     return sid;
 }
 
+/* Passwordless curl login (works on the Lua and ucode tracks alike).
+ * Returns { name, value } where `name` is whatever cookie the login response
+ * actually set — the runtime is the authority (Lua track `sysauth`, ucode
+ * track `sysauth_http`), never the device name or a hardcoded track. The `\t`
+ * anchors the name (bare `sysauth` is a prefix of `sysauth_http`); the longer
+ * name is listed first so a hypothetical double Set-Cookie resolves to ucode.
+ * Shared by login() and non-WebDriver clients (Edge CDP). */
+function curlLoginToken(host) {
+    const target = host || ROUTER;
+    const raw = execSync(`curl -s -c - -o /dev/null -d "luci_username=root&luci_password=" http://${target}/cgi-bin/luci/`, { encoding: 'utf8' });
+    const cm = raw.match(/(sysauth_http|sysauth)\t(\S+)/);
+    if (!cm) throw new Error('login failed: no sysauth cookie obtained');
+    return { name: cm[1], value: cm[2] };
+}
+
+/* Which of the two known cookie names actually authenticates this session on
+ * `host`? The runtime decides (Lua `sysauth`, ucode `sysauth_http`) — ask the
+ * box itself instead of inferring a track from the device name. The login form
+ * (`luci_username`) is the tell: an authenticated response never contains it. */
+function detectCookieName(host, tok) {
+    for (const name of ['sysauth', 'sysauth_http']) {
+        const html = execSync(`curl -s -H "Cookie: ${name}=${tok}" http://${host}/cgi-bin/luci/`, { encoding: 'utf8' });
+        if (!/luci_username/.test(html)) return name;
+    }
+    return 'sysauth';
+}
+
 async function login(sid) {
-    if (process.env.PROBE_SSH) {
+    if (SSH_HOST) {
         // No LuCI password needed: forge a ubus session over ssh (the
-        // router's own ubus daemon) and inject it as the sysauth cookie.
-        // PROBE_SSH=<host> PROBE_SSH_KEY=<keyfile> (optional).
-        const host = process.env.PROBE_SSH;
-        const key = process.env.PROBE_SSH_KEY ? `-i ${process.env.PROBE_SSH_KEY}` : '';
+        // router's own ubus daemon) and inject it as the session cookie.
+        // PROBE_SSH=<host> PROBE_SSH_KEY=<keyfile> (key defaults to
+        // SSH_KEY_2 from probe/.local-env).
+        const host = SSH_HOST;
+        const key = SSH_KEY ? `-i ${SSH_KEY}` : '';
         const create = execSync(`ssh ${key} root@${host} "ubus call session create '{\\"timeout\\":900}'"`, { encoding: 'utf8' });
         const tok = JSON.parse(create).ubus_rpc_session;
         execSync(`ssh ${key} root@${host} "ubus call session set '{\\"ubus_rpc_session\\":\\"${tok}\\",\\"values\\":{\\"token\\":\\"${tok}\\",\\"username\\":\\"root\\"}}'"`);
+        // Cookie name comes from the box (runtime-driven), not from a
+        // device→track assumption — 1.1 and 253 have both drifted tracks.
+        const cookieName = detectCookieName(host, tok);
         // NOTE: navigate to the PROBE_SSH host itself — lib.ROUTER may
         // point at a DIFFERENT device (ROUTER_1), which would register the
         // cookie on the wrong domain and leave the probe logged out
@@ -111,34 +147,25 @@ async function login(sid) {
         // cookie was injected on 1.1's domain).
         await nav(sid, `http://${host}/cgi-bin/luci/`);
         await sleep(1500);
-        // Lua runtime (luci-lua-runtime) authenticates via the plain `sysauth`
-        // cookie — sysauth_http is the ucode runtime's name. The ssh forge
-        // path here targets the Lua track (see the 2026-08-17 HANDOVER matrix),
-        // so inject `sysauth`.
-        console.log('[lib] login cookie: sysauth (ssh-forged session, Lua track)');
-        await wd('POST', `/session/${sid}/cookie`, { cookie: { name: 'sysauth', value: tok, path: '/', httpOnly: true } });
+        console.log(`[lib] login cookie: ${cookieName} (ssh-forged session, from the runtime)`);
+        await wd('POST', `/session/${sid}/cookie`, { cookie: { name: cookieName, value: tok, path: '/', httpOnly: true } });
         // Re-navigate WITH the cookie: the first nav rendered the
         // unauthenticated bootstrap page; the shell only renders after a
         // request that carries the session cookie.
         await nav(sid, `http://${host}/cgi-bin/luci/`);
         await sleep(2500);
-        return;
+        return { name: cookieName, value: tok };
     }
-    const raw = execSync(`curl -s -c - -o /dev/null -d "luci_username=root&luci_password=" http://${ROUTER}/cgi-bin/luci/`, { encoding: 'utf8' });
-    // Read the cookie name the login response actually set — the runtime is
-    // the authority (Lua track `sysauth`, ucode track `sysauth_http`), so
-    // accepting both keeps this path working across firmware drift. The `\t`
-    // anchors the name (bare `sysauth` is a prefix of `sysauth_http`); the
-    // longer name is listed first so a hypothetical double Set-Cookie resolves
-    // to the ucode one.
-    const cm = raw.match(/(sysauth_http|sysauth)\t(\S+)/);
-    if (!cm) throw new Error('login failed: no sysauth cookie obtained');
-    console.log(`[lib] login cookie: ${cm[1]} (from login response)`);
+    const auth = curlLoginToken();
+    console.log(`[lib] login cookie: ${auth.name} (from login response)`);
     await nav(sid, `http://${ROUTER}/cgi-bin/luci/`);
     await sleep(1500);
-    await wd('POST', `/session/${sid}/cookie`, { cookie: { name: cm[1], value: cm[2], path: '/', httpOnly: true } });
+    await wd('POST', `/session/${sid}/cookie`, { cookie: { name: auth.name, value: auth.value, path: '/', httpOnly: true } });
     await nav(sid, `http://${ROUTER}/cgi-bin/luci/`);
     await sleep(2500);
+    // Return the session token too: probes that need the rpcd session id
+    // (e.g. ssh `ubus call uci revert`) can use it without re-parsing curl.
+    return auth;
 }
 
 /* Normalize #rrggbb or rgb(r,g,b) to 'r,g,b'. */
@@ -171,4 +198,4 @@ async function finish(sid) {
     killStale();
 }
 
-module.exports = { sleep, exec, nav, wd, startGecko, newSession, login, theme, assertTheme, finish, ROUTER };
+module.exports = { sleep, exec, nav, wd, startGecko, newSession, login, curlLoginToken, theme, assertTheme, finish, ROUTER, SSH_HOST, SSH_KEY };

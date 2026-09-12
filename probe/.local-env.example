@@ -5,9 +5,11 @@
 # OpenWrt build tree root (where `make package/.../compile` works)
 LEDE_ROOT=
 
-# Router 1 (ucode/apk track, passwordless root)
+# Router 1 (device alias "1.1"; passwordless root). The LuCI runtime track is
+# whatever its firmware currently runs — devices drift, never assume a track
+# from the device name. Cookie name follows the runtime (runtime.lua).
 ROUTER_1=192.168.1.1
 
-# Router 2 (Lua/opkg track, key auth)
+# Router 2 (device alias "253"; ssh key auth)
 ROUTER_2=192.168.2.253
 SSH_KEY_2=~/.ssh/id_ed253

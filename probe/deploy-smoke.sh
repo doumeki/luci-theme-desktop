@@ -13,6 +13,9 @@ PROBE_DIR="$(cd "$(dirname "$0")" && pwd)"
 #
 # 用法: ./probe/deploy-smoke.sh 1.1|253 [期望版本]
 #   1.1 = ${ROUTER_1}（空密码 curl 登录） 253 = ${ROUTER_2}（ssh 铸 session）
+#   ⚠️ 1.1/253 只是设备别名，**不代表 runtime track**：cookie 名随 runtime
+#   （Lua→sysauth，ucode→sysauth_http；见 runtime.lua 的 cookieName()），
+#   设备重刷/换固件会漂移。下面按设备走的登录分支只是历史代理。
 set -u
 
 HOST=""; KEY=""
@@ -32,10 +35,13 @@ cleanup() { rm -f "$COOKIE_FILE"; }
 trap cleanup EXIT
 
 # ===== 登录 =====
+# cookie 名随 LuCI runtime（Lua→sysauth，ucode→sysauth_http；权威定义
+# files/root/usr/lib/lua/luci/desktop/runtime.lua 的 cookieName()），不随设备。
+# 空密码 curl 分支用 `-c` 写 jar，jar 里就是登录响应实际下发的名字，
+# 因此这里不猜、也不赋值 cookie 名。
 if [ -z "$KEY" ]; then
     curl -s -c "$COOKIE_FILE" -o /dev/null \
         -d "luci_username=root&luci_password=" "http://$HOST/cgi-bin/luci/"
-    CK="sysauth_http"
 else
     TOK=$(ssh "${OPT[@]}" "root@$HOST" \
         "ubus call session create '{\"timeout\":900}'" 2>/dev/null | grep -o '[0-9a-f]\{32\}' | head -1)
@@ -44,6 +50,9 @@ else
     fi
     ssh "${OPT[@]}" "root@$HOST" \
         "ubus call session set '{\"ubus_rpc_session\":\"$TOK\",\"values\":{\"token\":\"$TOK\",\"username\":\"root\"}}'" >/dev/null 2>&1
+    # ssh 铸 session 分支按 Lua track 的 cookie 名写 jar（本机 253 走这条路）。
+    # ⚠️ 这是历史约定，不是权威：若该设备漂到 ucode track，应改为
+    # sysauth_http（与 probe/lib.js detectCookieName() 同口径——问设备本身）。
     CK="sysauth"
     printf '%s\n' "# Netscape HTTP Cookie File" \
         "$HOST	FALSE	/	FALSE	0	$CK	$TOK" > "$COOKIE_FILE"
