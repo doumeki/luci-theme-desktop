@@ -104,6 +104,19 @@
             menuEl.innerHTML = html;
         },
 
+        // Which category step does this gesture mean? 0 = it is not a
+        // category swipe (leave it to the browser: scrolling etc.).
+        _swipeStep: function(dx, dy, atTop, atBottom) {
+            if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                return dx < 0 ? 1 : -1;                    // swipe left → next
+            }
+            if (Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+                if (dy > 0 && atTop) return -1;            // pull down at the top → previous
+                if (dy < 0 && atBottom) return 1;          // push up at the bottom → next
+            }
+            return 0;
+        },
+
         // Swipe left/right on the apps area → previous/next category.
         // Mobile only in practice (touch events); mouse users keep clicking
         // the sidebar. No wrap-around: the ends simply stop, like clicking.
@@ -162,24 +175,34 @@
                 }
             });
 
-            // ===== Touch: swipe the app list left/right to change category =====
-            // Only a clearly HORIZONTAL gesture is taken over (|dx| > 40 and
-            // |dx| > |dy| × 1.5) so the native vertical scroll and the search
-            // field (caret / text selection) behave exactly as before.
-            var tx = 0, ty = 0, tracking = false;
+            // ===== Touch gestures: change category by swipe =====
+            // Horizontal swipe (clearly sideways) always switches. A VERTICAL
+            // swipe only switches when the scroller was ALREADY at the
+            // matching edge — otherwise up/down is the list's own scroll:
+            //   list already at the top    + swipe down → previous category
+            //   list already at the bottom + swipe up   → next category
+            // The search field is excluded so caret/selection keep working.
+            var tx = 0, ty = 0, tracking = false, atTop = false, atBottom = false;
             menuEl.addEventListener('touchstart', function(e) {
                 tracking = false;
                 if (e.touches.length !== 1) return;
                 if (e.target.closest && e.target.closest('.menu-search')) return;
                 tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+                var sc = e.target.closest && e.target.closest('.menu-items, .menu-categories');
+                atTop = true; atBottom = true;
+                if (sc && sc.scrollHeight > sc.clientHeight) {
+                    atTop = sc.scrollTop <= 0;
+                    atBottom = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1;
+                }
                 tracking = true;
             }, { passive: true });
             menuEl.addEventListener('touchmove', function(e) {
                 if (!tracking || e.touches.length !== 1) return;
                 var dx = e.touches[0].clientX - tx, dy = e.touches[0].clientY - ty;
-                if (Math.abs(dx) <= 40 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+                var step = self._swipeStep(dx, dy, atTop, atBottom);
+                if (!step) return;
                 tracking = false;
-                self._swipeCategory(dx < 0 ? 1 : -1);   // swipe left → next
+                self._swipeCategory(step);
             }, { passive: true });
             menuEl.addEventListener('touchend', function() { tracking = false; }, { passive: true });
             menuEl.addEventListener('touchcancel', function() { tracking = false; }, { passive: true });

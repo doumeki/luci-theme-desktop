@@ -224,4 +224,25 @@ describe('Start menu: swipe between categories', function() {
         assert.equal(StartMenu._swipeCategory(1), false, 'nothing to switch to');
     });
 });
+
+// ===== Gesture decision (horizontal always, vertical only at the edge) =====
+describe('Start menu: swipe step decision', function() {
+    it('horizontal swipes always switch category', function() {
+        assert.equal(StartMenu._swipeStep(-60, 5, true, true), 1, 'swipe left → next');
+        assert.equal(StartMenu._swipeStep(60, 5, true, true), -1, 'swipe right → previous');
+    });
+
+    it('vertical swipes only switch when the list is already at that edge', function() {
+        assert.equal(StartMenu._swipeStep(2, 70, true, false), -1, 'pull down at the top → previous');
+        assert.equal(StartMenu._swipeStep(2, -70, false, true), 1, 'push up at the bottom → next');
+        assert.equal(StartMenu._swipeStep(2, 70, false, true), 0, 'pull down mid-list → scroll, not switch');
+        assert.equal(StartMenu._swipeStep(2, -70, true, false), 0, 'push up mid-list → scroll, not switch');
+    });
+
+    it('ignores short and diagonal gestures', function() {
+        assert.equal(StartMenu._swipeStep(20, 5, true, true), 0, 'too short');
+        assert.equal(StartMenu._swipeStep(45, 40, true, true), 0, 'diagonal is not a category swipe');
+        assert.equal(StartMenu._swipeStep(5, 60, true, true), -1, 'clearly vertical at the edge still counts');
+    });
+});
 })();
