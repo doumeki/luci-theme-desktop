@@ -476,6 +476,16 @@
     <script src="<%=media%>/js/icon-config.js"></script>
     <script src="<%=media%>/js/quantum-icons.js"></script>
     <script src="<%=media%>/js/icon-picker.js"></script>
+    <!-- desktop functionality split into modules that attach to
+         LuCIDesktop.desktop*; desktop.js is a thin facade forwarding the
+         window.Desktop API and composing init(). All four load BEFORE
+         desktop.js, which registers/inits immediately. Order:
+         state (shared stores) → icons (render/drag) → links (custom URL)
+         → menus (context menus/dialog) → desktop (facade). -->
+    <script src="<%=media%>/js/desktop-state.js"></script>
+    <script src="<%=media%>/js/desktop-icons.js"></script>
+    <script src="<%=media%>/js/desktop-links.js"></script>
+    <script src="<%=media%>/js/desktop-menus.js"></script>
     <script src="<%=media%>/js/desktop.js"></script>
     <script src="<%=media%>/js/widget.js"></script>
     <script src="<%=media%>/js/widgets/clock.js"></script>
