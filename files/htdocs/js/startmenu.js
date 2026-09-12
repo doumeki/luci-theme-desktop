@@ -104,6 +104,28 @@
             menuEl.innerHTML = html;
         },
 
+        // Swipe left/right on the apps area → previous/next category.
+        // Mobile only in practice (touch events); mouse users keep clicking
+        // the sidebar. No wrap-around: the ends simply stop, like clicking.
+        _swipeCategory: function(step) {
+            var menuEl = document.getElementById('start-menu');
+            if (!menuEl) return false;
+            var cats = menuEl.querySelectorAll('.menu-category-item');
+            if (cats.length < 2) return false;
+            var idx = -1;
+            for (var i = 0; i < cats.length; i++) {
+                if (cats[i].classList.contains('active')) { idx = i; break; }
+            }
+            if (idx === -1) idx = 0;
+            var next = idx + step;
+            if (next < 0 || next >= cats.length) return false;
+            this.showCategory(cats[next].getAttribute('data-category'));
+            if (cats[next].scrollIntoView) {
+                try { cats[next].scrollIntoView({ block: 'nearest' }); } catch (e) {}
+            }
+            return true;
+        },
+
         bindEvents: function() {
             var self = this;
             var menuEl = document.getElementById('start-menu');
@@ -140,9 +162,30 @@
                 }
             });
 
+            // ===== Touch: swipe the app list left/right to change category =====
+            // Only a clearly HORIZONTAL gesture is taken over (|dx| > 40 and
+            // |dx| > |dy| × 1.5) so the native vertical scroll and the search
+            // field (caret / text selection) behave exactly as before.
+            var tx = 0, ty = 0, tracking = false;
+            menuEl.addEventListener('touchstart', function(e) {
+                tracking = false;
+                if (e.touches.length !== 1) return;
+                if (e.target.closest && e.target.closest('.menu-search')) return;
+                tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+                tracking = true;
+            }, { passive: true });
+            menuEl.addEventListener('touchmove', function(e) {
+                if (!tracking || e.touches.length !== 1) return;
+                var dx = e.touches[0].clientX - tx, dy = e.touches[0].clientY - ty;
+                if (Math.abs(dx) <= 40 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+                tracking = false;
+                self._swipeCategory(dx < 0 ? 1 : -1);   // swipe left → next
+            }, { passive: true });
+            menuEl.addEventListener('touchend', function() { tracking = false; }, { passive: true });
+            menuEl.addEventListener('touchcancel', function() { tracking = false; }, { passive: true });
+
             // Right-click on menu item → Pin to Desktop
-            menuEl.addEventListener('contextmenu', function(e) {
-                var item = e.target.closest('.menu-item');
+            menuEl.addEventListener('contextmenu', function(e) {                var item = e.target.closest('.menu-item');
                 if (!item) return;
                 var href = item.getAttribute('data-href');
                 var title = item.getAttribute('data-title') || '';

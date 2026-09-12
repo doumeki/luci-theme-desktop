@@ -174,4 +174,54 @@ describe('StartMenu search', function() {
     });
 });
 
+
+// ===== Mobile swipe: left/right on the apps area changes category =====
+// Vertical scrolling and the search field must stay untouched — only a
+// clearly horizontal gesture is taken over.
+describe('Start menu: swipe between categories', function() {
+    var menuEl, origShow;
+
+    beforeEach(function() {
+        origShow = StartMenu.showCategory;
+        menuEl = document.getElementById('start-menu') || document.createElement('div');
+        menuEl.id = 'start-menu';
+        menuEl.innerHTML =
+            '<div class="menu-search"><input id="menu-search-input"></div>' +
+            '<div class="menu-panels"><div class="menu-categories">' +
+                '<div class="menu-category-item active" data-category="a">A</div>' +
+                '<div class="menu-category-item" data-category="b">B</div>' +
+                '<div class="menu-category-item" data-category="c">C</div>' +
+            '</div><div class="menu-items" data-category="a"></div></div>';
+        if (!menuEl.parentNode) document.body.appendChild(menuEl);
+        StartMenu.showCategory = function(id) {
+            StartMenu._lastShown = id;
+            menuEl.querySelectorAll('.menu-category-item').forEach(function(el) {
+                el.classList.toggle('active', el.getAttribute('data-category') === id);
+            });
+        };
+    });
+
+    afterEach(function() {
+        StartMenu.showCategory = origShow;
+        delete StartMenu._lastShown;
+    });
+
+    it('swipe left goes to the next category, swipe right to the previous', function() {
+        assert.equal(StartMenu._swipeCategory(1), true, 'moved forward');
+        assert.equal(StartMenu._lastShown, 'b', 'category B shown');
+        assert.equal(StartMenu._swipeCategory(1), true, 'moved forward again');
+        assert.equal(StartMenu._lastShown, 'c', 'category C shown');
+        assert.equal(StartMenu._swipeCategory(1), false, 'stops at the last category');
+        assert.equal(StartMenu._swipeCategory(-1), true, 'moved back');
+        assert.equal(StartMenu._lastShown, 'b', 'category B shown again');
+        assert.equal(StartMenu._swipeCategory(-1), true, 'moved back to the first');
+        assert.equal(StartMenu._swipeCategory(-1), false, 'stops at the first category');
+    });
+
+    it('is a no-op when there is only one category', function() {
+        menuEl.querySelectorAll('.menu-category-item')[1].remove();
+        menuEl.querySelectorAll('.menu-category-item')[1].remove();
+        assert.equal(StartMenu._swipeCategory(1), false, 'nothing to switch to');
+    });
+});
 })();
