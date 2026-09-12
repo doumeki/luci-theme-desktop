@@ -506,13 +506,14 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(savedPins()[0].title, 'https://example.com', 'name defaults to the URL');
     });
 
-    it('expands {host}-style placeholders against the current address', function() {
+    it('expands {router}/{httpx} placeholders against the current address', function() {
         var D = window.Desktop;
-        assert.equal(D.resolveUrlVars('http://{host}:300'), 'http://' + location.hostname + ':300', '{host}');
-        assert.equal(D.resolveUrlVars('{proto}//{host}:300/x'), location.protocol + '//' + location.hostname + ':300/x', '{proto}');
+        assert.equal(D.resolveUrlVars('http://{router}:300'), 'http://' + location.hostname + ':300', '{router}');
+        assert.equal(D.resolveUrlVars('{httpx}://{router}:300'), (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':300', 'canonical {httpx}://{router} form');
+        assert.equal(D.resolveUrlVars('{HTTPX}://{ROUTER}:300'), (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':300', 'case-insensitive');
+        assert.equal(D.resolveUrlVars('http://{host}:300'), 'http://' + location.hostname + ':300', '{host} alias still expands');
         assert.equal(D.resolveUrlVars('{origin}/cgi-bin/luci/admin/status/overview'), location.origin + '/cgi-bin/luci/admin/status/overview', '{origin}');
-        assert.equal(D.resolveUrlVars('http://{HOST}:300'), 'http://' + location.hostname + ':300', 'case-insensitive');
-        assert.equal(D.resolveUrlVars('http://{host}:{port}/x'), 'http://' + location.hostname + ':' + location.port + '/x', '{port}');
+        assert.equal(D.resolveUrlVars('{httpx}://{router}:{port}/x'), (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':' + location.port + '/x', '{port}');
         assert.equal(D.resolveUrlVars('https://example.com/x'), 'https://example.com/x', 'no placeholders → untouched');
         assert.equal(D.resolveUrlVars('/cgi-bin/luci/admin/status/overview'), '/cgi-bin/luci/admin/status/overview', 'plain path untouched');
     });
@@ -520,18 +521,18 @@ describe('Desktop custom URL shortcuts', function() {
     it('stores the placeholder but opens the expanded URL', function() {
         var tabs = [];
         window.open = function(u) { tabs.push(u); return null; };
-        window.Desktop.addCustomUrl('App', 'http://{host}:300', true);
-        assert.equal(savedPins()[0].url, 'http://{host}:300', 'stored as typed (works via IP or domain)');
-        window.Desktop.openShortcut('http://{host}:300', 'App');
-        assert.equal(tabs[0], 'http://' + location.hostname + ':300', 'expanded at open time');
+        window.Desktop.addCustomUrl('App', '{httpx}://{router}:300', true);
+        assert.equal(savedPins()[0].url, '{httpx}://{router}:300', 'stored as typed (works via IP or domain)');
+        window.Desktop.openShortcut('{httpx}://{router}:300', 'App');
+        assert.equal(tabs[0], (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':300', 'expanded at open time');
     });
 
-    it('opens a {host} link in a desktop window when the tab box is off', function() {
+    it('opens a {router} link in a desktop window when the tab box is off', function() {
         var windows = [];
         window.WM.open = function(u) { windows.push(u); };
-        window.Desktop.addCustomUrl('App', 'http://{host}:300', false);
-        window.Desktop.openShortcut('http://{host}:300', 'App');
-        assert.equal(windows[0], 'http://' + location.hostname + ':300', 'window gets the expanded URL');
+        window.Desktop.addCustomUrl('App', '{httpx}://{router}:300', false);
+        window.Desktop.openShortcut('{httpx}://{router}:300', 'App');
+        assert.equal(windows[0], (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':300', 'window gets the expanded URL');
     });
 
     it('keeps custom links out of the ghost cleanup (regression)', function() {

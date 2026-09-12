@@ -167,7 +167,7 @@
             'Open in a new browser tab': '在新标签页中打开',
             'LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.': 'LuCI 页面（/cgi-bin/luci/…）在桌面窗口内打开；外部站点在新标签页打开。',
             'Enter a valid http(s) address or a LuCI path.': '请输入有效的 http(s) 地址或 LuCI 路径。',
-            'Tip: {host} is the address you are using now — http://{host}:300 reaches this router on port 300 (also {port}, {proto}, {origin}).': '提示：{host} 是你当前访问的地址——http://{host}:300 可访问本路由的 300 端口（另支持 {port}、{proto}、{origin}）。',
+            'Tip: {router} is the address you are using now — {httpx}://{router}:300 reaches this router on port 300 (also {port}, {origin}).': '提示：{router} 是你当前访问的地址——{httpx}://{router}:300 可访问本路由的 300 端口（另支持 {port}、{origin}）。',
 
             // ===== wm.js =====
             'Untitled': '无标题',

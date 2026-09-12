@@ -409,19 +409,20 @@
         // Placeholders in a custom URL, resolved at OPEN time — one
         // shortcut then keeps working whether the router is reached by host
         // name or by IP (the URL is STORED as typed, never expanded):
-        //   {host}   → location.hostname  (tec.com | 192.168.1.1)
+        //   {router} → location.hostname  (tec.com | 192.168.1.1)
+        //   {httpx}  → http | https       (the scheme in use right now)
         //   {port}   → location.port      (LuCI's own port; '' for 80/443)
-        //   {proto}  → location.protocol  (http: / https:)
         //   {origin} → location.origin    (scheme://host:port)
-        // e.g. http://{host}:300 reaches a service on the router whatever
-        // name the shell happened to be opened with.
+        // e.g. {httpx}://{router}:300 reaches a service on the router
+        // whatever name the shell happened to be opened with.
+        // {host} / {hostname} are accepted as aliases of {router}.
         resolveUrlVars: function(url) {
             if (!url || url.indexOf('{') === -1) return url;
             if (typeof location === 'undefined') return url;
             return url
-                .replace(/\{host\}/gi, location.hostname)
+                .replace(/\{(?:router|host|hostname)\}/gi, location.hostname)
+                .replace(/\{httpx\}/gi, (location.protocol || '').replace(':', ''))
                 .replace(/\{port\}/gi, location.port || '')
-                .replace(/\{proto(?:col)?\}/gi, location.protocol)
                 .replace(/\{origin\}/gi, location.origin);
         },
 
@@ -500,7 +501,7 @@
                             _('LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.') +
                         '</div>' +
                         '<div class="link-hint">' +
-                            _('Tip: {host} is the address you are using now — http://{host}:300 reaches this router on port 300 (also {port}, {proto}, {origin}).') +
+                            _('Tip: {router} is the address you are using now — {httpx}://{router}:300 reaches this router on port 300 (also {port}, {origin}).') +
                         '</div>' +
                         '<div class="link-error"></div>' +
                     '</div>' +
