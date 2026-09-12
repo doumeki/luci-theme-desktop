@@ -25,11 +25,21 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
    `luci.desktop.runtime`（runtime.lua）：`isUcode() / cookieName() / sessionValid()
    / getChanges() / apply() / revert()`。**必须函数内 require**（modulecache
    字节码缓存会把模块级 local 变 nil —— 经典坑）。
+   **cookie 名随 runtime，不随设备**——`cookieName()` 是唯一权威（Lua→`sysauth`，
+   ucode→`sysauth_http`）。不要把"设备"当"track"的代理：设备重刷/换固件会让
+   track 漂移，任何"某设备 = 某 track/某 cookie 名"的硬编码都是过期认知。探针要
+   读登录响应实际 `Set-Cookie` 的名字（`probe/lib.js`），不要猜。
 3. **前端**：`window.LuCIDesktop` 命名空间。模块划分（`files/htdocs/js/`）：
    - `shell.js` — boot 流程、开始菜单、通知
    - `wm.js` — 窗口管理器（open/close/focus/拖拽/标题）
    - `taskbar.js` — 任务栏、auto-refresh 开关（会话级）
-   - `desktop.js` — 桌面快捷方式、可用性探测、ttyd 安装
+   - `desktop.js` — 桌面门面（facade）：转发 `window.Desktop` 公共 API + 组合
+     init；保留默认快捷方式目录、可用性探测、ttyd 安装
+   - `desktop-state.js` — 共享状态 `pinnedItems`/`hiddenIcons`/`iconLayout` +
+     load/save/normalize/迁移，经 `LuCIDesktop.desktopState` 读写
+   - `desktop-icons.js` — 图标渲染/网格碰撞布局、图标选择器接入、quantum 拖拽
+   - `desktop-menus.js` — 三套右键菜单 + 自定义链接对话框
+   - `desktop-links.js` — 自定义 URL（normalize/resolve/open）+ 幽灵清理豁免
    - `mobile.js` — 移动端（switcher、无多窗口）
    - `widget.js` + `widgets/` — 桌面 widget 框架与组件
    - `iframe-bridge.js` — iframe 注入（隐藏 chrome、链接拦截、XHR 轮询控制、
@@ -40,17 +50,25 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
    不要随意 bump——会覆盖已装设备的用户配置）。
 5. **`__LUCI_RUNTIME__`**：footer 双模板注入（'ucode'/'lua'），前端按 runtime
    选路径（如终端快捷方式）。注入时机在 desktop.js 注册**之后**——依赖它的
-   逻辑必须延迟解析。
+   逻辑必须延迟解析/由 shell.js boot 触发。
 6. **依赖**：`luci-base + luci-lua-runtime`（Makefile DEPENDS，安装自动带上；
    controller 是 Lua 的，纯 ucode LuCI（官方 25.x 默认无）不装兼容层则
-   controller 不加载——changes/* 403/HTML、保存静默失败）。
+   controller 不加载——changes/* 403/HTML、保存静默失败；缺时手动
+   `opkg install luci-lua-runtime` / `apk add luci-lua-runtime`）。
 
 ## 开发铁律
 
-- 改 JS 后必须跑 `node tests/run-headless.js`；**新增测试文件要加进
-  `tests/js/test-runner.html` 的 script 列表**（漏加 = 测试静默没跑）。
-- 改界面文案 = i18n 三方同步（dict/pot/po，run-headless 自动检查不一致）。
+- 改 JS 后必须跑 `node tests/run-headless.js`；新增测试文件仍要加进
+  `tests/js/test-runner.html` 的 script 列表，但**漏加不再静默**：run-headless
+  自动把磁盘上的 `tests/js/*.test.js` 与 runner 清单对照，多、少、重复都直接
+  fail 并列出该加/该删的文件名（0.1.0-230 起）。
+- 改界面文案 = **只改 dict**（`files/htdocs/js/i18n.js` 的 `zh_cn` 块）+ 跑
+  `node tools/gen-i18n.js` 生成 pot/po（dict 是唯一来源；run-headless 有防漂移
+  检查，dict 改了没重生成会 fail）。不要再手改 pot/po。
+- 改模板/controller 后：部署 + smoke（`probe/deploy-theme.sh` 自带冒烟：主题身份/
+  changes JSON）。
 - 版本号：`Makefile` 的 `PKG_RELEASE` +1，提交信息注明版本。
+- 提交信息用英文。
 
 ## 踩坑速查（AI 高频翻车点）
 
@@ -59,8 +77,22 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 | 模板只改了一份 | `.ut` 与 `.htm` 双份同步 |
 | controller 模块级 require | 函数体内 require（幂等） |
 | ucode 模板用字符串方法 | 用 `match()` 正则（ucode 无 `.to_lower()` 等） |
-| i18n 报错/缺翻译 | dict/pot/po 三方对齐后再跑 |
+| 探针布局测不出真机问题 | headless 视口下限 500px——布局探针手动把 iframe 压到 390px |
+| 第三方应用表格改不动 | 某些应用的行是 `tr{display:flex;flex-wrap:wrap}`，`table-layout` 无效 |
+| i18n 报错/缺翻译 | 只改 `i18n.js` 的 dict → 跑 `node tools/gen-i18n.js`；run-headless 防漂移检查 |
+| widget 样式越渲染越乱 | 静态样式进 `widget.css`，动态值走内联/`--var`；**禁止 `el.style.cssText +=` 累加**（render 必须幂等，run-headless 自动扫描 widgets/*.js） |
+| 部署后没生效（Lua track） | 清 `/tmp/luci-modulecache` + 重启 uhttpd（deploy 脚本已处理） |
+| 用设备名推断 track/cookie 名 | 换固件后登录失败——cookie 名只问 runtime：`cookieName()`（Lua `sysauth` / ucode `sysauth_http`）；探针读登录响应实际 `Set-Cookie` |
+| firefox 探针崩溃 | kill 残留重试（`[g]eckodriver --port` 模式）；**绝不裸 `pkill -f firefox`** |
 | ttyd 页面 iframe 不撑满 | 新版 luci-app-ttyd 的 iframe 是 JS 延迟注入——`fitTtydIframe` 有重试 |
+| 弹出层开到屏幕外 | **先把内容渲染进去再测量**（空菜单量到 0×0，夹取静默失效）；**宽度和高度都夹**进视口；统一入口 `_makeMenu(x,y,html)`（`desktop-menus.js`，三套右键菜单 + `showPinMenu` 都走它）；`display:none` 的元素量不到尺寸；二级菜单按行位置翻转方向 |
+| 子菜单方向不翻 | 右边缘要翻到左侧（`.sub-left`），鼠标 `mouseenter` 用捕获阶段监听 |
+| 改 URL 丢图标/位置 | 图标选择、格子位置、隐藏状态都按 URL 存，改 URL 要迁移（`_moveLinkMeta`） |
+| 自定义 pin 被当幽灵删 | 不在菜单树里的 pin 要 `custom:true` 豁免幽灵清理（pins/hidden/icon_layout 三处） |
+| 用假设限制手势 | 先真机实测再定约束——移动端开始菜单列表不滚动，按"会滚动"加的门槛让手势失效 |
+| 外壳模式没有 fonts.css | 外壳分支只链 shell/window/taskbar/startmenu/icon-picker/widget/mobile.css——`cascade.css`/`fonts.css` 只在 embed 分支。外壳里要用图标字体（argon）必须在 `startmenu.css` 自声明 `@font-face` |
+| 加分类图标要改两处 | 0.1.0-229 起单一来源：只改 `startmenu.js` 的 `CAT_ICONS`（`slug → {g:字形码, c:颜色}`，码位从 `cascade.css` 旧规则 `content` 抄）；CSS 一条通用 `[data-glyph]::before` 自动渲染。字形没覆盖的走 emoji/首字母兜底，图标槽用 `min-width`（勿写死宽度，否则 emoji 压标题） |
+| contenteditable 取值 | 永远别用 `textContent`（Enter 产生的是块级子元素/`<br>`，换行会全丢），按 DOM 形状序列化 |
 
 ## 第三方应用样式修补（壳内）
 
@@ -82,7 +114,10 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 ## 测试分层
 
 - **L1**：`node tests/run-headless.js` — 浏览器单元测试（无需路由器，CI 跑）
-- **L2 / L3**（可选，需 OpenWrt 设备）：见 `tests/README.md`
+- **L2**：`tests/lua/test-runtime.lua` — runtime 抽象层，需 OpenWrt 设备
+- **L3**：`probe/` — 部署/冒烟/真机探针，需 OpenWrt 设备
+
+详见 `tests/README.md`。
 
 ## 更多文档
 
