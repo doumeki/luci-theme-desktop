@@ -708,6 +708,61 @@ describe('Desktop context menu: submenu direction', function() {
     });
 });
 
+// ===== Desktop context menu: item order (0.1.0-234) =====
+// User-specified order: settings group first (Theme, Widgets), then ONE
+// separator, then the action group (New — still a submenu parent — plus
+// Rearrange Icons and Refresh). Asserted by DOM order of the top-level
+// .context-item rows, not by the rendered text (i18n-dependent).
+describe('Desktop context menu: item order', function() {
+    afterEach(function() {
+        document.querySelectorAll('#desktop-context-menu').forEach(function(el) { el.remove(); });
+    });
+
+    function rows(menu) {
+        return Array.prototype.filter.call(menu.children, function(el) {
+            return el.classList.contains('context-item');
+        });
+    }
+
+    function acts(menu) {
+        return rows(menu).map(function(el) { return el.getAttribute('data-act'); });
+    }
+
+    it('renders theme, widgets, new, rearrange, refresh in that DOM order', function() {
+        window.Desktop._showDesktopMenu(10, 60);
+        var menu = document.getElementById('desktop-context-menu');
+        assert.ok(menu, 'menu rendered');
+        assert.equal(acts(menu).join(','), 'theme,widgets,new,rearrange,refresh',
+            'top-level data-act order');
+    });
+
+    it('uses exactly one separator, between the settings and action groups', function() {
+        window.Desktop._showDesktopMenu(10, 60);
+        var menu = document.getElementById('desktop-context-menu');
+        var seps = Array.prototype.filter.call(menu.children, function(el) {
+            return el.classList.contains('context-separator');
+        });
+        assert.equal(seps.length, 1, 'single separator');
+        assert.equal(seps[0].previousElementSibling.getAttribute('data-act'), 'widgets',
+            'separator follows the settings group (Widgets)');
+        assert.equal(seps[0].nextElementSibling.getAttribute('data-act'), 'new',
+            'separator precedes the action group (New)');
+    });
+
+    it('New is still the submenu parent wrapping the Link action', function() {
+        window.Desktop._showDesktopMenu(10, 60);
+        var menu = document.getElementById('desktop-context-menu');
+        var row = rows(menu).filter(function(el) {
+            return el.getAttribute('data-act') === 'new';
+        })[0];
+        assert.ok(row, 'New row rendered');
+        assert.ok(row.classList.contains('context-has-sub'), 'New row is still a submenu parent');
+        var sub = row.querySelector('.context-submenu > .context-item');
+        assert.ok(sub, 'New still has a submenu item');
+        assert.equal(sub.getAttribute('data-act'), 'addlink', 'submenu item is the Link action');
+    });
+});
+
 // ===== Split-module public API contract (0.1.0-231) =====
 // desktop.js was split into desktop-state/icons/links/menus + a facade.
 // The facade must keep forwarding EVERY public window.Desktop method

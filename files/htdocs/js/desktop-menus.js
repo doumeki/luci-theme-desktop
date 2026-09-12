@@ -260,18 +260,19 @@
             parent.classList.toggle('sub-left', rect.right + w + 8 > window.innerWidth);
         },
 
+        // Order (0.1.0-234, user-specified): settings first (theme/widgets),
+        // then a single separator, then the actions (new/rearrange/refresh).
         _showDesktopMenu: function(x, y) {
             var m = _makeMenu(x, y,
+                '<div class="context-item" data-act="theme">' + _('Theme') + '</div>' +
+                '<div class="context-item" data-act="widgets">' + _('Widgets') + '</div>' +
+                '<div class="context-separator"></div>' +
                 '<div class="context-item context-has-sub" data-act="new">' + _('New') +
                     '<span class="context-arrow">&#8250;</span>' +
                     '<div class="context-submenu">' +
                         '<div class="context-item" data-act="addlink">' + _('Link') + '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div class="context-separator"></div>' +
-                '<div class="context-item" data-act="theme">' + _('Theme') + '</div>' +
-                '<div class="context-item" data-act="widgets">' + _('Widgets') + '</div>' +
-                '<div class="context-separator"></div>' +
                 '<div class="context-item" data-act="rearrange">' + _('Rearrange Icons') + '</div>' +
                 '<div class="context-item" data-act="refresh">' + _('Refresh') + '</div>');
             m.id = 'desktop-context-menu';
