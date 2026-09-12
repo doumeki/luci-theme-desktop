@@ -335,14 +335,22 @@ describe('Sticky note: multi-line content', function() {
     });
 });
 
-// ===== Whole-note drag =====
-// The user drags a note by grabbing anywhere on it — the note body is the
-// biggest target. Selecting text must still work (the drag only starts
-// after the pointer moves past a threshold).
-describe('Sticky note: drag anywhere on the note', function() {
+// ===== Drag handle = title bar =====
+// Desktop: only the header drags the note (it is the only element with the
+// grab cursor); the text area belongs to the caret, so dragging inside it
+// selects text and its right-click must stay the BROWSER's native menu
+// (Copy/Paste). Mobile keeps the framework's long-press-anywhere drag.
+describe('Sticky note: title is the drag handle', function() {
     afterEach(function() {
         WidgetManager._instancesOf('sticky-note').forEach(function(iid) { WidgetManager.disable(iid); });
     });
+
+    function enable(slot) {
+        stickyConfig({});
+        stickyConfig((function() { var o = {}; o[slot] = { notes: { '#f9e74a': 'text' }, activeColor: '#f9e74a' }; return o; })());
+        WidgetManager.enable('sticky-note', { id: slot });
+        return WidgetManager.instances[slot];
+    }
 
     function dragFrom(target, dx, dy) {
         target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, clientX: 100, clientY: 100, button: 0}));
@@ -350,42 +358,75 @@ describe('Sticky note: drag anywhere on the note', function() {
         document.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: 100 + dx, clientY: 100 + dy}));
     }
 
-    it('moves the note when dragged by the text body', function() {
-        stickyConfig({});
-        stickyConfig({ 'sn-DR1': { notes: { '#f9e74a': 'text' }, activeColor: '#f9e74a' } });
-        WidgetManager.enable('sticky-note', { id: 'sn-DR1' });
-        var inst = WidgetManager.instances['sn-DR1'];
+    it('moves the note when dragged by the header', function() {
+        var inst = enable('sn-DR1');
         var x0 = inst.x, y0 = inst.y;
-        dragFrom(noteBody(inst), 60, 30);
-        assert.equal(inst.x, x0 + 60, 'x follows a body drag');
-        assert.equal(inst.y, y0 + 30, 'y follows a body drag');
+        dragFrom(inst.el.querySelector('.sticky-header'), 40, 20);
+        assert.equal(inst.x, x0 + 40, 'x follows a header drag');
+        assert.equal(inst.y, y0 + 20, 'y follows a header drag');
     });
 
-    it('moves the note when dragged by the header (unchanged)', function() {
-        stickyConfig({});
-        stickyConfig({ 'sn-DR2': { notes: { '#f9e74a': 'text' }, activeColor: '#f9e74a' } });
-        WidgetManager.enable('sticky-note', { id: 'sn-DR2' });
-        var inst = WidgetManager.instances['sn-DR2'];
-        var x0 = inst.x;
-        dragFrom(inst.el.querySelector('.sticky-header'), 40, 0);
-        assert.equal(inst.x, x0 + 40, 'header drag still works');
-    });
-
-    it('does not fight text selection while the note is being edited', function() {
-        stickyConfig({});
-        stickyConfig({ 'sn-DR3': { notes: { '#f9e74a': 'select me' }, activeColor: '#f9e74a' } });
-        WidgetManager.enable('sticky-note', { id: 'sn-DR3' });
-        var inst = WidgetManager.instances['sn-DR3'];
+    it('does NOT move when dragged by the text area (selection wins)', function() {
+        var inst = enable('sn-DR2');
         var body = noteBody(inst);
-        var x0 = inst.x;
+        var x0 = inst.x, y0 = inst.y;
+        assert.equal(body.getAttribute('data-no-drag'), '1', 'text area is fenced off for the mouse drag');
+        dragFrom(body, 60, 30);
+        assert.equal(inst.x, x0, 'x unchanged');
+        assert.equal(inst.y, y0, 'y unchanged');
+        // …and the fence survives an edit/focus cycle (it is not a state)
         body.focus();
-        assert.equal(body.getAttribute('data-no-drag'), '1', 'editing fences off the drag');
-        dragFrom(body, 50, 20);
-        assert.equal(inst.x, x0, 'no move while editing (text selection wins)');
+        assert.equal(body.getAttribute('data-no-drag'), '1', 'still fenced while editing');
         body.blur();
-        assert.equal(body.getAttribute('data-no-drag'), null, 'leaving the editor restores dragging');
-        dragFrom(body, 50, 20);
-        assert.equal(inst.x, x0 + 50, 'draggable again once unfocused');
+        assert.equal(body.getAttribute('data-no-drag'), '1', 'still fenced after blur');
+        dragFrom(body, 60, 30);
+        assert.equal(inst.x, x0, 'still no drag from the text area');
+    });
+
+    it('keeps the native right-click menu on the note (copy/paste)', function() {
+        var inst = enable('sn-DR3');
+        // The desktop's own context menu is bound to #desktop — arm it so
+        // the assertion is meaningful (it would preventDefault + open).
+        if (window.Desktop && window.Desktop.bindEvents) window.Desktop.bindEvents();
+        var ev = new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: 50, clientY: 50});
+        noteBody(inst).dispatchEvent(ev);
+        assert.equal(ev.defaultPrevented, false, 'native menu not prevented');
+        assert.ok(!document.getElementById('desktop-context-menu'), 'desktop menu did not open over the note');
+        // Same on the header: the whole note is the user's text surface.
+        var ev2 = new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: 50, clientY: 20});
+        inst.el.querySelector('.sticky-header').dispatchEvent(ev2);
+        assert.equal(ev2.defaultPrevented, false, 'native menu on the header too');
+    });
+
+    it('mobile: long-press anywhere on the note still starts a drag', function() {
+        var origIsMobile = LuCIDesktop.isMobile;
+        LuCIDesktop.isMobile = function() { return true; };
+        try {
+            var inst = enable('sn-DR4');
+            var body = noteBody(inst);
+            var x0 = inst.x;
+            // widget.js binds the touch path only for mobile instances.
+            var start = new Event('touchstart', {bubbles: true});
+            start.touches = [{clientX: 100, clientY: 100}];
+            body.dispatchEvent(start);
+            return new Promise(function(res) { setTimeout(res, 600); }).then(function() {
+                var move = new Event('touchmove', {bubbles: true, cancelable: true});
+                move.touches = [{clientX: 140, clientY: 100}];
+                body.dispatchEvent(move);
+                assert.equal(inst.x, x0 + 40, 'long-press on the text area drags on mobile');
+                var end = new Event('touchend', {bubbles: true});
+                end.touches = [];
+                body.dispatchEvent(end);
+            }).then(function() {
+                LuCIDesktop.isMobile = origIsMobile;
+            }, function(e) {
+                LuCIDesktop.isMobile = origIsMobile;
+                throw e;
+            });
+        } catch (e) {
+            LuCIDesktop.isMobile = origIsMobile;
+            throw e;
+        }
     });
 });
 })();

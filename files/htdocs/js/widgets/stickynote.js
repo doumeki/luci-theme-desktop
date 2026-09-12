@@ -245,39 +245,23 @@
                     if (data.clickThrough) el.style.pointerEvents = 'none';
                 });
 
-                // ===== Drag the note from its text area too =====
-                // The framework drags the widget from any mousedown, but
-                // inside a contenteditable the browser ALSO starts a text
-                // selection — and while editing, dragging must select text
-                // instead of moving the note. Rule: an UNFOCUSED note drags
-                // from anywhere (header or text); once the editor holds the
-                // caret, [data-no-drag] keeps the framework out of the text
-                // area (the header still drags it). A gesture that actually
-                // moved blurs the editor again, so the note stays draggable
-                // and a drag never leaves text selected.
-                var moved = false, dragX = 0, dragY = 0;
-                var onDragMove = function(ev) {
-                    if (moved) return;
-                    if (Math.abs(ev.clientX - dragX) <= 4 && Math.abs(ev.clientY - dragY) <= 4) return;
-                    moved = true;
-                    var sel = window.getSelection && window.getSelection();
-                    if (sel && sel.removeAllRanges) sel.removeAllRanges();
-                };
-                var onDragUp = function() {
-                    document.removeEventListener('mousemove', onDragMove);
-                    document.removeEventListener('mouseup', onDragUp);
-                    if (moved) { moved = false; try { body.blur(); } catch (e) {} }
-                };
-                body.addEventListener('focus', function() { body.setAttribute('data-no-drag', '1'); });
-                body.addEventListener('blur', function() { body.removeAttribute('data-no-drag'); });
-                body.addEventListener('mousedown', function(ev) {
-                    if (ev.button !== 0) return;
-                    if (document.activeElement === body) return;   // editing → select text
-                    moved = false; dragX = ev.clientX; dragY = ev.clientY;
-                    document.addEventListener('mousemove', onDragMove);
-                    document.addEventListener('mouseup', onDragUp);
-                });
+                // ===== The title bar is the drag handle; the text area is
+                // a plain editor =====
+                // Desktop: fence the framework's mouse drag off the text
+                // area ([data-no-drag]) so dragging inside it selects text
+                // instead of moving the note — the header still drags the
+                // note (widget.css gives only the header the grab cursor).
+                // Touch is deliberately NOT restricted here: mobile has no
+                // right-click and the title is a tiny touch target, so
+                // widget.js keeps its long-press-anywhere drag (500ms) with
+                // short taps going on editing.
+                body.setAttribute('data-no-drag', '1');
             }
+
+            // Right-click on the note must reach the BROWSER's native menu
+            // (Copy / Paste / Select All) to be usable for copying text —
+            // the desktop's own context menu would otherwise swallow it.
+            el.addEventListener('contextmenu', function(ev) { ev.stopPropagation(); });
 
             // ===== Close button (✕ marks closed; content kept) =====
             var delBtn = el.querySelector('.sticky-del');

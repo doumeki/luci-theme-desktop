@@ -33,15 +33,14 @@
     -webkit-backdrop-filter: none;
 }
 
-/* ===== Sticky note: drag from the text area too =====
- * The whole note is a drag target (framework mousedown handler), but the
- * text area switches to the caret once the note is being edited — the
- * grab cursor mirrors that state (widgets/stickynote.js sets
- * data-no-drag while focused, which also fences the framework out). */
+/* ===== Sticky note: title bar drags, the text area edits =====
+ * The header carries the grab cursor and is the only desktop drag handle
+ * (stickynote.js marks the body [data-no-drag], so the framework's mouse
+ * drag never starts there — text selection wins and the browser's native
+ * right-click menu stays available for copying). The body shows the
+ * normal text caret instead. Mobile keeps the long-press-anywhere drag
+ * (widget.js _makeDraggable) — touch has no cursor to express it with. */
 .widget-sticky-note .sticky-body {
-    cursor: grab;
-}
-.widget-sticky-note .sticky-body:focus {
     cursor: text;
 }
 

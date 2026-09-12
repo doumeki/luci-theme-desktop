@@ -12,7 +12,7 @@ THEME_TITLE:=Desktop
 PKG_NAME:=luci-theme-$(THEME_NAME)
 PKG_VERSION:=0.1.0
 # 125 = merged branch (Lua track + ucode track unified, 2026-08-15)
-PKG_RELEASE:=213
+PKG_RELEASE:=214
 
 include $(INCLUDE_DIR)/package.mk
 
