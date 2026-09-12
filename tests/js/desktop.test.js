@@ -552,6 +552,37 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(D.resolveUrlVars('/cgi-bin/luci/admin/status/overview'), '/cgi-bin/luci/admin/status/overview', 'plain path untouched');
     });
 
+    it('keeps the chosen icon, position and hidden state when the URL is edited', function() {
+        function savedSection(name) {
+            for (var i = posts.length - 1; i >= 0; i--) {
+                var b = posts[i].body || '';
+                if (b.indexOf('section=' + name + '&') !== 0) continue;
+                var m = /(?:^|&)data=([^&]*)/.exec(b);
+                if (m) return JSON.parse(decodeURIComponent(m[1].replace(/\+/g, ' ')));
+            }
+            return null;
+        }
+        setConfig({
+            pins: [{ url: 'https://old.example.com', title: 'App', custom: true, newTab: true }],
+            hidden_icons: ['https://old.example.com'],
+            icon_layout: { 'https://old.example.com': { icon: 'docker', desktop: { col: 2, row: 1 } } },
+            widgets: {}, theme: {}, wallpaper: {}
+        });
+        window.Desktop.editCustomUrl('https://old.example.com');
+        var overlay = document.querySelector('.link-dialog-overlay');
+        overlay.querySelector('.link-url').value = 'https://new.example.com';
+        overlay.querySelector('.link-save').click();
+        var layout = savedSection('icon_layout');
+        assert.ok(layout && layout['https://new.example.com'], 'icon layout moved to the new URL');
+        assert.equal(layout['https://new.example.com'].icon, 'docker', 'chosen icon kept');
+        assert.equal(layout['https://new.example.com'].desktop.col, 2, 'grid cell kept');
+        assert.equal(layout['https://old.example.com'], undefined, 'old URL key dropped');
+        var hidden = savedSection('hidden');
+        assert.equal(hidden.indexOf('https://new.example.com') !== -1, true, 'hidden state follows the new URL');
+        assert.equal(hidden.indexOf('https://old.example.com'), -1, 'old URL no longer hidden');
+        assert.equal(savedPins()[0].url, 'https://new.example.com', 'pin repointed');
+    });
+
     it('stores the placeholder but opens the expanded URL', function() {
         var tabs = [];
         window.open = function(u) { tabs.push(u); return null; };

@@ -495,6 +495,26 @@
             }
         },
 
+        // Editing a link's URL must not lose what is keyed by the URL: the
+        // icon the user picked, the desktop grid cell and the hidden state
+        // all live in icon_layout / hidden_icons. Without this the icon
+        // reverted to the default (and the stale entry was pruned later as
+        // a ghost).
+        _moveLinkMeta: function(oldUrl, newUrl) {
+            if (!oldUrl || !newUrl || oldUrl === newUrl) return;
+            if (iconLayout[oldUrl]) {
+                iconLayout[newUrl] = iconLayout[oldUrl];
+                delete iconLayout[oldUrl];
+                saveIconLayout();
+            }
+            var hi = hiddenIcons.indexOf(oldUrl);
+            if (hi !== -1) {
+                hiddenIcons.splice(hi, 1);
+                if (hiddenIcons.indexOf(newUrl) === -1) hiddenIcons.push(newUrl);
+                saveHidden();
+            }
+        },
+
         // Add / edit dialog. Reuses the icon-picker overlay CSS (already
         // linked by BOTH header branches — no template change needed).
         _showLinkDialog: function(existing) {
@@ -570,7 +590,10 @@
                     return;
                 }
                 var oldUrl = isEdit ? existing.url : null;
-                if (oldUrl && oldUrl !== url) self.unpinItem(oldUrl);
+                if (oldUrl && oldUrl !== url) {
+                    self.unpinItem(oldUrl);
+                    self._moveLinkMeta(oldUrl, url);   // keep icon/position/hidden
+                }
                 self.addCustomUrl(nameEl.value, url, tabEl.checked);
                 close();
             };
