@@ -158,7 +158,12 @@
 
             // Wire up iframe bridge: inject CSS, intercept links, detect logout
             iframe.addEventListener('load', function() {
-                if (loading && loading.parentNode) loading.remove();
+                if (loading && loading.parentNode) {
+                    // The app is already visible behind the hint (it is a
+                    // floating chip, not an overlay) — just fade it out.
+                    loading.style.opacity = '0';
+                    setTimeout(function() { if (loading.parentNode) loading.remove(); }, 300);
+                }
                 if (window.IframeBridge) {
                     IframeBridge.onIframeLoad(iframe, id);
                 }

@@ -303,6 +303,19 @@ function i18nConsistencyCheck() {
         }
     } catch (e) {}
 
+    // Progressive app rendering (0.1.0-215): the window loading hint must
+    // stay a small non-blocking chip. As an opaque inset:0 overlay it hid
+    // the app that had ALREADY painted until the load event (which waits
+    // for every subresource) — a slow app like firewall then looked like it
+    // "appears all at once", and tabs already rendered were unclickable.
+    try {
+        const css = readFile('files/htdocs/css/window.css');
+        const block = /\.window-loading\s*\{([^}]*)\}/.exec(css);
+        if (!block || /inset:\s*0/.test(block[1]) || !/pointer-events:\s*none/.test(block[1])) {
+            problems.push('window-loading must be a non-blocking floating hint (no inset:0 full overlay, needs pointer-events:none):\n  → files/htdocs/css/window.css');
+        }
+    } catch (e) {}
+
     if (problems.length) {
         console.log('❌ i18n consistency failed:\n\n' + problems.join('\n\n'));
         process.exit(1);

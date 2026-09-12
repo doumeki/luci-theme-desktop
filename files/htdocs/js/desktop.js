@@ -406,6 +406,25 @@
             return 'http://' + u;                            // bare host or IP
         },
 
+        // Placeholders in a custom URL, resolved at OPEN time — one
+        // shortcut then keeps working whether the router is reached by host
+        // name or by IP (the URL is STORED as typed, never expanded):
+        //   {host}   → location.hostname  (tec.com | 192.168.1.1)
+        //   {port}   → location.port      (LuCI's own port; '' for 80/443)
+        //   {proto}  → location.protocol  (http: / https:)
+        //   {origin} → location.origin    (scheme://host:port)
+        // e.g. http://{host}:300 reaches a service on the router whatever
+        // name the shell happened to be opened with.
+        resolveUrlVars: function(url) {
+            if (!url || url.indexOf('{') === -1) return url;
+            if (typeof location === 'undefined') return url;
+            return url
+                .replace(/\{host\}/gi, location.hostname)
+                .replace(/\{port\}/gi, location.port || '')
+                .replace(/\{proto(?:col)?\}/gi, location.protocol)
+                .replace(/\{origin\}/gi, location.origin);
+        },
+
         // A URL that leaves this LuCI origin (default: open in a new tab).
         isExternalUrl: function(url) {
             if (!url || url.charAt(0) === '/') return false;
@@ -434,16 +453,18 @@
 
         // Open a shortcut: a custom link flagged newTab leaves the shell
         // (external sites refuse framing), everything else opens as a
-        // desktop window like any app.
+        // desktop window like any app. {host}-style placeholders expand
+        // here, against the address the shell was opened with.
         openShortcut: function(url, title) {
+            var target = this.resolveUrlVars(url);
             for (var i = 0; i < pinnedItems.length; i++) {
                 var p = pinnedItems[i];
                 if (p.url === url && p.custom && p.newTab) {
-                    window.open(url, '_blank', 'noopener');
+                    window.open(target, '_blank', 'noopener');
                     return;
                 }
             }
-            WM.open(url, title);
+            WM.open(target, title);
         },
 
         editCustomUrl: function(url) {
@@ -478,6 +499,9 @@
                         '<div class="link-hint">' +
                             _('LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.') +
                         '</div>' +
+                        '<div class="link-hint">' +
+                            _('Tip: {host} is the address you are using now — http://{host}:300 reaches this router on port 300 (also {port}, {proto}, {origin}).') +
+                        '</div>' +
                         '<div class="link-error"></div>' +
                     '</div>' +
                     '<div class="link-actions">' +
@@ -500,11 +524,12 @@
             }
 
             // Typing a URL keeps the tab checkbox in sync with what the URL
-            // implies — until the user sets it by hand.
+            // implies — until the user sets it by hand. Placeholders expand
+            // first so http://{host}:300 is judged as the real target.
             urlEl.addEventListener('input', function() {
                 if (tabTouched) return;
                 var u = self.normalizeUrl(urlEl.value);
-                tabEl.checked = u ? self.isExternalUrl(u) : false;
+                tabEl.checked = u ? self.isExternalUrl(self.resolveUrlVars(u)) : false;
             });
             tabEl.addEventListener('change', function() { tabTouched = true; });
 

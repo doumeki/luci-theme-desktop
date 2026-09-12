@@ -160,25 +160,35 @@
     position: relative;
 }
 
-/* Loading placeholder shown while the app page loads */
+/* Loading hint shown while the app page loads. Deliberately a small
+ * floating chip with pointer-events:none — the iframe stays VISIBLE from
+ * the first painted byte, so a slow app (firewall) fills in progressively
+ * instead of appearing all at once when the full `load` event fires.
+ * That event waits for every subresource, and the old opaque overlay hid
+ * the already-rendered page until then (also blocking clicks on tabs that
+ * had already rendered). */
 .window-loading {
     position: absolute;
-    inset: 0;
-    z-index: 1;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: var(--win-body-bg, #f5f5f5);
-    color: var(--win-body-fg, #888);
+    gap: 8px;
+    padding: 5px 12px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
     font-size: 12px;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
 }
 .window-loading-spinner {
-    width: 24px;
-    height: 24px;
-    border: 3px solid rgba(128, 128, 128, 0.25);
-    border-top-color: var(--accent-color, #4a90d9);
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
     border-radius: 50%;
     animation: window-spin 0.8s linear infinite;
 }

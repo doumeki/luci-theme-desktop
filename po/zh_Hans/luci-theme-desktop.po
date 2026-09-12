@@ -619,3 +619,6 @@ msgid "LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites op
 msgstr "LuCI 页面（/cgi-bin/luci/…）在桌面窗口内打开；外部站点在新标签页打开。"
 msgid "Enter a valid http(s) address or a LuCI path."
 msgstr "请输入有效的 http(s) 地址或 LuCI 路径。"
+
+msgid "Tip: {host} is the address you are using now — http://{host}:300 reaches this router on port 300 (also {port}, {proto}, {origin})."
+msgstr "提示：{host} 是你当前访问的地址——http://{host}:300 可访问本路由的 300 端口（另支持 {port}、{proto}、{origin}）。"

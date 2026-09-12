@@ -506,6 +506,34 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(savedPins()[0].title, 'https://example.com', 'name defaults to the URL');
     });
 
+    it('expands {host}-style placeholders against the current address', function() {
+        var D = window.Desktop;
+        assert.equal(D.resolveUrlVars('http://{host}:300'), 'http://' + location.hostname + ':300', '{host}');
+        assert.equal(D.resolveUrlVars('{proto}//{host}:300/x'), location.protocol + '//' + location.hostname + ':300/x', '{proto}');
+        assert.equal(D.resolveUrlVars('{origin}/cgi-bin/luci/admin/status/overview'), location.origin + '/cgi-bin/luci/admin/status/overview', '{origin}');
+        assert.equal(D.resolveUrlVars('http://{HOST}:300'), 'http://' + location.hostname + ':300', 'case-insensitive');
+        assert.equal(D.resolveUrlVars('http://{host}:{port}/x'), 'http://' + location.hostname + ':' + location.port + '/x', '{port}');
+        assert.equal(D.resolveUrlVars('https://example.com/x'), 'https://example.com/x', 'no placeholders → untouched');
+        assert.equal(D.resolveUrlVars('/cgi-bin/luci/admin/status/overview'), '/cgi-bin/luci/admin/status/overview', 'plain path untouched');
+    });
+
+    it('stores the placeholder but opens the expanded URL', function() {
+        var tabs = [];
+        window.open = function(u) { tabs.push(u); return null; };
+        window.Desktop.addCustomUrl('App', 'http://{host}:300', true);
+        assert.equal(savedPins()[0].url, 'http://{host}:300', 'stored as typed (works via IP or domain)');
+        window.Desktop.openShortcut('http://{host}:300', 'App');
+        assert.equal(tabs[0], 'http://' + location.hostname + ':300', 'expanded at open time');
+    });
+
+    it('opens a {host} link in a desktop window when the tab box is off', function() {
+        var windows = [];
+        window.WM.open = function(u) { windows.push(u); };
+        window.Desktop.addCustomUrl('App', 'http://{host}:300', false);
+        window.Desktop.openShortcut('http://{host}:300', 'App');
+        assert.equal(windows[0], 'http://' + location.hostname + ':300', 'window gets the expanded URL');
+    });
+
     it('keeps custom links out of the ghost cleanup (regression)', function() {
         // Menu tree WITHOUT either pinned URL: the app pin is a ghost, the
         // custom link must survive — a menu-driven cleanup would otherwise
