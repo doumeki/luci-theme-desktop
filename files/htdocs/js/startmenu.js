@@ -380,25 +380,27 @@
         },
 
         showPinMenu: function(x, y, url, title) {
-            // Remove existing
-            var existing = document.getElementById('pin-menu');
-            if (existing) existing.remove();
-
-            var menu = document.createElement('div');
+            // Reuse the SINGLE popup-menu factory in desktop-menus.js: it
+            // renders the items first, then clamps the real width AND height
+            // into the viewport. This used to be a second copy of the
+            // placement math — one that worked only because it happened to
+            // measure after innerHTML, while the desktop menus did not.
+            var make = window.LuCIDesktop && LuCIDesktop.desktopMenus && LuCIDesktop.desktopMenus._makeMenu;
+            var html = '<div class="context-item" data-action="pin">' + _('Pin to Desktop') + '</div>';
+            var menu;
+            if (typeof make === 'function') {
+                menu = make(x, y, html);
+            } else {
+                // Defensive only (desktop-menus.js not loaded yet): show the
+                // action unclamped rather than lose it. Placement math must
+                // not be duplicated here.
+                menu = document.createElement('div');
+                menu.className = 'context-menu';
+                menu.innerHTML = html;
+                menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;';
+                document.body.appendChild(menu);
+            }
             menu.id = 'pin-menu';
-            menu.className = 'context-menu';
-            menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;';
-            menu.innerHTML =
-                '<div class="context-item" data-action="pin">' + _('Pin to Desktop') + '</div>';
-            document.body.appendChild(menu);
-            // Clamp inside the viewport (long-press near the edge)
-            var r = menu.getBoundingClientRect();
-            if (r.right > window.innerWidth) {
-                menu.style.left = Math.max(4, window.innerWidth - r.width - 4) + 'px';
-            }
-            if (r.bottom > window.innerHeight) {
-                menu.style.top = Math.max(4, window.innerHeight - r.height - 4) + 'px';
-            }
 
             var self = this;
             menu.addEventListener('click', function(e) {

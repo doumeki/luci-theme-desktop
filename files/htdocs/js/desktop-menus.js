@@ -12,28 +12,75 @@
     if (!DESKTOP) { console.error('desktop-menus.js: LuCIDesktop namespace not found'); return; }
     var State = DESKTOP.desktopState;
 
-    function _makeMenu(x, y) {
-        document.querySelectorAll('#desktop-context-menu, #icon-context-menu').forEach(function(m) { m.remove(); });
+    // Keep this much empty space between the menu and the viewport edge
+    // (covers the border + drop shadow so the menu never looks clipped).
+    var MENU_MARGIN = 6;
+
+    // Clamp an ALREADY-RENDERED menu into the viewport on BOTH axes.
+    //
+    // offsetWidth/offsetHeight (not getBoundingClientRect) are used because
+    // the layout size is what we position against: .context-menu has an
+    // entrance animation (scale 0.95 -> 1), and a rect measured mid-animation
+    // is ~5% too small, which would let the final (unscaled) menu poke past
+    // the edge again.
+    //
+    // The menu must contain its items before this runs: an empty
+    // .context-menu measures 0x0 in the test shell (and ~min-width x 10px in
+    // production), so every "does it fit?" test is false and the clamp
+    // silently no-ops — that was the right/bottom clipping bug.
+    function _placeMenu(menu, x, y) {
+        var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+        var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+        var w = menu.offsetWidth;
+        var h = menu.offsetHeight;
+
+        // Open at the click, then hug the far edge when it would overflow.
+        // A menu WIDER/TALLER than the viewport is pinned to the top/left
+        // margin (never a negative coordinate).
+        var left = x;
+        if (left + w > vw - MENU_MARGIN) left = vw - w - MENU_MARGIN;
+        if (left < MENU_MARGIN) left = MENU_MARGIN;
+
+        var top = y;
+        if (top + h > vh - MENU_MARGIN) top = vh - h - MENU_MARGIN;
+        if (top < MENU_MARGIN) top = MENU_MARGIN;
+
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+
+        // Taller than the viewport: pin to the top and make it scroll
+        // instead of running off the bottom. max-height/overflow are only
+        // applied in this extreme case, so a normal menu never becomes a
+        // clipping container for its absolutely-positioned submenu.
+        if (h + MENU_MARGIN * 2 > vh) {
+            menu.style.maxHeight = Math.max(0, vh - MENU_MARGIN * 2) + 'px';
+            menu.style.overflowY = 'auto';
+        }
+    }
+
+    // SINGLE entry point for every popup menu (desktop / pinned icon /
+    // default icon / Start-Menu "Pin to Desktop"): create it, render the
+    // caller's HTML, append, then clamp. Callers that inject content after
+    // this returns reintroduce the off-screen bug.
+    function _makeMenu(x, y, html) {
+        document.querySelectorAll('#desktop-context-menu, #icon-context-menu, #pin-menu')
+            .forEach(function(m) { m.remove(); });
         var menu = document.createElement('div');
         menu.className = 'context-menu';
+        menu.innerHTML = html || '';
         menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;';
         document.body.appendChild(menu);
-        // Clamp inside the viewport — long-press near the right/bottom
-        // edge must not push the menu off-screen
-        var r = menu.getBoundingClientRect();
-        if (r.right > window.innerWidth) {
-            menu.style.left = Math.max(4, window.innerWidth - r.width - 4) + 'px';
-        }
-        if (r.bottom > window.innerHeight) {
-            menu.style.top = Math.max(4, window.innerHeight - r.height - 4) + 'px';
-        }
+        _placeMenu(menu, x, y);
         return menu;
     }
 
     var menus = {
+        // The one popup-menu factory (create + render + viewport clamp).
+        // Exposed so startmenu.js's Pin-to-Desktop menu reuses it instead of
+        // keeping a second, drifting copy of the placement math.
+        _makeMenu: _makeMenu,
+
         _showDefaultIconMenu: function(x, y, url, title, iconEl) {
-            var m = _makeMenu(x, y);
-            m.id = 'icon-context-menu';
             var installable = iconEl && iconEl.classList.contains('installable');
             var html = '';
             if (!installable) {
@@ -47,7 +94,8 @@
                 html += '<div class="context-item" data-act="reseticon">' + _('Reset Icon') + '</div>';
             }
             html += '<div class="context-item" data-act="hide">' + _('Hide') + '</div>';
-            m.innerHTML = html;
+            var m = _makeMenu(x, y, html);
+            m.id = 'icon-context-menu';
             m.addEventListener('click', function(e) {
                 var act = e.target.closest('.context-item');
                 if (!act) return;
@@ -74,16 +122,15 @@
         },
 
         _showIconMenu: function(x, y, pinned) {
-            var m = _makeMenu(x, y);
-            m.id = 'icon-context-menu';
-            m.innerHTML =
+            var m = _makeMenu(x, y,
                 '<div class="context-item" data-act="open">' + _('Open') + '</div>' +
                 '<div class="context-item" data-act="changeicon">' + _('Change Icon') + '</div>' +
                 (State.layout()[pinned.url] && State.layout()[pinned.url].icon ? '<div class="context-item" data-act="reseticon">' + _('Reset Icon') + '</div>' : '') +
                 '<div class="context-item" data-act="rename">' + _('Rename') + '</div>' +
                 (pinned.custom ? '<div class="context-item" data-act="editlink">' + _('Edit Link') + '</div>' : '') +
                 '<div class="context-separator"></div>' +
-                '<div class="context-item" data-act="unpin">' + _('Unpin') + '</div>';
+                '<div class="context-item" data-act="unpin">' + _('Unpin') + '</div>');
+            m.id = 'icon-context-menu';
             m.addEventListener('click', function(e) {
                 var act = e.target.closest('.context-item');
                 if (!act) return;
@@ -214,9 +261,7 @@
         },
 
         _showDesktopMenu: function(x, y) {
-            var m = _makeMenu(x, y);
-            m.id = 'desktop-context-menu';
-            m.innerHTML =
+            var m = _makeMenu(x, y,
                 '<div class="context-item context-has-sub" data-act="new">' + _('New') +
                     '<span class="context-arrow">&#8250;</span>' +
                     '<div class="context-submenu">' +
@@ -228,7 +273,8 @@
                 '<div class="context-item" data-act="widgets">' + _('Widgets') + '</div>' +
                 '<div class="context-separator"></div>' +
                 '<div class="context-item" data-act="rearrange">' + _('Rearrange Icons') + '</div>' +
-                '<div class="context-item" data-act="refresh">' + _('Refresh') + '</div>';
+                '<div class="context-item" data-act="refresh">' + _('Refresh') + '</div>');
+            m.id = 'desktop-context-menu';
             m.addEventListener('mouseenter', function(e) {
                 var row = e.target.closest && e.target.closest('.context-has-sub');
                 if (row) Desktop._placeSubmenu(row);
