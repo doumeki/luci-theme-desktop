@@ -70,6 +70,37 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 - 版本号：`Makefile` 的 `PKG_RELEASE` +1，提交信息注明版本。
 - 提交信息用英文。
 
+## 敏感信息与个人测试信息（红线）
+
+本仓库会发布到公开远端，**推送不可撤销**，而 CI 只跑 L1 测试、**没有任何**
+密钥扫描兜底。所以：
+
+- **红线**：任何被 git 跟踪的文件里都不得出现真实设备地址/主机名、口令、
+  token、私钥内容或私钥路径、个人环境路径（本机绝对路径、个人 ssh key 名等）。
+  文档、注释、示例脚本一视同仁——公开仓库是永久且可被索引的。
+- **个人值只放本地**：设备地址、ssh key 等写进 **gitignored** 的
+  `probe/.local-env`（仓库只提供 `probe/.local-env.example` 模板，自行复制填写）。
+  脚本/代码**只从环境变量或该文件读取**，绝不写死。
+- **覆盖用既有变量**：`ROUTER_1` / `ROUTER_2` / `SSH_KEY_2`
+  （`probe/.local-env`）与 `PROBE_ROUTER` / `PROBE_SSH` / `PROBE_SSH_KEY`
+  （进程环境，单次运行覆盖）。接新设备时优先复用这些变量，不要新增写死的默认值。
+- **占位符约定**：文档/示例里用
+  `<router-ip-or-host>`、`<ssh-host>`、`<path-to-private-key>`、`${VAR}`；
+  需要示例 IP 时用 RFC 5737 文档网段（`192.0.2.x`、`198.51.100.x`、`203.0.113.x`）。
+- **分享复现步骤时**：只贴命令与占位符，别贴真实值；把个人数据留在本地。
+- **自动化保障**：L1 套件（`node tests/run-headless.js`，CI 每次 push/PR 执行）
+  内置敏感信息扫描闸门，扫描所有会被公开的文件（`files/`、`tests/`、`tools/`、
+  `probe/`、`Makefile`、`.gitignore`、`AGENTS.md`、`tests/README.md`）。命中
+  设备 IP、私钥标记、赋值型凭据、内部域名，或 `probe/.local-env` 真值泄漏，
+  即 **fail**，输出只给 `文件:行号` + 脱敏片段。确属误报要**精确豁免**：在命中
+  行加 `// secret-scan-allow: <rule>` 注释，或在 `tests/run-headless.js` 顶部的
+  `SECRET_SCAN_ALLOW` 加一条 `文件:规则`；**不要**整体关掉检查。
+- **新贡献者三步上手**：
+  1. `cp probe/.local-env.example probe/.local-env`，填入自己的设备地址与 key 路径；
+  2. `node tests/run-headless.js` —— L1 测试（无需路由器，应全绿）；
+  3. `bash probe/deploy-theme.sh <device>` —— 构建 + 部署 + 冒烟（`<device>` 用
+     `probe/.local-env` 里定义的别名或地址）。
+
 ## 踩坑速查（AI 高频翻车点）
 
 | 坑 | 对策 |

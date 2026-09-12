@@ -76,6 +76,16 @@ To run any device probe, create `probe/.local-env` first (copy
 `probe/.local-env.example` and fill in your own values); without it `lib.js`
 falls back to `127.0.0.1` and the probes cannot log in.
 
+### Sensitive data
+
+Never commit a real device address, host name, password, token or key path —
+public pushes are irreversible. Keep personal values in the gitignored
+`probe/.local-env`, use the variables listed above, and write examples with
+placeholders (`<router-ip-or-host>`, `<path-to-private-key>`, `${VAR}`) or the
+RFC 5737 documentation range (`192.0.2.x`). The Level 1 runner scans every
+published file and fails on a leak — see the "敏感信息与个人测试信息" section in
+`AGENTS.md` for the red lines and the narrow allowlist mechanism.
+
 
 ## CI
 
