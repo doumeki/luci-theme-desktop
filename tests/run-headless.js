@@ -388,6 +388,35 @@ function i18nConsistencyCheck() {
     console.log('✅ i18n consistency: dict=' + dict.size + ' pot=' + pot.size + ' po=' + po.size + ' aligned');
 }
 
+// ===== i18n single-source drift check (0.1.0-230) =====
+// po/template.pot + po/zh_Hans/luci-theme-desktop.po are GENERATED from the
+// zh_cn dict by tools/gen-i18n.js. i18nConsistencyCheck above only proves the
+// three files agree on the msgid SET; this one proves the two generated files
+// still match what the generator would write right now — a dict edit without
+// a regeneration otherwise ships the old catalog silently (the exact bug the
+// single-source refactor removes).
+function i18nDriftCheck() {
+    let gen;
+    try { gen = require(path.join(THEME_DIR, 'tools/gen-i18n.js')); }
+    catch (e) {
+        console.log('❌ cannot load tools/gen-i18n.js: ' + e.message);
+        process.exit(1);
+    }
+    const r = gen.generate();
+    const stale = [];
+    [['po/template.pot', r.pot], ['po/zh_Hans/luci-theme-desktop.po', r.po]].forEach(function(pair) {
+        let disk = '';
+        try { disk = readFile(pair[0]); } catch (e) {}
+        if (disk !== pair[1]) stale.push('  ' + pair[0]);
+    });
+    if (stale.length) {
+        console.log('❌ i18n catalog is stale (dict changed without regeneration):\n' +
+            stale.join('\n') + '\n  → run `node tools/gen-i18n.js`');
+        process.exit(1);
+    }
+    console.log('✅ i18n catalog: pot/po match the dict (no drift)');
+}
+
 // ===== widget inline-style contract (0.1.0-230) =====
 // Widget render must be idempotent: static presentation lives in widget.css
 // (`.widget-sticky-note …`), only DYNAMIC values may touch inline styles (or
@@ -460,6 +489,7 @@ function cleanup() {
 (async () => {
     try {
         i18nConsistencyCheck();
+        i18nDriftCheck();
         widgetStyleContractCheck();
         runLuaRuntimeTests();
         killAll();

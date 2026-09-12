@@ -1,46 +1,14 @@
 # LuCI Desktop Theme — Simplified Chinese Translation
 # Copyright 2026 DMKLIGHT
 #
-msgid "CPU usage may be inaccurate on this build"
-msgstr "此固件上 CPU 占用率可能不准"
-msgid "Do not show again"
-msgstr "不再提醒"
-
-msgid "Missing luci-lua-runtime — install to enable theme features"
-msgstr "缺少 luci-lua-runtime — 安装后主题功能可用"
-
-msgid "Max instances warning"
-msgstr "实例数量上限提示"
-
-msgid "Online wallpaper unavailable (curl missing)"
-msgstr "在线壁纸不可用（缺少 curl）"
-msgid "Picsum unreachable"
-msgstr "Picsum 无法访问"
-
-msgid "Platform compatibility"
-msgstr "平台兼容性提示"
+# GENERATED FILE — do not edit by hand.
+# Source of truth: files/htdocs/js/i18n.js (the zh_cn dict).
+# Regenerate: node tools/gen-i18n.js
 msgid ""
-msgstr "Content-Type: text/plain; charset=UTF-8\n"
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
 
-msgid "App"
-msgstr "色系"
-
-msgid "Colors"
-msgstr "颜色"
-
-msgid "Icons"
-msgstr "图标"
-
-msgid "Login"
-msgstr "登录"
-
-msgid "Hide background at 0% opacity"
-msgstr "透明度 0% 时隐藏背景"
-
-# theme-config.js — field labels
-msgid "Platform compatibility warnings"
-msgstr "平台兼容性警告"
-
+# theme-config.js
 msgid "Titlebar (active)"
 msgstr "标题栏（活动）"
 
@@ -72,10 +40,10 @@ msgid "Dark Mode"
 msgstr "深色模式"
 
 msgid "App Primary"
-msgstr "应用主色"
+msgstr "亮色系主色调"
 
 msgid "App Primary (dark)"
-msgstr "应用主色（暗色）"
+msgstr "暗色系主色调"
 
 msgid "Desktop Wallpaper"
 msgstr "桌面壁纸"
@@ -134,6 +102,27 @@ msgstr "光晕 X"
 msgid "Glow Y"
 msgstr "光晕 Y"
 
+msgid "Go to password configuration..."
+msgstr "前往密码配置..."
+
+msgid "Do not show again"
+msgstr "不再提醒"
+
+msgid "Max instances warning"
+msgstr "实例数量上限提示"
+
+msgid "Picsum unreachable"
+msgstr "Picsum 无法访问"
+
+msgid "Platform compatibility warnings"
+msgstr "平台兼容性警告"
+
+msgid "Wallpaper refresh failed"
+msgstr "壁纸刷新失败"
+
+msgid "Wallpaper saved to built-in"
+msgstr "壁纸已保存到内置图库"
+
 msgid "Spread"
 msgstr "扩散"
 
@@ -143,21 +132,33 @@ msgstr "角度"
 msgid "Menu Hover"
 msgstr "菜单悬停切换"
 
+msgid "Swipe Step"
+msgstr "滑动灵敏度"
+
 msgid "Auto Refresh"
 msgstr "自动刷新"
 
 msgid "Picsum Auto Refresh"
 msgstr "登录刷新"
 
-# theme-config.js — layout section labels
+# Layout section labels
 msgid "Titlebar"
 msgstr "标题栏"
 
 msgid "Desktop"
 msgstr "桌面"
 
+msgid "App"
+msgstr "色系"
+
+msgid "Icons"
+msgstr "图标"
+
 msgid "Menu"
 msgstr "菜单"
+
+msgid "Login"
+msgstr "登录"
 
 # themesettings.js
 msgid "Apply"
@@ -196,6 +197,9 @@ msgstr "当前:"
 msgid "No matching icons"
 msgstr "没有匹配的图标"
 
+msgid "Colors"
+msgstr "颜色"
+
 msgid "Fonts"
 msgstr "字体"
 
@@ -210,9 +214,6 @@ msgstr "保存到内置"
 
 msgid "Save"
 msgstr "保存"
-
-msgid "then refresh"
-msgstr "然后刷新页面"
 
 msgid "Theme Settings"
 msgstr "主题设置"
@@ -259,12 +260,6 @@ msgstr "错误"
 msgid "Already in Built-in: "
 msgstr "已在内置中: "
 
-msgid "Wallpaper refresh failed"
-msgstr "壁纸刷新失败"
-
-msgid "Wallpaper saved to built-in"
-msgstr "壁纸已保存到内置图库"
-
 msgid "✓ Saved"
 msgstr "✓ 已保存"
 
@@ -277,6 +272,9 @@ msgstr "没有注册的组件。"
 
 msgid "Click-through"
 msgstr "点击穿透"
+
+msgid "Hide background at 0% opacity"
+msgstr "透明度 0% 时隐藏背景"
 
 msgid "Close"
 msgstr "关闭"
@@ -295,27 +293,6 @@ msgstr "永久删除 "
 
 msgid "?\n\nThis cannot be undone."
 msgstr " 中的所有内容？\n\n此操作不可撤销。"
-
-msgid "Max "
-msgstr "已达最大实例数 "
-
-msgid " instances of "
-msgstr "："
-
-msgid "Widget requires an id"
-msgstr "组件需要 id"
-
-msgid "Widget requires a render function"
-msgstr "组件需要 render 函数"
-
-msgid "Widget \""
-msgstr "组件 \""
-
-msgid "\" already registered"
-msgstr "\" 已注册"
-
-msgid "\" not registered"
-msgstr "\" 未注册"
 
 # wallpaper-settings.js
 msgid "Wallpapers"
@@ -388,8 +365,26 @@ msgstr "打开"
 msgid "Hide"
 msgstr "隐藏"
 
+msgid "Hide this icon?"
+msgstr "隐藏此图标？"
+
+msgid "Hide on mobile"
+msgstr "移动端隐藏"
+
+msgid "Notifications"
+msgstr "通知"
+
+msgid "Recent Apps"
+msgstr "最近应用"
+
 msgid "Install"
 msgstr "安装"
+
+msgid "Missing luci-lua-runtime — install to enable theme features"
+msgstr "缺少 luci-lua-runtime — 安装后主题功能可用"
+
+msgid "then refresh"
+msgstr "然后刷新页面"
 
 msgid "Install failed"
 msgstr "安装失败"
@@ -399,9 +394,6 @@ msgstr "正在安装终端…"
 
 msgid "Not installed"
 msgstr "未安装"
-
-msgid "Hide this icon?"
-msgstr "隐藏此图标？"
 
 msgid "Rename"
 msgstr "重命名"
@@ -417,6 +409,37 @@ msgstr "组件"
 
 msgid "Theme settings loading..."
 msgstr "主题设置加载中..."
+
+# Custom URL shortcuts (desktop right-click → Add Custom URL)
+msgid "Add Custom URL"
+msgstr "添加自定义链接"
+
+msgid "New"
+msgstr "新建"
+
+msgid "Link"
+msgstr "链接"
+
+msgid "Edit Link"
+msgstr "编辑链接"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Address (URL)"
+msgstr "地址（URL）"
+
+msgid "Open in a new browser tab"
+msgstr "在新标签页中打开"
+
+msgid "LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab."
+msgstr "LuCI 页面（/cgi-bin/luci/…）在桌面窗口内打开；外部站点在新标签页打开。"
+
+msgid "Enter a valid http(s) address or a LuCI path."
+msgstr "请输入有效的 http(s) 地址或 LuCI 路径。"
+
+msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000"
+msgstr "{router} = 当前访问的主机名，{httpx} = http 或 https，{port} = 当前端口，{origin} = 协议://主机:端口。示例：{httpx}://{router}:3000"
 
 # wm.js
 msgid "Untitled"
@@ -469,26 +492,31 @@ msgstr "自动刷新：关"
 msgid "Window"
 msgstr "窗口"
 
+# uci indicator
 msgid "Unsaved Changes"
 msgstr "未保存的配置"
 
 msgid "No password set!"
 msgstr "未设置密码！"
 
-msgid "Go to password configuration..."
-msgstr "前往密码配置..."
+# platform compatibility probe (shell.js)
+msgid "Platform compatibility"
+msgstr "平台兼容性提示"
 
-msgid "There is no password set on this router. Please configure a root password to protect the web interface."
-msgstr "路由器尚未设置密码。请配置 root 密码以保护 Web 界面。"
+msgid "Online wallpaper unavailable (curl missing)"
+msgstr "在线壁纸不可用（缺少 curl）"
+
+msgid "CPU usage may be inaccurate on this build"
+msgstr "此固件上 CPU 占用率可能不准"
 
 msgid "Password"
 msgstr "密码"
 
-msgid "Please log in."
-msgstr "请登录。"
-
 msgid "Username"
 msgstr "用户名"
+
+msgid "Please log in."
+msgstr "请登录。"
 
 msgid "Invalid username and/or password! Please try again."
 msgstr "用户名或密码错误！请重试。"
@@ -509,11 +537,11 @@ msgid "Reverted"
 msgstr "已放弃"
 
 # widgets/stickynote.js
-msgid "Yellow"
-msgstr "黄色"
-
 msgid "Sticky Note"
 msgstr "便签"
+
+msgid "Yellow"
+msgstr "黄色"
 
 msgid "Coral"
 msgstr "珊瑚色"
@@ -537,27 +565,30 @@ msgid "Sticky "
 msgstr "便签 "
 
 # widgets/clock.js
-msgid "Analog"
-msgstr "指针"
-
 msgid "Desktop Clock"
 msgstr "桌面时钟"
+
+msgid "Analog"
+msgstr "指针"
 
 msgid "Digital"
 msgstr "数字"
 
 # widgets/system-info.js
-msgid "CPU"
-msgstr "处理器"
-
 msgid "System Info"
 msgstr "系统信息"
+
+msgid "CPU"
+msgstr "处理器"
 
 msgid "Mem"
 msgstr "内存"
 
 msgid "Temp"
 msgstr "温度"
+
+msgid "Up"
+msgstr "运行"
 
 msgid "Show temperature"
 msgstr "显示温度"
@@ -577,9 +608,6 @@ msgstr "刷新间隔（秒）"
 msgid "Resize"
 msgstr "调整大小"
 
-msgid "Up"
-msgstr "运行"
-
 msgid "d "
 msgstr "天 "
 
@@ -596,43 +624,34 @@ msgstr "接口"
 msgid "Download"
 msgstr "下载"
 
-# taskbar.js
-msgid "Tray item \""
-msgstr "托盘项 \""
-
+# tray.js
 msgid "Tray item requires an id"
 msgstr "托盘项需要 id"
 
+msgid "Tray item \""
+msgstr "托盘项 \""
 
-# Custom URL shortcuts (desktop right-click -> Add Custom URL)
-msgid "Add Custom URL"
-msgstr "添加自定义链接"
-msgid "Edit Link"
-msgstr "编辑链接"
-msgid "Name"
-msgstr "名称"
-msgid "Address (URL)"
-msgstr "地址（URL）"
-msgid "Open in a new browser tab"
-msgstr "在新标签页中打开"
-msgid "LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab."
-msgstr "LuCI 页面（/cgi-bin/luci/…）在桌面窗口内打开；外部站点在新标签页打开。"
-msgid "Enter a valid http(s) address or a LuCI path."
-msgstr "请输入有效的 http(s) 地址或 LuCI 路径。"
+msgid "There is no password set on this router. Please configure a root password to protect the web interface."
+msgstr "路由器尚未设置密码。请配置 root 密码以保护 Web 界面。"
 
-msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000"
-msgstr "{router} = 当前访问的主机名，{httpx} = http 或 https，{port} = 当前端口，{origin} = 协议://主机:端口。示例：{httpx}://{router}:3000"
+msgid "\" already registered"
+msgstr "\" 已注册"
 
-# Desktop context menu: New -> Link
-msgid "New"
-msgstr "新建"
-msgid "Link"
-msgstr "链接"
-msgid "Hide on mobile"
-msgstr "移动端隐藏"
-msgid "Notifications"
-msgstr "通知"
-msgid "Recent Apps"
-msgstr "最近应用"
-msgid "Swipe Step"
-msgstr "滑动灵敏度"
+msgid "\" not registered"
+msgstr "\" 未注册"
+
+# widget error messages
+msgid "Widget requires an id"
+msgstr "组件需要 id"
+
+msgid "Widget requires a render function"
+msgstr "组件需要 render 函数"
+
+msgid "Widget \""
+msgstr "组件 \""
+
+msgid "Max "
+msgstr "已达最大实例数 "
+
+msgid " instances of "
+msgstr "："
