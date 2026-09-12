@@ -2,8 +2,13 @@
 /* quantum-drag-probe.js — diagnose quantum drag on a real router
  *
  * Usage:
- *   PROBE_SSH=192.168.1.1 node probe/quantum-drag-probe.js
- *   PROBE_SSH=192.168.2.253 PROBE_SSH_KEY=~/.ssh/id_ed253 node probe/quantum-drag-probe.js
+ *   node probe/quantum-drag-probe.js                       # 1.1 direct (passwordless curl)
+ *   PROBE_ROUTER=192.168.2.253 PROBE_SSH=192.168.2.253 \
+ *     PROBE_SSH_KEY=~/.ssh/id_ed253 node probe/quantum-drag-probe.js   # 253 (ssh-forged session)
+ *
+ * Login cookie name follows the LuCI runtime, not the device: Lua track sets
+ * `sysauth`, ucode track sets `sysauth_http` (Runtime.cookieName()). lib.login()
+ * reads whichever name the login response set, so the same probe works on both.
  *
  * Checks (on the shell page):
  *   1. engine module loaded (LuCIDesktop.QuantumIcons)

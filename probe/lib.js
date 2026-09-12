@@ -5,7 +5,15 @@
  *   await lib.login(sid);   await lib.nav(sid, url);
  *   await lib.assertTheme(sid, 'desktop');   // fails loudly on wrong theme
  *   ... await lib.finish(sid);
- * Theme switch via: ./probe/theme-ctl.sh desktop|argon [1.1|253]  (this git root) */
+ * Theme switch via: ./probe/theme-ctl.sh desktop|argon [1.1|253]  (this git root)
+ *
+ * Login cookie name follows the LuCI runtime, not the device: the Lua track
+ * (luci-lua-runtime) sets `sysauth`, the ucode track sets `sysauth_http`
+ * (authoritative definition: Runtime.cookieName() in
+ * files/root/usr/lib/lua/luci/desktop/runtime.lua). The passwordless curl path
+ * below therefore reads whichever name the login response actually set instead
+ * of hardcoding a track; the ssh-forged-session path (Lua track) injects
+ * `sysauth`. */
 'use strict';
 const { spawn, execSync } = require('child_process');
 const http = require('http');
@@ -103,9 +111,11 @@ async function login(sid) {
         // cookie was injected on 1.1's domain).
         await nav(sid, `http://${host}/cgi-bin/luci/`);
         await sleep(1500);
-        // Lua runtime (luci-lua-runtime, e.g. 2.253) authenticates via the
-        // plain `sysauth` cookie — sysauth_http is the ucode runtime's
-        // name. PROBE_SSH targets the Lua runtime, so inject `sysauth`.
+        // Lua runtime (luci-lua-runtime) authenticates via the plain `sysauth`
+        // cookie — sysauth_http is the ucode runtime's name. The ssh forge
+        // path here targets the Lua track (see the 2026-08-17 HANDOVER matrix),
+        // so inject `sysauth`.
+        console.log('[lib] login cookie: sysauth (ssh-forged session, Lua track)');
         await wd('POST', `/session/${sid}/cookie`, { cookie: { name: 'sysauth', value: tok, path: '/', httpOnly: true } });
         // Re-navigate WITH the cookie: the first nav rendered the
         // unauthenticated bootstrap page; the shell only renders after a
@@ -115,8 +125,15 @@ async function login(sid) {
         return;
     }
     const raw = execSync(`curl -s -c - -o /dev/null -d "luci_username=root&luci_password=" http://${ROUTER}/cgi-bin/luci/`, { encoding: 'utf8' });
-    const cm = raw.match(/(sysauth_http)\t(\S+)/);
+    // Read the cookie name the login response actually set — the runtime is
+    // the authority (Lua track `sysauth`, ucode track `sysauth_http`), so
+    // accepting both keeps this path working across firmware drift. The `\t`
+    // anchors the name (bare `sysauth` is a prefix of `sysauth_http`); the
+    // longer name is listed first so a hypothetical double Set-Cookie resolves
+    // to the ucode one.
+    const cm = raw.match(/(sysauth_http|sysauth)\t(\S+)/);
     if (!cm) throw new Error('login failed: no sysauth cookie obtained');
+    console.log(`[lib] login cookie: ${cm[1]} (from login response)`);
     await nav(sid, `http://${ROUTER}/cgi-bin/luci/`);
     await sleep(1500);
     await wd('POST', `/session/${sid}/cookie`, { cookie: { name: cm[1], value: cm[2], path: '/', httpOnly: true } });
