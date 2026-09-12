@@ -707,4 +707,49 @@ describe('Desktop context menu: submenu direction', function() {
         assert.equal(row.classList.contains('sub-left'), false, 'opens right when it fits');
     });
 });
+
+// ===== Split-module public API contract (0.1.0-231) =====
+// desktop.js was split into desktop-state/icons/links/menus + a facade.
+// The facade must keep forwarding EVERY public window.Desktop method
+// (production callers in shell.js/startmenu.js and these tests rely on
+// them), and the shared state store must stay reachable under
+// LuCIDesktop.desktopState. Guards against a method being dropped when a
+// piece of functionality is moved between modules.
+describe('Desktop public API survives the module split', function() {
+    var METHODS = [
+        // state + boot
+        'reloadConfig', 'init',
+        // icons (desktop-icons.js)
+        'renderShortcuts', '_initQuantumDrag', 'openIconPicker',
+        'pinItem', 'unpinItem', 'rearrangeIcons', 'bindEvents',
+        // menus + link dialog (desktop-menus.js)
+        '_showDefaultIconMenu', '_showIconMenu', '_showDesktopMenu',
+        '_placeSubmenu', '_showLinkDialog',
+        // custom URLs + ghost clean (desktop-links.js)
+        'menuUrls', '_customUrlSet', 'cleanGhostApps',
+        'normalizeUrl', 'resolveUrlVars', 'isExternalUrl',
+        'addCustomUrl', 'openShortcut', 'editCustomUrl', '_moveLinkMeta',
+        // availability probe + ttyd install (facade)
+        'probeDefaultShortcuts', '_finishProbeRender', 'installDefault',
+        '_reloadPage', 'checkInstallStatus', '_installPoll'
+    ];
+
+    it('forwards every public Desktop method', function() {
+        assert.ok(window.Desktop, 'window.Desktop exists');
+        var missing = METHODS.filter(function(name) {
+            return typeof window.Desktop[name] !== 'function';
+        });
+        assert.equal(missing.length, 0, 'missing Desktop methods: ' + missing.join(', '));
+    });
+
+    it('exposes the shared store via LuCIDesktop.desktopState', function() {
+        var S = window.LuCIDesktop.desktopState;
+        assert.ok(S, 'desktopState namespace exists');
+        ['pins', 'setPins', 'hidden', 'setHidden', 'layout', 'setLayout',
+         'load', 'savePins', 'saveHidden', 'saveIconLayout',
+         'configSection', 'normalizeLayout'].forEach(function(k) {
+            assert.equal(typeof S[k], 'function', 'desktopState.' + k + ' is a function');
+        });
+    });
+});
 })();
