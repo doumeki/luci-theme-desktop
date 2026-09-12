@@ -57,6 +57,26 @@ bash probe/theme-ctl.sh desktop|argon [1.1|253]
 Browser probes (firefox headless via geckodriver) take the router from
 `PROBE_ROUTER` / `PROBE_SSH` environment variables.
 
+### Which probe scripts are versioned?
+
+Some ad-hoc probes are tracked, others stay local. The split is deliberate —
+only device-agnostic scripts are committed:
+
+- **Tracked** (in git, safe to share): the 22 `tests/*.js` probes and
+  `probe/pw-alert-cdp.js`. They never hardcode a device or a cookie name:
+  login goes through `probe/lib.js`, which reads the router from
+  `probe/.local-env` (`ROUTER_1`/`ROUTER_2`/`SSH_KEY_2`) or the
+  `PROBE_ROUTER`/`PROBE_SSH`/`PROBE_SSH_KEY` env overrides, and the cookie
+  name from the actual `Set-Cookie` in the login response.
+- **Still gitignored** (machine-specific, local only): `probe/runtime-matrix.js`,
+  `probe/toast-sync.js` and the other remaining `probe/*.js`/`*.sh` entries in
+  `.gitignore`.
+
+To run any device probe, create `probe/.local-env` first (copy
+`probe/.local-env.example` and fill in your own values); without it `lib.js`
+falls back to `127.0.0.1` and the probes cannot log in.
+
+
 ## CI
 
 `.github/workflows/tests.yml` runs Level 1 on every push and pull request:
