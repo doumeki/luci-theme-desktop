@@ -506,6 +506,40 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(savedPins()[0].title, 'https://example.com', 'name defaults to the URL');
     });
 
+    it('save-through-dialog keeps a leading placeholder intact (no http:// prefix)', function() {
+        // Regression: normalizeUrl saw a leading '{' (not a letter) and
+        // treated "{httpx}://{router}:3000" as a bare host, storing
+        // "http://{httpx}://{router}:3000".
+        function save(raw) {
+            window.Desktop._showLinkDialog(null);
+            var overlay = document.querySelector('.link-dialog-overlay');
+            overlay.querySelector('.link-url').value = raw;
+            overlay.querySelector('.link-name').value = 'App';
+            overlay.querySelector('.link-save').click();
+        }
+        function lastSaved() {
+            var pins = savedPins();
+            return pins[pins.length - 1].url;
+        }
+        save('{httpx}://{router}:3000');
+        assert.equal(lastSaved(), '{httpx}://{router}:3000', '{httpx} scheme kept');
+        document.querySelectorAll('.link-dialog-overlay').forEach(function(el) { el.remove(); });
+        save('{origin}/cgi-bin/luci/admin/status/overview');
+        assert.equal(lastSaved(), '{origin}/cgi-bin/luci/admin/status/overview', '{origin} already has a scheme');
+        document.querySelectorAll('.link-dialog-overlay').forEach(function(el) { el.remove(); });
+        save('{router}:3000');
+        assert.equal(lastSaved(), 'http://{router}:3000', 'placeholder HOST still gets http://');
+    });
+
+    it('normalizes {httpx} written without the slashes too', function() {
+        var D = window.Desktop;
+        assert.equal(D.normalizeUrl('{httpx}://{router}:3000'), '{httpx}://{router}:3000', 'canonical form kept');
+        assert.equal(D.normalizeUrl('{httpx}//{router}:3000'), '{httpx}://{router}:3000', 'missing colon repaired');
+        assert.equal(D.normalizeUrl('{httpx}{router}:3000'), '{httpx}://{router}:3000', 'missing slashes repaired');
+        assert.equal(D.normalizeUrl('{router}'), 'http://{router}', 'bare {router} → http://');
+        assert.equal(D.normalizeUrl('{router}:3000'), 'http://{router}:3000', '{router}:port → http://');
+    });
+
     it('expands {router}/{httpx} placeholders against the current address', function() {
         var D = window.Desktop;
         assert.equal(D.resolveUrlVars('http://{router}:300'), 'http://' + location.hostname + ':300', '{router}');

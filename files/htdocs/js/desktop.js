@@ -397,6 +397,24 @@
         normalizeUrl: function(raw) {
             var u = (raw || '').replace(/^\s+|\s+$/g, '');
             if (!u) return null;
+            // A leading placeholder may already BE the scheme or the whole
+            // origin — never prefix http:// over it:
+            //   {httpx}://host:3000   keep (scheme placeholder)
+            //   {origin}/cgi-bin/...  keep (already scheme://host:port)
+            //   {router}:3000         host → add http:// like any bare host
+            var lead = /^\{[a-z][a-z0-9]*\}/i.exec(u);
+            if (lead) {
+                var name = lead[0].slice(1, -1).toLowerCase();
+                var rest = u.slice(lead[0].length);
+                if (name === 'httpx') {
+                    if (rest.indexOf('://') === 0) return u;
+                    if (rest.indexOf('//') === 0) return lead[0] + ':' + rest;   // {httpx}//host
+                    return lead[0] + '://' + rest;                               // {httpx}host
+                }
+                if (name === 'origin') return u;
+                if (/^:\/\//.test(rest) || /^[a-z][a-z0-9+.\-]*:/i.test(rest)) return u;
+                return 'http://' + u;
+            }
             if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) {          // explicit scheme
                 return /^https?:/i.test(u) ? u : null;
             }

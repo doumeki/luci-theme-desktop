@@ -620,5 +620,5 @@ msgstr ""
 msgid "Enter a valid http(s) address or a LuCI path."
 msgstr ""
 
-msgid "Tip: {router} is the address you are using now — {httpx}://{router}:300 reaches this router on port 300 (also {port}, {origin})."
+msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000"
 msgstr ""
