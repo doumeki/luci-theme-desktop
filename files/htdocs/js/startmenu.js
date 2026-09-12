@@ -104,19 +104,16 @@
             menuEl.innerHTML = html;
         },
 
-        // Which category step does this gesture mean? 0 = not a category
-        // swipe. Vertical is NOT gated on scroll edges: the mobile menu
-        // list does not scroll in practice (verified on device), so an
-        // up/down swipe is free to switch (up = next, down = previous).
-        // Desktop is unaffected — these handlers are touch-only.
-        _swipeStep: function(dx, dy) {
-            if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                return dx < 0 ? 1 : -1;                    // swipe left → next
-            }
-            if (Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx) * 1.5) {
-                return dy < 0 ? 1 : -1;                    // swipe up → next
-            }
-            return 0;
+        // Continuous paging: one 48px notch of accumulated drag = one
+        // category step (0 = not far enough yet). Direction mirrors the
+        // desktop HOVER behaviour — dragging DOWN walks down the sidebar
+        // list (= next), dragging UP walks back; horizontal drags work the
+        // same way (left = next). Called repeatedly while dragging, so a
+        // long swipe pages several categories instead of one.
+        _swipeNotch: function(acc, vertical) {
+            if (Math.abs(acc) < 48) return 0;
+            var sign = acc > 0 ? 1 : -1;
+            return vertical ? sign : -sign;
         },
 
         // Swipe left/right on the apps area → previous/next category.
@@ -177,26 +174,37 @@
                 }
             });
 
-            // ===== Touch gestures: change category by swipe =====
-            // Any clearly directional swipe switches category: left/right
-            // or up (= next) / down (= previous). The menu list does not
-            // scroll on mobile in practice, so up/down is free to use. The
-            // search field is excluded so caret/selection keep working.
-            var tx = 0, ty = 0, tracking = false;
+            // ===== Touch gestures: drag to page through categories =====
+            // Continuous (follow-the-finger) paging that mimics the desktop
+            // hover effect: one step per 48px of travel, several steps in a
+            // long drag. Vertical: down = next, up = previous. Horizontal
+            // works too (left = next). The search field is excluded so
+            // caret/selection keep working; desktop is untouched (touch
+            // events never fire there).
+            var tx = 0, ty = 0, tracking = false, acc = 0, vert = true;
+            var STEP = 48;
             menuEl.addEventListener('touchstart', function(e) {
                 tracking = false;
                 if (e.touches.length !== 1) return;
                 if (e.target.closest && e.target.closest('.menu-search')) return;
                 tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+                acc = 0; vert = true;
                 tracking = true;
             }, { passive: true });
             menuEl.addEventListener('touchmove', function(e) {
                 if (!tracking || e.touches.length !== 1) return;
-                var dx = e.touches[0].clientX - tx, dy = e.touches[0].clientY - ty;
-                var step = self._swipeStep(dx, dy);
-                if (!step) return;
-                tracking = false;
-                self._swipeCategory(step);
+                var cx = e.touches[0].clientX, cy = e.touches[0].clientY;
+                var dx = cx - tx, dy = cy - ty;
+                tx = cx; ty = cy;
+                // One axis owns the gesture: whichever moved more overall.
+                if (Math.abs(dx) > Math.abs(dy)) { vert = false; acc += dx; }
+                else { vert = true; acc += dy; }
+                while (true) {
+                    var step = self._swipeNotch(acc, vert);
+                    if (!step) break;
+                    if (!self._swipeCategory(step)) { acc = 0; break; }   // hit an end
+                    acc -= (vert ? step : -step) * STEP;
+                }
             }, { passive: true });
             menuEl.addEventListener('touchend', function() { tracking = false; }, { passive: true });
             menuEl.addEventListener('touchcancel', function() { tracking = false; }, { passive: true });

@@ -225,22 +225,22 @@ describe('Start menu: swipe between categories', function() {
     });
 });
 
-// ===== Gesture decision: any clear direction switches =====
-describe('Start menu: swipe step decision', function() {
-    it('horizontal swipes switch category', function() {
-        assert.equal(StartMenu._swipeStep(-60, 5), 1, 'swipe left → next');
-        assert.equal(StartMenu._swipeStep(60, 5), -1, 'swipe right → previous');
+// ===== Continuous paging: 48px notch, down/left = next =====
+describe('Start menu: swipe notch', function() {
+    it('needs a full notch before stepping', function() {
+        assert.equal(StartMenu._swipeNotch(47, true), 0, 'below the threshold → no step');
+        assert.equal(StartMenu._swipeNotch(-47, true), 0, 'below the threshold (up) → no step');
     });
 
-    it('vertical swipes switch category too (menu list does not scroll)', function() {
-        assert.equal(StartMenu._swipeStep(2, -60), 1, 'swipe up → next');
-        assert.equal(StartMenu._swipeStep(2, 60), -1, 'swipe down → previous');
+    it('vertical: down = next, up = previous (mirrors hover)', function() {
+        assert.equal(StartMenu._swipeNotch(48, true), 1, 'drag down → next');
+        assert.equal(StartMenu._swipeNotch(-48, true), -1, 'drag up → previous');
+        assert.equal(StartMenu._swipeNotch(120, true), 1, 'long drag → next (consumed notch by notch)');
     });
 
-    it('ignores short and diagonal gestures', function() {
-        assert.equal(StartMenu._swipeStep(20, 5), 0, 'too short');
-        assert.equal(StartMenu._swipeStep(45, 40), 0, 'diagonal is ambiguous');
-        assert.equal(StartMenu._swipeStep(5, 20), 0, 'vertical too short');
+    it('horizontal: left = next', function() {
+        assert.equal(StartMenu._swipeNotch(-48, false), 1, 'drag left → next');
+        assert.equal(StartMenu._swipeNotch(48, false), -1, 'drag right → previous');
     });
 });
 })();
