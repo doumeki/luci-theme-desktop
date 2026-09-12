@@ -33,6 +33,18 @@
     -webkit-backdrop-filter: none;
 }
 
+/* ===== Sticky note: drag from the text area too =====
+ * The whole note is a drag target (framework mousedown handler), but the
+ * text area switches to the caret once the note is being edited — the
+ * grab cursor mirrors that state (widgets/stickynote.js sets
+ * data-no-drag while focused, which also fences the framework out). */
+.widget-sticky-note .sticky-body {
+    cursor: grab;
+}
+.widget-sticky-note .sticky-body:focus {
+    cursor: text;
+}
+
 /* ===== Resize handle (opt-in: def.resizable) =====
  * Bottom-right grip that drags the instance's px width/height
  * (widget.js _makeResizable). pointer-events:auto so it stays grabbable

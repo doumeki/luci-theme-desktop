@@ -196,7 +196,12 @@
         { id: 'docker', title: 'Docker', category: CATEGORIES.DOCKER, emoji: '🐳', desc: 'Docker 管理' },
         { id: 'containers', title: '容器列表', category: CATEGORIES.DOCKER, emoji: '📦', desc: '运行容器' },
         { id: 'images', title: '镜像管理', category: CATEGORIES.DOCKER, emoji: '🖼️', desc: 'Docker 镜像' },
-        { id: 'lxc', title: 'LXC 容器', category: CATEGORIES.DOCKER, emoji: '📦', desc: 'LXC 容器管理' }
+        { id: 'lxc', title: 'LXC 容器', category: CATEGORIES.DOCKER, emoji: '📦', desc: 'LXC 容器管理' },
+
+        // ===== 自定义链接 =====
+        // Default icon for user-added custom URL shortcuts (desktop
+        // right-click → Add Custom URL); also selectable in the picker.
+        { id: 'link', title: '自定义链接', category: CATEGORIES.TOOLS, emoji: '🔗', desc: '自定义 URL 快捷方式' }
     ];
 
     // ---------- LuCI url fragment -> icon id ----------

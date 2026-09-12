@@ -159,6 +159,14 @@
             'New name:': '新名称：',
             'Widgets': '组件',
             'Theme settings loading...': '主题设置加载中...',
+            // Custom URL shortcuts (desktop right-click → Add Custom URL)
+            'Add Custom URL': '添加自定义链接',
+            'Edit Link': '编辑链接',
+            'Name': '名称',
+            'Address (URL)': '地址（URL）',
+            'Open in a new browser tab': '在新标签页中打开',
+            'LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.': 'LuCI 页面（/cgi-bin/luci/…）在桌面窗口内打开；外部站点在新标签页打开。',
+            'Enter a valid http(s) address or a LuCI path.': '请输入有效的 http(s) 地址或 LuCI 路径。',
 
             // ===== wm.js =====
             'Untitled': '无标题',

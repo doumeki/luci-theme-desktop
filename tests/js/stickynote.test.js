@@ -276,4 +276,116 @@ describe('Sticky note: closed-slot resurrection guard', function() {
         assert.contains(inst.el.querySelector('.sticky-body').textContent || '', 'open', 'content rendered');
     });
 });
+
+// ===== Multi-line content (Enter) + whole-note drag =====
+// Enter in a contenteditable does NOT create a text newline: the browser
+// splits the line into BLOCK children (Chrome: <div>…) or inserts <br>
+// (Firefox). textContent drops both, so a saved note lost every line
+// break ("便签无法保存换行"). The serializer must recover \n from the
+// DOM shape, and the editor must render \n back as a break (pre-wrap).
+describe('Sticky note: multi-line content', function() {
+    afterEach(function() {
+        WidgetManager._instancesOf('sticky-note').forEach(function(iid) { WidgetManager.disable(iid); });
+    });
+
+    function enable(slot, text) {
+        stickyConfig({});
+        stickyConfig((function() { var o = {}; o[slot] = { notes: { '#f9e74a': text }, activeColor: '#f9e74a' }; return o; })());
+        WidgetManager.enable('sticky-note', { id: slot });
+        return WidgetManager.instances[slot];
+    }
+
+    it('saves Chrome Enter output (block children) as newlines', function() {
+        var inst = enable('sn-N1', '');
+        var body = noteBody(inst);
+        body.innerHTML = 'line1<div>line2</div><div>line3</div>';
+        body.dispatchEvent(new Event('input'));
+        assert.equal(afterSync('sn-N1').notes['#f9e74a'], 'line1\nline2\nline3', 'block boundaries → \\n');
+    });
+
+    it('saves Firefox Enter output (<br>) as newlines', function() {
+        var inst = enable('sn-N2', '');
+        var body = noteBody(inst);
+        body.innerHTML = 'line1<br>line2';
+        body.dispatchEvent(new Event('input'));
+        assert.equal(afterSync('sn-N2').notes['#f9e74a'], 'line1\nline2', '<br> → \\n');
+    });
+
+    it('keeps an intentional blank line (empty block between lines)', function() {
+        var inst = enable('sn-N3', '');
+        var body = noteBody(inst);
+        body.innerHTML = 'a<div><br></div><div>b</div>';
+        body.dispatchEvent(new Event('input'));
+        assert.equal(afterSync('sn-N3').notes['#f9e74a'], 'a\n\nb', 'blank line preserved');
+    });
+
+    it('renders a stored newline back as a line break (pre-wrap round trip)', function() {
+        var inst = enable('sn-N4', 'a\nb');
+        var body = noteBody(inst);
+        assert.equal(body.textContent, 'a\nb', 'newline kept in the editor text');
+        assert.contains(window.getComputedStyle(body).whiteSpace, 'pre-wrap', 'CSS renders \\n as a break');
+    });
+
+    it('update() (periodic tick) rewrites multi-line content without flattening it', function() {
+        var inst = enable('sn-N5', 'a\nb');
+        var body = noteBody(inst);
+        body.innerHTML = 'a<div>b</div>';
+        WidgetManager.registry['sticky-note'].update(inst.el, inst, inst);
+        assert.equal(afterSync('sn-N5').notes['#f9e74a'], 'a\nb', 'update() keeps the break');
+    });
+});
+
+// ===== Whole-note drag =====
+// The user drags a note by grabbing anywhere on it — the note body is the
+// biggest target. Selecting text must still work (the drag only starts
+// after the pointer moves past a threshold).
+describe('Sticky note: drag anywhere on the note', function() {
+    afterEach(function() {
+        WidgetManager._instancesOf('sticky-note').forEach(function(iid) { WidgetManager.disable(iid); });
+    });
+
+    function dragFrom(target, dx, dy) {
+        target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, clientX: 100, clientY: 100, button: 0}));
+        document.dispatchEvent(new MouseEvent('mousemove', {bubbles: true, clientX: 100 + dx, clientY: 100 + dy}));
+        document.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: 100 + dx, clientY: 100 + dy}));
+    }
+
+    it('moves the note when dragged by the text body', function() {
+        stickyConfig({});
+        stickyConfig({ 'sn-DR1': { notes: { '#f9e74a': 'text' }, activeColor: '#f9e74a' } });
+        WidgetManager.enable('sticky-note', { id: 'sn-DR1' });
+        var inst = WidgetManager.instances['sn-DR1'];
+        var x0 = inst.x, y0 = inst.y;
+        dragFrom(noteBody(inst), 60, 30);
+        assert.equal(inst.x, x0 + 60, 'x follows a body drag');
+        assert.equal(inst.y, y0 + 30, 'y follows a body drag');
+    });
+
+    it('moves the note when dragged by the header (unchanged)', function() {
+        stickyConfig({});
+        stickyConfig({ 'sn-DR2': { notes: { '#f9e74a': 'text' }, activeColor: '#f9e74a' } });
+        WidgetManager.enable('sticky-note', { id: 'sn-DR2' });
+        var inst = WidgetManager.instances['sn-DR2'];
+        var x0 = inst.x;
+        dragFrom(inst.el.querySelector('.sticky-header'), 40, 0);
+        assert.equal(inst.x, x0 + 40, 'header drag still works');
+    });
+
+    it('does not fight text selection while the note is being edited', function() {
+        stickyConfig({});
+        stickyConfig({ 'sn-DR3': { notes: { '#f9e74a': 'select me' }, activeColor: '#f9e74a' } });
+        WidgetManager.enable('sticky-note', { id: 'sn-DR3' });
+        var inst = WidgetManager.instances['sn-DR3'];
+        var body = noteBody(inst);
+        var x0 = inst.x;
+        body.focus();
+        assert.equal(body.getAttribute('data-no-drag'), '1', 'editing fences off the drag');
+        dragFrom(body, 50, 20);
+        assert.equal(inst.x, x0, 'no move while editing (text selection wins)');
+        body.blur();
+        assert.equal(body.getAttribute('data-no-drag'), null, 'leaving the editor restores dragging');
+        dragFrom(body, 50, 20);
+        assert.equal(inst.x, x0 + 50, 'draggable again once unfocused');
+    });
+});
 })();

@@ -1280,6 +1280,10 @@
 
     var dragState = null;
     document.addEventListener('mousedown', function(e) {
+        // A widget can fence off a sub-area that owns the mouse gesture
+        // itself (sticky note text area while editing → text selection,
+        // not a window drag). Opt out with data-no-drag on that element.
+        if (e.target && e.target.closest && e.target.closest('[data-no-drag]')) return;
         var widgetEl = e.target.closest('.widget-instance');
         if (!widgetEl) return;
         var iid = widgetEl.getAttribute('data-widget-id');

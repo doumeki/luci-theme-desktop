@@ -140,6 +140,13 @@
 
     // ===== Desktop Module =====
     var Desktop = {
+        // Re-read the per-tab config (#desktop-config: pins / hidden icons /
+        // icon layout). init() calls it on boot; exposed because the link
+        // dialog and tests seed state by writing that script tag directly.
+        reloadConfig: function() {
+            loadConfig();
+        },
+
         init: function() {
             loadConfig();
             this.cleanGhostApps();
@@ -288,6 +295,16 @@
             setTimeout(function() { self.renderShortcuts(); }, 0);
         },
 
+        // URLs of user-added custom links (pins marked custom:true). They
+        // are NOT in the LuCI menu tree, so every menu-driven cleanup must
+        // skip them — otherwise the user's own link is deleted as a
+        // "ghost" on the next page load.
+        _customUrlSet: function() {
+            var set = {};
+            pinnedItems.forEach(function(p) { if (p && p.custom) set[p.url] = true; });
+            return set;
+        },
+
         // Remove pins/hidden entries whose URL no longer exists in the menu tree.
         // Prevents "ghost icons" from uninstalled/deleted apps.
         cleanGhostApps: function() {
@@ -296,11 +313,13 @@
                 console.log('[ghost-clean] no menu data, skip');
                 return;
             }
+            var customUrls = this._customUrlSet();
 
             // Clean pinned items (array of {url, title})
             var removedPins = [];
             var oldPinLen = pinnedItems.length;
             pinnedItems = pinnedItems.filter(function(p) {
+                if (p.custom) return true;   // user's own link — never a ghost
                 if (!validUrls[p.url]) {
                     removedPins.push(p.url);
                     console.log('[ghost-clean] pin ghost: ' + p.url + ' title="' + p.title + '"');
@@ -317,6 +336,7 @@
             var removedHidden = [];
             var oldHiddenLen = hiddenIcons.length;
             hiddenIcons = hiddenIcons.filter(function(h) {
+                if (customUrls[h]) return true;   // hiding a custom link is valid
                 if (!validUrls[h]) {
                     removedHidden.push(h);
                     console.log('[ghost-clean] hidden ghost: ' + h);
@@ -333,6 +353,7 @@
             // no longer exist in the menu tree.
             var removedLayout = 0;
             Object.keys(iconLayout).forEach(function(u) {
+                if (customUrls[u]) return;   // position/icon of a custom link
                 if (!validUrls[u]) {
                     delete iconLayout[u];
                     removedLayout++;
@@ -364,6 +385,156 @@
             this.renderShortcuts();
         },
 
+        // ===== Custom URL shortcuts =====
+        // A custom link is a pin with custom:true — same storage as a
+        // pinned menu item, but the URL is NOT in the LuCI menu tree (see
+        // _customUrlSet/cleanGhostApps) and it carries newTab: external
+        // sites cannot be framed (X-Frame-Options → blank window).
+
+        // Normalize what the user typed into an openable URL, or null when
+        // it must not be opened (never javascript:/data:, never
+        // protocol-relative).
+        normalizeUrl: function(raw) {
+            var u = (raw || '').replace(/^\s+|\s+$/g, '');
+            if (!u) return null;
+            if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) {          // explicit scheme
+                return /^https?:/i.test(u) ? u : null;
+            }
+            if (u.indexOf('//') === 0) return null;          // protocol-relative
+            if (u.charAt(0) === '/') return u;               // LuCI / static path
+            if (/^(admin|cgi-bin)\//.test(u)) return '/' + u;
+            return 'http://' + u;                            // bare host or IP
+        },
+
+        // A URL that leaves this LuCI origin (default: open in a new tab).
+        isExternalUrl: function(url) {
+            if (!url || url.charAt(0) === '/') return false;
+            if (typeof location === 'undefined') return true;
+            return url.indexOf(location.origin + '/') !== 0;
+        },
+
+        addCustomUrl: function(title, url, newTab) {
+            var name = (title || '').replace(/^\s+|\s+$/g, '') || url;
+            var entry = null;
+            for (var i = 0; i < pinnedItems.length; i++) {
+                if (pinnedItems[i].url === url) { entry = pinnedItems[i]; break; }
+            }
+            if (entry) {
+                entry.title = name;
+                entry.custom = true;
+                entry.newTab = !!newTab;
+            } else {
+                entry = { url: url, title: name, custom: true, newTab: !!newTab };
+                pinnedItems.push(entry);
+            }
+            savePins();
+            this.renderShortcuts();
+            return entry;
+        },
+
+        // Open a shortcut: a custom link flagged newTab leaves the shell
+        // (external sites refuse framing), everything else opens as a
+        // desktop window like any app.
+        openShortcut: function(url, title) {
+            for (var i = 0; i < pinnedItems.length; i++) {
+                var p = pinnedItems[i];
+                if (p.url === url && p.custom && p.newTab) {
+                    window.open(url, '_blank', 'noopener');
+                    return;
+                }
+            }
+            WM.open(url, title);
+        },
+
+        editCustomUrl: function(url) {
+            for (var i = 0; i < pinnedItems.length; i++) {
+                if (pinnedItems[i].url === url && pinnedItems[i].custom) {
+                    this._showLinkDialog(pinnedItems[i]);
+                    return;
+                }
+            }
+        },
+
+        // Add / edit dialog. Reuses the icon-picker overlay CSS (already
+        // linked by BOTH header branches — no template change needed).
+        _showLinkDialog: function(existing) {
+            var self = this;
+            var isEdit = !!existing;
+            var overlay = document.createElement('div');
+            overlay.className = 'icon-picker-overlay link-dialog-overlay open';
+            overlay.innerHTML =
+                '<div class="icon-picker-panel link-dialog">' +
+                    '<div class="icon-picker-header">' +
+                        '<span class="icon-picker-title">' + _(isEdit ? 'Edit Link' : 'Add Custom URL') + '</span>' +
+                        '<button type="button" class="icon-picker-close">&times;</button>' +
+                    '</div>' +
+                    '<div class="link-dialog-body">' +
+                        '<label class="link-field"><span>' + _('Name') + '</span>' +
+                            '<input type="text" class="link-name" maxlength="40"></label>' +
+                        '<label class="link-field"><span>' + _('Address (URL)') + '</span>' +
+                            '<input type="text" class="link-url" placeholder="https://example.com"></label>' +
+                        '<label class="link-check"><input type="checkbox" class="link-newtab"> ' +
+                            _('Open in a new browser tab') + '</label>' +
+                        '<div class="link-hint">' +
+                            _('LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.') +
+                        '</div>' +
+                        '<div class="link-error"></div>' +
+                    '</div>' +
+                    '<div class="link-actions">' +
+                        '<button type="button" class="link-cancel">' + _('Cancel') + '</button>' +
+                        '<button type="button" class="link-save">' + _('Save') + '</button>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+
+            var nameEl = overlay.querySelector('.link-name');
+            var urlEl = overlay.querySelector('.link-url');
+            var tabEl = overlay.querySelector('.link-newtab');
+            var errEl = overlay.querySelector('.link-error');
+            var tabTouched = isEdit;   // never auto-toggle an existing choice
+
+            if (isEdit) {
+                nameEl.value = existing.title || '';
+                urlEl.value = existing.url || '';
+                tabEl.checked = !!existing.newTab;
+            }
+
+            // Typing a URL keeps the tab checkbox in sync with what the URL
+            // implies — until the user sets it by hand.
+            urlEl.addEventListener('input', function() {
+                if (tabTouched) return;
+                var u = self.normalizeUrl(urlEl.value);
+                tabEl.checked = u ? self.isExternalUrl(u) : false;
+            });
+            tabEl.addEventListener('change', function() { tabTouched = true; });
+
+            var close = function() { overlay.remove(); document.removeEventListener('keydown', onKey); };
+            var onKey = function(ev) {
+                if (ev.key === 'Escape') close();
+                else if (ev.key === 'Enter' && ev.target === urlEl) save();
+            };
+            document.addEventListener('keydown', onKey);
+            overlay.querySelector('.icon-picker-close').addEventListener('click', close);
+            overlay.querySelector('.link-cancel').addEventListener('click', close);
+            overlay.addEventListener('mousedown', function(ev) { if (ev.target === overlay) close(); });
+
+            var save = function() {
+                var url = self.normalizeUrl(urlEl.value);
+                if (!url) {
+                    errEl.textContent = _('Enter a valid http(s) address or a LuCI path.');
+                    urlEl.focus();
+                    return;
+                }
+                var oldUrl = isEdit ? existing.url : null;
+                if (oldUrl && oldUrl !== url) self.unpinItem(oldUrl);
+                self.addCustomUrl(nameEl.value, url, tabEl.checked);
+                close();
+            };
+            overlay.querySelector('.link-save').addEventListener('click', save);
+
+            setTimeout(function() { nameEl.focus(); }, 0);
+        },
+
         renderShortcuts: function() {
             var container = document.getElementById('desktop-icons');
             if (!container) return;
@@ -380,7 +551,10 @@
             });
 
             var all = defaults.concat(pinnedItems.map(function(p, i) {
-                return { title: p.title, url: p.url, pinned: true, pinIndex: i };
+                return {
+                    title: p.title, url: p.url, pinned: true, pinIndex: i,
+                    custom: !!p.custom, newTab: !!p.newTab
+                };
             }));
 
             // Grid layout: columns, auto-arranged top-to-bottom
@@ -447,7 +621,13 @@
                     catIcon = window.LuCIDesktop.IconConfig.getIconById(choiceId);
                 }
                 if (!catIcon && window.LuCIDesktop.IconConfig) {
-                    catIcon = window.LuCIDesktop.IconConfig.matchUrl(item.url);
+                    // Custom links have no menu entry to match, and a URL
+                    // fragment could match by accident (a link containing
+                    // "/ping" would become the diagnostic icon) — they fall
+                    // back to the generic link icon instead.
+                    catIcon = item.custom
+                        ? window.LuCIDesktop.IconConfig.getIconById('link')
+                        : window.LuCIDesktop.IconConfig.matchUrl(item.url);
                 }
                 if (catIcon) {
                     var catBg = hexToRgba(LuCIDesktop.IconConfig.colors[catIcon.category], 0.16);
@@ -487,7 +667,7 @@
                 if (LuCIDesktop.isMobile()) return;   // mobile: single tap opens
                 var icon = e.target.closest('.desktop-icon');
                 if (!icon) return;
-                WM.open(icon.getAttribute('data-url'), icon.getAttribute('title') || '');
+                Desktop.openShortcut(icon.getAttribute('data-url'), icon.getAttribute('title') || '');
             });
 
             // Mobile: single tap opens (desktop keeps double-click). A
@@ -500,7 +680,7 @@
                 }
                 var icon = e.target.closest('.desktop-icon');
                 if (!icon) return;
-                WM.open(icon.getAttribute('data-url'), icon.getAttribute('title') || '');
+                Desktop.openShortcut(icon.getAttribute('data-url'), icon.getAttribute('title') || '');
             });
 
             // Mobile: long-press an icon → the same icon context menu as
@@ -613,7 +793,7 @@
                 if (!act) return;
                 var a = act.getAttribute('data-act');
                 if (a === 'open') {
-                    WM.open(url, title);
+                    Desktop.openShortcut(url, title);
                 } else if (a === 'install') {
                     Desktop.installDefault(url);
                 } else if (a === 'changeicon') {
@@ -719,6 +899,7 @@
                 '<div class="context-item" data-act="changeicon">' + _('Change Icon') + '</div>' +
                 (iconLayout[pinned.url] && iconLayout[pinned.url].icon ? '<div class="context-item" data-act="reseticon">' + _('Reset Icon') + '</div>' : '') +
                 '<div class="context-item" data-act="rename">' + _('Rename') + '</div>' +
+                (pinned.custom ? '<div class="context-item" data-act="editlink">' + _('Edit Link') + '</div>' : '') +
                 '<div class="context-separator"></div>' +
                 '<div class="context-item" data-act="unpin">' + _('Unpin') + '</div>';
             m.addEventListener('click', function(e) {
@@ -726,7 +907,9 @@
                 if (!act) return;
                 var a = act.getAttribute('data-act');
                 if (a === 'open') {
-                    WM.open(pinned.url, pinned.title);
+                    Desktop.openShortcut(pinned.url, pinned.title);
+                } else if (a === 'editlink') {
+                    Desktop.editCustomUrl(pinned.url);
                 } else if (a === 'changeicon') {
                     Desktop.openIconPicker(pinned.url);
                 } else if (a === 'reseticon') {
@@ -768,6 +951,8 @@
             var m = _makeMenu(x, y);
             m.id = 'desktop-context-menu';
             m.innerHTML =
+                '<div class="context-item" data-act="addlink">' + _('Add Custom URL') + '</div>' +
+                '<div class="context-separator"></div>' +
                 '<div class="context-item" data-act="theme">' + _('Theme') + '</div>' +
                 '<div class="context-item" data-act="widgets">' + _('Widgets') + '</div>' +
                 '<div class="context-separator"></div>' +
@@ -777,7 +962,8 @@
                 var act = e.target.closest('.context-item');
                 if (!act) return;
                 var a = act.getAttribute('data-act');
-                if (a === 'theme') window.ThemeSettings ? ThemeSettings.open() : alert(_('Theme settings loading...'));
+                if (a === 'addlink') Desktop._showLinkDialog(null);
+                else if (a === 'theme') window.ThemeSettings ? ThemeSettings.open() : alert(_('Theme settings loading...'));
                 else if (a === 'widgets') WidgetManager.openSettings();
                 else if (a === 'rearrange') Desktop.rearrangeIcons();
                 else if (a === 'refresh') {

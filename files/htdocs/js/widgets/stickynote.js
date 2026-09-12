@@ -232,7 +232,7 @@
                 var map = getSyncMap();
                 var e = map[slot] || newEntry();
                 if (!e.notes) e.notes = {};
-                e.notes[e.activeColor || DEFAULT_COLOR] = body.textContent || '';
+                e.notes[e.activeColor || DEFAULT_COLOR] = readBody(body);
                 map[slot] = e;
                 writeSyncMap(map);
             };
@@ -243,6 +243,39 @@
                 body.addEventListener('focus', function() { el.style.pointerEvents = 'auto'; });
                 body.addEventListener('blur', function() {
                     if (data.clickThrough) el.style.pointerEvents = 'none';
+                });
+
+                // ===== Drag the note from its text area too =====
+                // The framework drags the widget from any mousedown, but
+                // inside a contenteditable the browser ALSO starts a text
+                // selection — and while editing, dragging must select text
+                // instead of moving the note. Rule: an UNFOCUSED note drags
+                // from anywhere (header or text); once the editor holds the
+                // caret, [data-no-drag] keeps the framework out of the text
+                // area (the header still drags it). A gesture that actually
+                // moved blurs the editor again, so the note stays draggable
+                // and a drag never leaves text selected.
+                var moved = false, dragX = 0, dragY = 0;
+                var onDragMove = function(ev) {
+                    if (moved) return;
+                    if (Math.abs(ev.clientX - dragX) <= 4 && Math.abs(ev.clientY - dragY) <= 4) return;
+                    moved = true;
+                    var sel = window.getSelection && window.getSelection();
+                    if (sel && sel.removeAllRanges) sel.removeAllRanges();
+                };
+                var onDragUp = function() {
+                    document.removeEventListener('mousemove', onDragMove);
+                    document.removeEventListener('mouseup', onDragUp);
+                    if (moved) { moved = false; try { body.blur(); } catch (e) {} }
+                };
+                body.addEventListener('focus', function() { body.setAttribute('data-no-drag', '1'); });
+                body.addEventListener('blur', function() { body.removeAttribute('data-no-drag'); });
+                body.addEventListener('mousedown', function(ev) {
+                    if (ev.button !== 0) return;
+                    if (document.activeElement === body) return;   // editing → select text
+                    moved = false; dragX = ev.clientX; dragY = ev.clientY;
+                    document.addEventListener('mousemove', onDragMove);
+                    document.addEventListener('mouseup', onDragUp);
                 });
             }
 
@@ -266,7 +299,7 @@
                     var map = getSyncMap();
                     var en = map[slot] || newEntry();
                     if (!en.notes) en.notes = {};
-                    if (body) en.notes[en.activeColor || DEFAULT_COLOR] = body.textContent || '';
+                    if (body) en.notes[en.activeColor || DEFAULT_COLOR] = readBody(body);
                     en.activeColor = sel.value;
                     map[slot] = en;
                     writeSyncMap(map);
@@ -283,7 +316,7 @@
             if (!entry) return;
             if (!entry.notes) entry.notes = {};
             var key = entry.activeColor || DEFAULT_COLOR;
-            var current = body.textContent || '';
+            var current = readBody(body);
             if (current !== (entry.notes[key] || '')) {
                 entry.notes[key] = current;
                 map[api.instanceId] = entry;
@@ -370,6 +403,37 @@
         var d = document.createElement('div');
         d.textContent = s;
         return d.innerHTML;
+    }
+
+    // ===== Editor text =====
+    // Enter in a contenteditable does NOT create a text newline: the
+    // browser splits the line into BLOCK children (`<div>…`, Chrome) or
+    // inserts `<br>` (Firefox). textContent drops both — so a note saved
+    // through the old `body.textContent` lost every line break on reload
+    // ("便签无法保存换行"). Rebuild the text from the DOM shape instead:
+    // <br> becomes \n and a block child starts a new line (an empty block
+    // is a blank line). Rendering already uses white-space:pre-wrap, so a
+    // stored \n comes back as a real line break.
+    var BLOCK_TAGS = /^(div|p|li|ul|ol|h[1-6]|blockquote|pre|section|article|aside|header|footer|figure|table|tr)$/;
+    function serializeBody(root) {
+        var out = '';
+        var kids = root.childNodes;
+        for (var i = 0; i < kids.length; i++) {
+            var n = kids[i];
+            if (n.nodeType === 3) { out += n.nodeValue; continue; }
+            if (n.nodeType !== 1) continue;
+            var tag = (n.nodeName || '').toLowerCase();
+            if (tag === 'br') { out += '\n'; continue; }
+            if (BLOCK_TAGS.test(tag) && out && out.charAt(out.length - 1) !== '\n') out += '\n';
+            out += serializeBody(n);
+        }
+        return out;
+    }
+    // Trailing newlines are dropped: an Enter at the very end leaves an
+    // empty block behind, which would otherwise add a blank line per edit.
+    function readBody(body) {
+        if (!body) return '';
+        return serializeBody(body).replace(/\n+$/, '');
     }
 
     // ===== Lightweight view sync (replaces the v3 reconcile) =====

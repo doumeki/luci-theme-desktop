@@ -419,4 +419,173 @@ describe('Desktop installable shortcut', function() {
         });
     });
 });
+
+// ===== Custom URL shortcuts (0.1.0-213) =====
+// Desktop right-click → Add Custom URL. A custom link is a pin carrying
+// custom:true — its URL is NOT in the LuCI menu tree, so the menu-driven
+// ghost cleanup must leave it alone, and an external link opens in a
+// browser tab (framing it would leave a blank desktop window:
+// X-Frame-Options).
+describe('Desktop custom URL shortcuts', function() {
+    var origXHR, origWMOpen, origWindowOpen, posts;
+
+    function setConfig(obj) {
+        var el = document.getElementById('desktop-config');
+        // getConfig() caches the parsed object and only re-parses when the
+        // RAW TEXT changed — identical JSON would keep the previous test's
+        // (mutated) arrays alive. Blank the tag first to drop the cache.
+        el.textContent = '';
+        LuCIDesktop.getConfig();
+        el.textContent = JSON.stringify(obj);
+        window.Desktop.reloadConfig();
+    }
+    // Last pins payload that went to the save endpoint, decoded.
+    function savedPins() {
+        for (var i = posts.length - 1; i >= 0; i--) {
+            var b = posts[i].body || '';
+            if (b.indexOf('section=pins') === -1) continue;
+            var m = /(?:^|&)data=([^&]*)/.exec(b);
+            if (m) return JSON.parse(decodeURIComponent(m[1].replace(/\+/g, ' ')));
+        }
+        return null;
+    }
+
+    beforeEach(function() {
+        posts = [];
+        origXHR = window.XMLHttpRequest;
+        window.XMLHttpRequest = function() {
+            this.open = function(method, url) { this._url = url; };
+            this.setRequestHeader = function() {};
+            this.send = function(body) { posts.push({ url: this._url, body: body }); };
+        };
+        origWMOpen = window.WM.open;
+        origWindowOpen = window.open;
+        setConfig({ pins: [], hidden_icons: [], widgets: {}, theme: {}, wallpaper: {} });
+    });
+
+    afterEach(function() {
+        window.XMLHttpRequest = origXHR;
+        window.WM.open = origWMOpen;
+        window.open = origWindowOpen;
+        delete window.LuCIMenuData;
+        document.querySelectorAll('.link-dialog-overlay').forEach(function(el) { el.remove(); });
+    });
+
+    it('normalizes what the user typed into an openable URL', function() {
+        var D = window.Desktop;
+        assert.equal(D.normalizeUrl('  /cgi-bin/luci/admin/status/overview '), '/cgi-bin/luci/admin/status/overview', 'LuCI path kept');
+        assert.equal(D.normalizeUrl('admin/status/overview'), '/admin/status/overview', 'bare LuCI path gets a slash');
+        assert.equal(D.normalizeUrl('https://example.com/x'), 'https://example.com/x', 'https kept');
+        assert.equal(D.normalizeUrl('example.com'), 'http://example.com', 'bare host → http://');
+        assert.equal(D.normalizeUrl('192.168.1.1:8080'), 'http://192.168.1.1:8080', 'bare host:port → http://');
+        assert.equal(D.normalizeUrl('javascript:alert(1)'), null, 'javascript: refused');
+        assert.equal(D.normalizeUrl('data:text/html,x'), null, 'data: refused');
+        assert.equal(D.normalizeUrl('//evil.example.com'), null, 'protocol-relative refused');
+        assert.equal(D.normalizeUrl('   '), null, 'empty refused');
+    });
+
+    it('treats only off-origin URLs as external', function() {
+        var D = window.Desktop;
+        assert.equal(D.isExternalUrl('/cgi-bin/luci/admin/status/overview'), false, 'LuCI path is local');
+        assert.equal(D.isExternalUrl(location.origin + '/luci-static/desktop/x.css'), false, 'same origin is local');
+        assert.equal(D.isExternalUrl('https://example.com/'), true, 'other origin is external');
+    });
+
+    it('stores a custom link as a pin flagged custom', function() {
+        window.Desktop.addCustomUrl('Example', 'https://example.com', true);
+        var pins = savedPins();
+        assert.ok(pins && pins.length === 1, 'one pin saved');
+        assert.equal(pins[0].url, 'https://example.com', 'url stored');
+        assert.equal(pins[0].title, 'Example', 'title stored');
+        assert.equal(pins[0].custom, true, 'marked custom');
+        assert.equal(pins[0].newTab, true, 'newTab stored');
+    });
+
+    it('falls back to the URL as the name when none is given', function() {
+        window.Desktop.addCustomUrl('   ', 'https://example.com', false);
+        assert.equal(savedPins()[0].title, 'https://example.com', 'name defaults to the URL');
+    });
+
+    it('keeps custom links out of the ghost cleanup (regression)', function() {
+        // Menu tree WITHOUT either pinned URL: the app pin is a ghost, the
+        // custom link must survive — a menu-driven cleanup would otherwise
+        // delete the user's own shortcut on every page load.
+        window.LuCIMenuData = [{ href: '/cgi-bin/luci/admin/status/overview', title: 'Overview', subs: [] }];
+        setConfig({
+            pins: [
+                { url: '/cgi-bin/luci/admin/ghost/app', title: 'Ghost App' },
+                { url: 'https://example.com', title: 'My Link', custom: true, newTab: true }
+            ],
+            hidden_icons: ['https://example.com'],
+            icon_layout: { 'https://example.com': { icon: 'link', desktop: { col: 1, row: 0 } } },
+            widgets: {}, theme: {}, wallpaper: {}
+        });
+        window.Desktop.cleanGhostApps();
+        var pins = savedPins();
+        assert.ok(pins, 'cleanup saved the pruned pins');
+        assert.equal(pins.length, 1, 'ghost app pin removed');
+        assert.equal(pins[0].url, 'https://example.com', 'custom link survives');
+        assert.equal(window.Desktop._customUrlSet()['https://example.com'], true, 'custom url set kept');
+    });
+
+    it('opens external links in a browser tab and apps in a desktop window', function() {
+        var tabs = [], windows = [];
+        window.open = function(u) { tabs.push(u); return null; };
+        window.WM.open = function(u) { windows.push(u); };
+        window.Desktop.addCustomUrl('Example', 'https://example.com', true);
+        window.Desktop.addCustomUrl('Overview', '/cgi-bin/luci/admin/status/overview', false);
+        window.Desktop.openShortcut('https://example.com', 'Example');
+        assert.equal(tabs.length, 1, 'external custom link → new tab');
+        assert.equal(windows.length, 0, '…and not a (blank) desktop window');
+        window.Desktop.openShortcut('/cgi-bin/luci/admin/status/overview', 'Overview');
+        assert.equal(windows.length, 1, 'LuCI path → desktop window');
+        assert.equal(tabs.length, 1, 'no extra tab');
+    });
+
+    it('adds a link through the dialog (external URL pre-checks the tab box)', function() {
+        window.Desktop._showLinkDialog(null);
+        var overlay = document.querySelector('.link-dialog-overlay');
+        assert.ok(overlay, 'dialog rendered');
+        var name = overlay.querySelector('.link-name');
+        var url = overlay.querySelector('.link-url');
+        var tab = overlay.querySelector('.link-newtab');
+        assert.equal(tab.checked, false, 'tab box starts unchecked');
+        url.value = 'https://example.com/page';
+        url.dispatchEvent(new Event('input'));
+        assert.equal(tab.checked, true, 'external URL auto-checks "open in a new tab"');
+        name.value = 'Example';
+        overlay.querySelector('.link-save').click();
+        var pins = savedPins();
+        assert.ok(pins && pins.length === 1, 'link saved from the dialog');
+        assert.equal(pins[0].url, 'https://example.com/page', 'normalized URL stored');
+        assert.equal(pins[0].newTab, true, 'tab flag stored');
+        assert.ok(!document.querySelector('.link-dialog-overlay'), 'dialog closed after save');
+    });
+
+    it('rejects an unopenable URL in the dialog and keeps it open', function() {
+        window.Desktop._showLinkDialog(null);
+        var overlay = document.querySelector('.link-dialog-overlay');
+        overlay.querySelector('.link-url').value = 'javascript:alert(1)';
+        overlay.querySelector('.link-save').click();
+        assert.ok(overlay.querySelector('.link-error').textContent.length > 0, 'error shown');
+        assert.equal(savedPins(), null, 'nothing saved');
+        assert.ok(document.querySelector('.link-dialog-overlay'), 'dialog stays open');
+    });
+
+    it('edits an existing link (URL change repoints the pin)', function() {
+        window.Desktop.addCustomUrl('Example', 'https://example.com', true);
+        window.Desktop.editCustomUrl('https://example.com');
+        var overlay = document.querySelector('.link-dialog-overlay');
+        assert.ok(overlay, 'edit dialog opened');
+        assert.equal(overlay.querySelector('.link-url').value, 'https://example.com', 'URL prefilled');
+        assert.equal(overlay.querySelector('.link-name').value, 'Example', 'name prefilled');
+        overlay.querySelector('.link-url').value = '/cgi-bin/luci/admin/status/overview';
+        overlay.querySelector('.link-name').value = 'Overview';
+        overlay.querySelector('.link-save').click();
+        var pins = savedPins();
+        assert.equal(pins.length, 1, 'still one pin (old URL dropped)');
+        assert.equal(pins[0].url, '/cgi-bin/luci/admin/status/overview', 'URL updated');
+        assert.equal(pins[0].title, 'Overview', 'name updated');
+    });
+});
 })();
