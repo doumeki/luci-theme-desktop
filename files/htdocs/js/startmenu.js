@@ -13,19 +13,40 @@
 
     var visible = false;
 
-    // Top-level LuCI slugs the argon icon font has a glyph for. MUST stay in
-    // sync with the [data-category=...] rules in startmenu.css: a slug listed
-    // here without a CSS rule renders an empty icon box, and vice versa.
+    // SINGLE SOURCE OF TRUTH for start menu category icons: slug -> argon
+    // glyph + color. To add or adjust a category icon, edit THIS table only.
+    // catIconHTML() copies the two values onto the icon node as data-glyph +
+    // an inline color, and startmenu.css draws every one of them with a
+    // single generic rule (`.menu-cat-icon[data-glyph]::before`). There is no
+    // parallel CSS list to keep in sync any more.
+    //
+    // The glyph codes/colors mirror the 12 legacy [data-title=...] rules in
+    // cascade.css (kept there unchanged for the classic LuCI sidebar). The
+    // font is files/htdocs/fonts/argon.*, shipped with the theme; a codepoint
+    // is usable exactly when cascade.css has a `content:` value for it.
+    // Slugs the font has no glyph for stay OUT of this table and fall back to
+    // emoji/first letter (see catFallback) — nothing to do for those.
     // Real slugs measured on both test routers: status/system/services/nas/
     // control/vpn/network/nlbw. The other entries cover common installs.
-    var CAT_GLYPH_SLUGS = {
-        status: 1, system: 1, services: 1, nas: 1, vpn: 1, network: 1,
-        nlbw: 1, docker: 1, statistics: 1, stats: 1, control: 1,
-        asterisk: 1, logout: 1
+    var CAT_ICONS = {
+        status:     { g: '\ue906', c: 'var(--primary, var(--accent-color, #5e72e4))' },
+        system:     { g: '\ue90a', c: '#fb6340' },
+        services:   { g: '\ue909', c: '#11cdef' },
+        nas:        { g: '\ue90c', c: '#f3a4b5' },
+        vpn:        { g: '\ue90b', c: '#aaad03' },
+        network:    { g: '\ue908', c: '#8965e0' },
+        nlbw:       { g: '\ue90d', c: '#2dce89' },   // Argon's Bandwidth_Monitor
+        docker:     { g: '\ue911', c: '#6699ff' },
+        statistics: { g: '\ue913', c: '#5603ad' },
+        stats:      { g: '\ue913', c: '#5603ad' },
+        control:    { g: '\ue912', c: 'var(--primary, var(--accent-color, #5e72e4))' },
+        asterisk:   { g: '\ue914', c: '#fb6340' },
+        logout:     { g: '\ue907', c: '#adb5bd' }
     };
 
-    function hasCatGlyph(id) {
-        return !!id && Object.prototype.hasOwnProperty.call(CAT_GLYPH_SLUGS, id);
+    function catIcon(id) {
+        return (id && Object.prototype.hasOwnProperty.call(CAT_ICONS, id))
+            ? CAT_ICONS[id] : null;
     }
 
     // Fallback for a category the icon font cannot draw: the emoji the shared
@@ -44,9 +65,12 @@
 
     function catIconHTML(cat) {
         var id = cat && cat.id ? String(cat.id) : '';
-        if (hasCatGlyph(id)) {
-            // Empty node — startmenu.css supplies the glyph via ::before.
-            return '<span class="menu-cat-icon" aria-hidden="true"></span>';
+        var ic = catIcon(id);
+        if (ic) {
+            // Glyph + color ride on the node (data-glyph / inline color) and
+            // startmenu.css renders them via one generic ::before rule.
+            return '<span class="menu-cat-icon" aria-hidden="true" data-glyph="' +
+                escapeHTML(ic.g) + '" style="color:' + escapeHTML(ic.c) + '"></span>';
         }
         return '<span class="menu-cat-icon menu-cat-icon-fallback" aria-hidden="true">' +
             escapeHTML(catFallback(cat)) + '</span>';

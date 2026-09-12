@@ -77,8 +77,10 @@
     border-right: 1px solid rgba(255, 255, 255, 0.05); flex-shrink: 0;
 }
 .menu-category-item {
-    padding: 8px 14px; font-size: var(--menu-font-size, 13px); color: var(--startmenu-fg);
-    cursor: pointer; border-radius: 4px; margin: 1px 4px;
+    /* Left side tightened ~7px (padding 14→9, margin 4→2) so the icon+title
+     * sit a touch closer to the panel edge; the right side is unchanged. */
+    padding: 8px 14px 8px 9px; font-size: var(--menu-font-size, 13px); color: var(--startmenu-fg);
+    cursor: pointer; border-radius: 4px; margin: 1px 4px 1px 2px;
     transition: background 0.15s;
 }
 .menu-category-item:hover { background: var(--startmenu-hover-bg, rgba(255, 255, 255, 0.2)); }
@@ -90,13 +92,20 @@ html:not([data-theme="dark"]) .menu-category-item.active:hover { background: var
 
 /* ===== Category icons =====
  * Every category gets a .menu-cat-icon slot so the title text always starts
- * at the same offset. Slugs the argon font has a glyph for draw it via
- * ::before; the rest carry emoji/letter text injected by startmenu.js and
- * use .menu-cat-icon-fallback (plain text, no icon font).
+ * at the same offset. startmenu.js is the SINGLE SOURCE OF TRUTH for the
+ * glyph + color (its CAT_ICONS table): for a known slug it writes
+ * data-glyph and an inline color onto this node, and the one generic rule
+ * below renders it. Adding/adjusting a category icon therefore only means
+ * editing CAT_ICONS in startmenu.js — no CSS change (and no second list to
+ * keep in sync). Slugs the argon font has no glyph for are absent from the
+ * table and get the emoji/letter text injected by startmenu.js, styled by
+ * .menu-cat-icon-fallback (plain text, no icon font).
  */
 .menu-cat-icon {
     display: inline-block;
-    width: 1.15em;
+    /* min-width (not width): the slot is a floor, so a wider fallback glyph
+     * grows the box instead of overflowing over the title text. */
+    min-width: 1.15em;
     margin-right: 8px;
     font-family: 'argon';
     font-style: normal;
@@ -108,68 +117,22 @@ html:not([data-theme="dark"]) .menu-category-item.active:hover { background: var
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
+/* Generic glyph renderer: the codepoint comes from the data-glyph attribute
+ * that startmenu.js copies out of CAT_ICONS. */
+.menu-cat-icon[data-glyph]::before { content: attr(data-glyph); }
+/* Emoji/letter fallback (slug absent from CAT_ICONS). Emoji are wider and
+ * visually heavier than the argon glyphs, so: a slightly larger min-width
+ * (still centered, still grows if needed) keeps the title start aligned with
+ * the glyph path, and 0.9em matches the emoji's weight/size to the glyph.
+ * Sizes are pinned by the "fallback icon never overlaps the title" test in
+ * tests/js/startmenu.test.js — re-measure there before changing them. */
 .menu-cat-icon-fallback {
     font-family: inherit;
-    font-size: 0.95em;
+    font-size: 0.9em;
+    line-height: 1;
+    min-width: 1.35em;
+    text-align: center;
     vertical-align: 0;
-}
-
-/* Slug -> argon glyph. The glyph codes and colors mirror the 12 legacy
- * [data-title=...] rules in cascade.css (kept there for the classic
- * sidebar); these selectors target the start menu's data-category slugs.
- * The slug list MUST stay in sync with CAT_GLYPH_SLUGS in startmenu.js —
- * a slug with a rule here but not in the JS set still gets ::before, and a
- * slug in the JS set without a rule here would render an empty box. */
-.menu-category-item[data-category=status] .menu-cat-icon::before {
-    content: "\e906";
-    color: var(--primary, var(--accent-color, #5e72e4));
-}
-.menu-category-item[data-category=system] .menu-cat-icon::before {
-    content: "\e90a";
-    color: #fb6340;
-}
-.menu-category-item[data-category=services] .menu-cat-icon::before {
-    content: "\e909";
-    color: #11cdef;
-}
-.menu-category-item[data-category=nas] .menu-cat-icon::before {
-    content: "\e90c";
-    color: #f3a4b5;
-}
-.menu-category-item[data-category=vpn] .menu-cat-icon::before {
-    content: "\e90b";
-    color: #aaad03;
-}
-.menu-category-item[data-category=network] .menu-cat-icon::before {
-    content: "\e908";
-    color: #8965e0;
-}
-/* LuCI keeps the bandwidth monitor under the "nlbw" slug; Argon called it
- * Bandwidth_Monitor. */
-.menu-category-item[data-category=nlbw] .menu-cat-icon::before {
-    content: "\e90d";
-    color: #2dce89;
-}
-.menu-category-item[data-category=docker] .menu-cat-icon::before {
-    content: "\e911";
-    color: #6699ff;
-}
-.menu-category-item[data-category=statistics] .menu-cat-icon::before,
-.menu-category-item[data-category=stats] .menu-cat-icon::before {
-    content: "\e913";
-    color: #5603ad;
-}
-.menu-category-item[data-category=control] .menu-cat-icon::before {
-    content: "\e912";
-    color: var(--primary, var(--accent-color, #5e72e4));
-}
-.menu-category-item[data-category=asterisk] .menu-cat-icon::before {
-    content: "\e914";
-    color: #fb6340;
-}
-.menu-category-item[data-category=logout] .menu-cat-icon::before {
-    content: "\e907";
-    color: #adb5bd;
 }
 
 /* Right: sub-items */

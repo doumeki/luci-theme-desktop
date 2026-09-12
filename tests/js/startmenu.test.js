@@ -108,7 +108,29 @@ describe('Start menu: category icons', function() {
         assert.ok(!icon.classList.contains('menu-cat-icon-fallback'),
             'known slug uses the icon font, not the fallback');
         assert.equal((icon.innerHTML || '').trim(), '',
-            'glyph comes from CSS ::before, the node itself stays empty');
+            'the node stays empty — the glyph is CSS-generated from data-glyph');
+        assert.ok(icon.hasAttribute('data-glyph'),
+            'known slug carries the glyph source on the node');
+    });
+
+    it('table slugs carry their data-glyph + color from the CAT_ICONS table', function() {
+        StartMenu.render();
+        // Expected values mirror cascade.css's legacy [data-title=...] rules;
+        // they are the contract a new slug must be added to.
+        var expected = {
+            status:  '\ue906',
+            system:  '\ue90a',
+            network: '\ue908'
+        };
+        Object.keys(expected).forEach(function(slug) {
+            var icon = document.querySelector('#start-menu .menu-category-item[data-category="' + slug + '"] .menu-cat-icon');
+            assert.ok(icon, slug + ' has an icon node');
+            assert.equal(icon.getAttribute('data-glyph'), expected[slug],
+                slug + ' glyph matches the table');
+            assert.ok(!!icon.style.color, slug + ' carries a color from the table');
+            assert.ok(!icon.classList.contains('menu-cat-icon-fallback'),
+                slug + ' uses the glyph path, not the fallback');
+        });
     });
 
     it('falls back to an emoji from IconConfig for an unknown slug', function() {
@@ -120,6 +142,7 @@ describe('Start menu: category icons', function() {
         var icon = document.querySelector('#start-menu .menu-category-item[data-category="zzz-unknown"] .menu-cat-icon');
         assert.ok(icon, 'unknown category still gets an icon node');
         assert.ok(icon.classList.contains('menu-cat-icon-fallback'), 'fallback class applied');
+        assert.ok(!icon.hasAttribute('data-glyph'), 'no glyph for an unknown slug');
         var expected = LuCIDesktop.IconConfig.matchUrl('/admin/status/overview');
         assert.ok(expected && expected.emoji, 'test href maps to an emoji');
         assert.equal(icon.textContent, expected.emoji, 'first sub-item href drives the emoji');
@@ -134,6 +157,7 @@ describe('Start menu: category icons', function() {
         var icon = document.querySelector('#start-menu .menu-category-item[data-category="zzz-nohref"] .menu-cat-icon');
         assert.ok(icon, 'unknown category still gets an icon node');
         assert.ok(icon.classList.contains('menu-cat-icon-fallback'), 'fallback class applied');
+        assert.ok(!icon.hasAttribute('data-glyph'), 'no glyph for an unknown slug');
         assert.equal(icon.textContent, 'Z', 'first letter of the title');
     });
 
@@ -142,6 +166,64 @@ describe('Start menu: category icons', function() {
         var item = document.querySelector('#start-menu .menu-category-item[data-category="status"]');
         assert.contains(item.textContent, '状态', 'title still rendered');
         assert.ok(item.querySelector('.menu-cat-icon'), 'icon node present');
+    });
+
+    it('never lets a wide fallback glyph overflow into the title (slot grows)', function() {
+        // Fallback path for a slug absent from CAT_ICONS. Stub the shared
+        // url->icon table with a deliberately WIDE payload so the assertion
+        // does not depend on which emoji font the host has: the fallback slot
+        // must GROW to contain its glyph (min-width, never a fixed width —
+        // a fixed box either wraps the emoji into multiple lines or lets it
+        // paint over the title text).
+        var origMatch = LuCIDesktop.IconConfig.matchUrl;
+        LuCIDesktop.IconConfig.matchUrl = function() { return { emoji: '📊🖥📡' }; };
+        try {
+            window.LuCIMenuData.push({
+                title: "自定义", id: "custom-x",
+                subs: [{title: "概览", href: "/admin/status/overview"}]
+            });
+            StartMenu.render();
+            // The fixture keeps #start-menu hidden; layout (and therefore
+            // getBoundingClientRect) only exists while it is rendered.
+            document.getElementById('start-menu').style.display = '';
+
+            var item = document.querySelector('#start-menu .menu-category-item[data-category="custom-x"]');
+            var icon = item.querySelector('.menu-cat-icon');
+            assert.ok(icon.classList.contains('menu-cat-icon-fallback'), 'fallback path used');
+
+            var glyphRange = document.createRange();
+            glyphRange.selectNodeContents(icon);
+            var glyphRect = glyphRange.getBoundingClientRect();
+            var boxRect = icon.getBoundingClientRect();
+
+            var textNode = null;
+            for (var n = icon.nextSibling; n; n = n.nextSibling) {
+                if (n.nodeType === 3 && (n.textContent || '').trim()) { textNode = n; break; }
+            }
+            assert.ok(textNode, 'title text node follows the icon');
+            var titleRange = document.createRange();
+            titleRange.selectNodeContents(textNode);
+            var titleRect = titleRange.getBoundingClientRect();
+
+            assert.ok(glyphRect.width > 0 && titleRect.width > 0, 'both boxes are laid out');
+            // Single line: a fixed-width slot would wrap the wide payload into
+            // a tall multi-line stack instead of widening.
+            var cs = window.getComputedStyle(icon);
+            var fs = parseFloat(cs.fontSize) || 12;
+            var lh = parseFloat(cs.lineHeight);
+            if (!isFinite(lh) || lh <= 3) lh = fs * 1.2;
+            assert.ok(boxRect.height <= lh * 1.6,
+                'fallback slot grew instead of wrapping (height ' + boxRect.height.toFixed(1) +
+                ' <= ' + (lh * 1.6).toFixed(1) + ')');
+            assert.ok(boxRect.width + 0.5 >= glyphRect.width,
+                'fallback box contains its glyph on one line (box ' + boxRect.width.toFixed(1) +
+                ' >= glyph ' + glyphRect.width.toFixed(1) + ')');
+            assert.ok(glyphRect.right <= titleRect.left + 0.5,
+                'fallback right edge (' + glyphRect.right.toFixed(1) +
+                ') must not cross the title start (' + titleRect.left.toFixed(1) + ')');
+        } finally {
+            LuCIDesktop.IconConfig.matchUrl = origMatch;
+        }
     });
 });
 
