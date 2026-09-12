@@ -161,6 +161,8 @@
             'Theme settings loading...': '主题设置加载中...',
             // Custom URL shortcuts (desktop right-click → Add Custom URL)
             'Add Custom URL': '添加自定义链接',
+            'New': '新建',
+            'Link': '链接',
             'Edit Link': '编辑链接',
             'Name': '名称',
             'Address (URL)': '地址（URL）',

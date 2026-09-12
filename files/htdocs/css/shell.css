@@ -630,6 +630,36 @@ html, body {
     margin: 4px 8px;
 }
 
+/* ===== Context submenu (e.g. New -> Link) =====
+ * Opens on hover (mouse) and on tap of the parent row (touch has no
+ * hover — desktop.js toggles .open on the parent). */
+.context-has-sub {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+.context-arrow { opacity: 0.45; font-size: 11px; line-height: 1; }
+.context-submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: -5px;
+    margin-left: 4px;
+    min-width: 110px;
+    background: var(--contextmenu-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    padding: 4px;
+    z-index: 1;
+}
+.context-has-sub:hover > .context-submenu,
+.context-has-sub.open > .context-submenu { display: block; }
+
 
 
 /* ===== Theme settings panel: light mode adapts via --theme-panel-* vars ===== */

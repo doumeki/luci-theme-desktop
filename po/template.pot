@@ -622,3 +622,9 @@ msgstr ""
 
 msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000"
 msgstr ""
+
+# Desktop context menu: New -> Link
+msgid "New"
+msgstr ""
+msgid "Link"
+msgstr ""

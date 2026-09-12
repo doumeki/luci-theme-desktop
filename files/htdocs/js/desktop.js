@@ -1018,7 +1018,12 @@
             var m = _makeMenu(x, y);
             m.id = 'desktop-context-menu';
             m.innerHTML =
-                '<div class="context-item" data-act="addlink">' + _('Add Custom URL') + '</div>' +
+                '<div class="context-item context-has-sub" data-act="new">' + _('New') +
+                    '<span class="context-arrow">&#8250;</span>' +
+                    '<div class="context-submenu">' +
+                        '<div class="context-item" data-act="addlink">' + _('Link') + '</div>' +
+                    '</div>' +
+                '</div>' +
                 '<div class="context-separator"></div>' +
                 '<div class="context-item" data-act="theme">' + _('Theme') + '</div>' +
                 '<div class="context-item" data-act="widgets">' + _('Widgets') + '</div>' +
@@ -1029,6 +1034,12 @@
                 var act = e.target.closest('.context-item');
                 if (!act) return;
                 var a = act.getAttribute('data-act');
+                if (a === 'new') {
+                    // Touch has no hover — tapping the parent opens the
+                    // submenu (and keeps the menu itself open).
+                    act.classList.toggle('open');
+                    return;
+                }
                 if (a === 'addlink') Desktop._showLinkDialog(null);
                 else if (a === 'theme') window.ThemeSettings ? ThemeSettings.open() : alert(_('Theme settings loading...'));
                 else if (a === 'widgets') WidgetManager.openSettings();

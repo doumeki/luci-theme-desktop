@@ -622,3 +622,9 @@ msgstr "请输入有效的 http(s) 地址或 LuCI 路径。"
 
 msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000"
 msgstr "{router} = 当前访问的主机名，{httpx} = http 或 https，{port} = 当前端口，{origin} = 协议://主机:端口。示例：{httpx}://{router}:3000"
+
+# Desktop context menu: New -> Link
+msgid "New"
+msgstr "新建"
+msgid "Link"
+msgstr "链接"
