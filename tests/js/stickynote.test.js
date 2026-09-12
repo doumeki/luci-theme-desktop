@@ -429,4 +429,87 @@ describe('Sticky note: title is the drag handle', function() {
         }
     });
 });
+
+// ===== Render idempotence =====
+// The note used to build its whole look by appending to el.style.cssText on
+// every render (`el.style.cssText = el.style.cssText + '…'`) and by embedding
+// long style="…" strings in innerHTML — so re-rendering one instance kept
+// growing the inline style (style drift, hard to debug). Static presentation
+// now lives in widget.css (.widget-sticky-note) and only DYNAMIC values touch
+// inline styles (active color as --sticky-bg, shared opacity/click-through),
+// so rendering the same instance again must be a no-op for computed styles.
+describe('Sticky note: render idempotence (no inline-style accumulation)', function() {
+    afterEach(function() {
+        WidgetManager._instancesOf('sticky-note').forEach(function(iid) { WidgetManager.disable(iid); });
+    });
+
+    function snapshot(inst) {
+        var el = inst.el;
+        var body = noteBody(inst);
+        var header = el.querySelector('.sticky-header');
+        var cs = window.getComputedStyle(el);
+        var bs = window.getComputedStyle(body);
+        var hs = window.getComputedStyle(header);
+        return {
+            inline: el.getAttribute('style') || '',
+            bg: cs.backgroundColor,
+            radius: cs.borderRadius,
+            padding: cs.padding,
+            shadow: cs.boxShadow,
+            cursor: cs.cursor,
+            bodyPadding: bs.padding,
+            bodyMinHeight: bs.minHeight,
+            bodyWhiteSpace: bs.whiteSpace,
+            headerPadding: hs.padding,
+            headerCursor: hs.cursor,
+            headerStyle: header.getAttribute('style')
+        };
+    }
+
+    function enable(slot, color, text) {
+        stickyConfig({});
+        stickyConfig((function() {
+            var o = {};
+            o[slot] = { notes: {}, activeColor: color };
+            o[slot].notes[color] = text;
+            return o;
+        })());
+        WidgetManager.enable('sticky-note', { id: slot });
+        return WidgetManager.instances[slot];
+    }
+
+    it('computed styles and the inline style attribute survive repeated renders', function() {
+        var inst = enable('sn-ID1', '#7ec8a0', 'idempotent');
+        inst._api.rerender();
+        var first = snapshot(inst);
+        inst._api.rerender();
+        inst._api.rerender();
+        var after = snapshot(inst);
+        Object.keys(first).forEach(function(k) {
+            assert.equal(after[k], first[k], 'stable after re-render: ' + k);
+        });
+        // …and the static look really is CSS-driven (not an empty comparison)
+        assert.equal(first.bg, 'rgb(126, 200, 160)', 'page color paints the background via --sticky-bg');
+        assert.equal(first.radius, '4px', 'radius comes from widget.css');
+        assert.equal(first.bodyPadding, '8px 10px', 'body padding comes from widget.css');
+        assert.contains(first.bodyWhiteSpace, 'pre-wrap', 'body wrapping comes from widget.css');
+        assert.equal(first.headerStyle, null, 'header carries no inline style attribute');
+        assert.ok(first.inline.indexOf('--sticky-bg') !== -1, 'dynamic color exposed as a CSS variable');
+    });
+
+    it('page-color switch updates --sticky-bg without growing the inline style', function() {
+        var inst = enable('sn-ID2', '#f9e74a', 'page');
+        var sel = noteSel(inst);
+        sel.value = '#6eb5f7';
+        sel.dispatchEvent(new Event('change'));
+        var after = inst.el.getAttribute('style') || '';
+        assert.equal(after.split('--sticky-bg').length - 1, 1,
+            'exactly one --sticky-bg declaration (nothing appended)');
+        assert.equal(inst.el.style.getPropertyValue('--sticky-bg'), '#6eb5f7', 'new page color written');
+        assert.equal(window.getComputedStyle(inst.el).backgroundColor, 'rgb(110, 181, 247)',
+            'background follows the new page');
+        inst._api.rerender();
+        assert.equal(inst.el.getAttribute('style') || '', after, 're-render of the new color is stable');
+    });
+});
 })();

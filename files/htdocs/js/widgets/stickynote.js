@@ -194,11 +194,14 @@
             var title = _('Sticky ') + num;
 
             el.setAttribute('data-mode', 'note');
-            el.style.cssText = el.style.cssText +
-                'background:' + c + ';' +
-                'border-radius:4px;box-shadow:2px 2px 8px rgba(0,0,0,0.3);' +
-                'padding:0;overflow:hidden;' +
-                'font:13px/1.4 sans-serif;color:#222;cursor:default;';
+            // Static presentation (background base, radius, shadow, padding,
+            // font, cursor + the header/body/select look) lives in widget.css
+            // under .widget-sticky-note. Only DYNAMIC values stay inline: the
+            // active page's color as a CSS variable (the static rule consumes
+            // it) and the shared opacity/click-through below. Never append to
+            // el.style.cssText here — that grew without bound on every render
+            // (style drift; regression-tested in tests/js/stickynote.test.js).
+            el.style.setProperty('--sticky-bg', c);
 
             // Shared style (opacity/clickThrough live in the stickysync
             // entry, not in the per-view config): apply here so a note
@@ -212,15 +215,12 @@
             }
 
             el.innerHTML =
-                '<div class="sticky-header" style="display:flex;align-items:center;gap:4px;padding:4px 6px;' +
-                'background:rgba(0,0,0,0.08);cursor:grab;user-select:none;">' +
-                '<span class="sticky-title" style="flex:1;font-size:11px;font-weight:600;opacity:0.6;">' + title + '</span>' +
+                '<div class="sticky-header">' +
+                '<span class="sticky-title">' + title + '</span>' +
                 buildColorPicker(c) +
-                '<button class="sticky-del" title="' + _('Close') + '" style="background:none;border:none;' +
-                'font-size:14px;cursor:pointer;opacity:0.5;line-height:1;padding:0 2px;">&times;</button>' +
+                '<button class="sticky-del" title="' + _('Close') + '">&times;</button>' +
                 '</div>' +
-                '<div class="sticky-body" contenteditable="true" style="padding:8px 10px;min-height:100px;' +
-                'outline:none;word-wrap:break-word;white-space:pre-wrap;">' +
+                '<div class="sticky-body" contenteditable="true">' +
                 escapeHTML(text) +
                 '</div>';
 
@@ -372,9 +372,11 @@
     });
 
     function buildColorPicker(current) {
-        var h = '<select class="sticky-color" style="font-size:10px;padding:1px 2px;' +
-            'background:rgba(255,255,255,0.5);border:1px solid rgba(0,0,0,0.15);' +
-            'border-radius:2px;cursor:pointer;max-width:60px;">';
+        // Select chrome is static (widget.css .sticky-color). The per-option
+        // swatch color is a VALUE from the COLORS constant, so it stays an
+        // inline background — rebuilt with innerHTML on every render, so it
+        // never accumulates.
+        var h = '<select class="sticky-color">';
         COLORS.forEach(function(c, i) {
             h += '<option value="' + c + '"' + (c === current ? ' selected' : '') +
                  ' style="background:' + c + ';">' + _(COLOR_LABELS[i]) + '</option>';

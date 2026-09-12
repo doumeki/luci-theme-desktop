@@ -39,9 +39,65 @@
  * drag never starts there — text selection wins and the browser's native
  * right-click menu stays available for copying). The body shows the
  * normal text caret instead. Mobile keeps the long-press-anywhere drag
- * (widget.js _makeDraggable) — touch has no cursor to express it with. */
+ * (widget.js _makeDraggable) — touch has no cursor to express it with.
+ *
+ * ALL static presentation lives here; stickynote.js only writes the
+ * DYNAMIC bits (per-page color via --sticky-bg, shared opacity/
+ * click-through, framework position/size). It must never append to
+ * el.style.cssText: the old render did `el.style.cssText = el.style.cssText
+ * + '…'`, so every re-render grew the inline style string (style drift,
+ * see the render-idempotence test in tests/js/stickynote.test.js). */
+.widget-sticky-note {
+    background: var(--sticky-bg, #f9e74a);
+    border-radius: 4px;
+    box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+    padding: 0;
+    overflow: hidden;
+    font: 13px/1.4 sans-serif;
+    color: #222;
+    cursor: default;
+}
+.widget-sticky-note .sticky-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: rgba(0, 0, 0, 0.08);
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.widget-sticky-note .sticky-title {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.6;
+}
+.widget-sticky-note .sticky-del {
+    background: none;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0.5;
+    line-height: 1;
+    padding: 0 2px;
+}
 .widget-sticky-note .sticky-body {
     cursor: text;
+    padding: 8px 10px;
+    min-height: 100px;
+    outline: none;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+.widget-sticky-note .sticky-color {
+    font-size: 10px;
+    padding: 1px 2px;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    cursor: pointer;
+    max-width: 60px;
 }
 
 /* ===== Resize handle (opt-in: def.resizable) =====
@@ -250,6 +306,14 @@
     font-size: 10px;
     text-transform: none;
     letter-spacing: 0;
+}
+/* Non-resizable Network Traffic keeps the historical fixed 190px card
+ * width. A resizable instance gets its px size from the user's drag
+ * (framework width/height), so this must NOT match one — the exact
+ * condition of the old `if (!def.resizable) el.style.cssText += …`
+ * (widget.js sets [data-resizable] only for def.resizable widgets). */
+.widget-instance.widget-net-traffic:not([data-resizable]) {
+    width: 190px;
 }
 
 /* ===== Settings panel ===== */

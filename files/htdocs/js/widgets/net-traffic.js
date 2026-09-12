@@ -163,12 +163,12 @@
             // instance element (CSS: [data-opacity="0"][data-hide-bg="1"]).
             if (data.hideBgAtZero) el.setAttribute('data-hide-bg', '1');
             else el.removeAttribute('data-hide-bg');
-            // Fixed 190px default for the non-resizable case only. A
-            // resizable instance gets its px size from the user's drag
-            // (config width, restored by enable) — appending width here
-            // would override it on every re-render (option change, iface
-            // switch) and undo the resize.
-            if (!this.resizable) el.style.cssText = el.style.cssText + 'width:190px;';
+            // Fixed 190px default for the non-resizable case only — the rule
+            // lives in widget.css
+            // (.widget-instance.widget-net-traffic:not([data-resizable])), so
+            // a re-render can never append to el.style.cssText and override
+            // the user's dragged width. A resizable instance gets its px size
+            // from the drag (config width, restored by enable).
             prevSample = null;   // iface/render changed — restart diffing
             el.innerHTML =
                 '<div class="widget-card">' +

@@ -388,6 +388,39 @@ function i18nConsistencyCheck() {
     console.log('✅ i18n consistency: dict=' + dict.size + ' pot=' + pot.size + ' po=' + po.size + ' aligned');
 }
 
+// ===== widget inline-style contract (0.1.0-230) =====
+// Widget render must be idempotent: static presentation lives in widget.css
+// (`.widget-sticky-note …`), only DYNAMIC values may touch inline styles (or
+// better, a CSS custom property). Appending to el.style.cssText made a
+// re-render grow the inline style string without bound (sticky-note bug:
+// style drift, width overrides, hard to debug). Comments are stripped so the
+// rationale comments in the widget sources don't trip the check.
+function stripJsComments(src) {
+    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+}
+
+function widgetStyleContractCheck() {
+    const dir = path.join(THEME_DIR, 'files/htdocs/js/widgets');
+    const bad = [];
+    try {
+        fs.readdirSync(dir).filter(function(f) { return f.slice(-3) === '.js'; })
+            .forEach(function(f) {
+                const src = stripJsComments(fs.readFileSync(path.join(dir, f), 'utf8'));
+                if (/\.style\.cssText/.test(src)) bad.push(f);
+            });
+    } catch (e) {
+        console.log('❌ cannot scan files/htdocs/js/widgets: ' + e.message);
+        process.exit(1);
+    }
+    if (bad.length) {
+        console.log('❌ widget renders must not touch el.style.cssText (render must be idempotent):\n  ' +
+            bad.join('\n  ') + '\n  → move static styles into files/htdocs/css/widget.css, keep only\n' +
+            '    dynamic values inline or as CSS custom properties (--var)');
+        process.exit(1);
+    }
+    console.log('✅ widget inline-style contract: static styles are CSS-driven');
+}
+
 // ===== runtime.lua 双格式规范化单测（tests/lua/test-runtime.lua） =====
 // uci:changes() 的数组/dict 格式规范化是历史最高频 bug 区（0.1.0-84 等），
 // Lua 侧此前零自动化覆盖。本地 lua5.1 可跑（staging hostpkg 或系统 lua5.1）。
@@ -427,6 +460,7 @@ function cleanup() {
 (async () => {
     try {
         i18nConsistencyCheck();
+        widgetStyleContractCheck();
         runLuaRuntimeTests();
         killAll();
         await new Promise(res => server.listen(HPORT, '127.0.0.1', res));

@@ -27,6 +27,10 @@
     <!-- Real start menu stylesheet: the fallback-icon layout test (emoji slot
          vs. title text) must measure the shipped CSS, not just the DOM. -->
     <link rel="stylesheet" href="../../files/htdocs/css/startmenu.css">
+    <!-- Real widget stylesheet: widget presentation is CSS-driven (widget.js
+         writes only dynamic values), so render-idempotence / computed-style
+         tests must measure the shipped widget.css. -->
+    <link rel="stylesheet" href="../../files/htdocs/css/widget.css">
 </head>
 <body>
 <h1>Desktop Theme — JS Unit Tests</h1>
