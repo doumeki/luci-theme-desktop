@@ -243,4 +243,120 @@ describe('Start menu: swipe notch', function() {
         assert.equal(StartMenu._swipeNotch(48, false), -1, 'drag right → previous');
     });
 });
+
+// ===== End-to-end: real touch events drive the category change =====
+// The pure _swipeNotch tests could not catch the "edge gate made the
+// gesture a no-op" bug — only wiring the actual listeners can.
+describe('Start menu: touch swipe through real events', function() {
+    var menuEl, shown;
+
+    function touch(type, x, y) {
+        var ev = new Event(type, { bubbles: true, cancelable: true });
+        ev.touches = type === 'touchend' ? [] : [{ clientX: x, clientY: y }];
+        // must start on the app list, not the search field
+        (menuEl.querySelector('.menu-items') || menuEl).dispatchEvent(ev);
+    }
+
+    beforeEach(function() {
+        menuEl = document.getElementById('start-menu');
+        if (!menuEl) { menuEl = document.createElement('div'); menuEl.id = 'start-menu'; document.body.appendChild(menuEl); }
+        menuEl.innerHTML =
+            '<div class="menu-search"><input id="menu-search-input"></div>' +
+            '<div class="menu-panels"><div class="menu-categories">' +
+                '<div class="menu-category-item active" data-category="a">A</div>' +
+                '<div class="menu-category-item" data-category="b">B</div>' +
+                '<div class="menu-category-item" data-category="c">C</div>' +
+            '</div><div class="menu-items" data-category="a"></div></div>';
+        menuEl.style.display = '';
+        shown = [];
+        StartMenu.showCategory = function(id) {
+            shown.push(id);
+            menuEl.querySelectorAll('.menu-category-item').forEach(function(el) {
+                el.classList.toggle('active', el.getAttribute('data-category') === id);
+            });
+        };
+        StartMenu.bindEvents();          // idempotent
+    });
+
+    it('a downward drag walks to the next category (hover direction)', function() {
+        touch('touchstart', 100, 100);
+        touch('touchmove', 100, 150);    // +50 → one notch
+        touch('touchend', 100, 150);
+        assert.equal(shown[0], 'b', 'drag down → next');
+    });
+
+    it('pages continuously while the finger keeps moving', function() {
+        touch('touchstart', 100, 100);
+        touch('touchmove', 100, 130);    // +30 (no notch yet)
+        assert.equal(shown.length, 0, 'under 48px → nothing yet');
+        touch('touchmove', 100, 160);    // +30 → total 60 → one notch, 12 left
+        assert.equal(shown.length, 1, 'first notch fired');
+        touch('touchmove', 100, 220);    // +60 → 12+60=72 → one more
+        assert.equal(shown.length, 2, 'second notch fired in the same drag');
+        assert.equal(shown.join(','), 'b,c', 'paged b then c');
+    });
+
+    it('an upward drag walks back', function() {
+        StartMenu.showCategory('c');
+        shown = [];
+        touch('touchstart', 100, 200);
+        touch('touchmove', 100, 140);    // -60 → previous
+        assert.equal(shown[0], 'b', 'drag up → previous');
+    });
+
+    it('stops at the ends instead of wrapping', function() {
+        touch('touchstart', 100, 100);
+        touch('touchmove', 100, 400);    // far past the last category
+        assert.equal(shown.join(','), 'b,c', 'stops at the last category');
+    });
+
+    it('ignores gestures that start in the search field', function() {
+        var ev = new Event('touchstart', { bubbles: true });
+        ev.touches = [{ clientX: 10, clientY: 10 }];
+        menuEl.querySelector('.menu-search').dispatchEvent(ev);
+        touch('touchmove', 10, 80);
+        assert.equal(shown.length, 0, 'search field keeps caret/selection gestures');
+    });
+});
+
+// ===== Panel stays inside the viewport whatever the taskbar position =====
+describe('Start menu: panel viewport clamp', function() {
+    var menuEl, taskbar, origMobile;
+
+    beforeEach(function() {
+        origMobile = LuCIDesktop.isMobile;
+        LuCIDesktop.isMobile = function() { return false; };
+        menuEl = document.getElementById('start-menu');
+        if (!menuEl) { menuEl = document.createElement('div'); menuEl.id = 'start-menu'; document.body.appendChild(menuEl); }
+        menuEl.style.display = 'none';
+        menuEl.removeAttribute('style');
+        menuEl.style.display = 'none';
+        taskbar = document.getElementById('taskbar');
+        if (!taskbar) { taskbar = document.createElement('div'); taskbar.id = 'taskbar'; document.body.appendChild(taskbar); }
+    });
+
+    afterEach(function() {
+        LuCIDesktop.isMobile = origMobile;
+        menuEl.removeAttribute('style');
+        taskbar.removeAttribute('style');
+    });
+
+    it('anchors above a bottom taskbar and caps the height', function() {
+        taskbar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:40px;';
+        StartMenu.show();
+        var tbTop = window.innerHeight - 40;
+        assert.ok(parseInt(menuEl.style.maxHeight, 10) <= tbTop, 'max-height leaves the top edge visible');
+        assert.ok(parseInt(menuEl.style.maxHeight, 10) >= 180, 'never collapses below the floor');
+        assert.equal(menuEl.style.top, 'auto', 'not top-anchored');
+        assert.ok(parseInt(menuEl.style.bottom, 10) > 0, 'bottom-anchored above the taskbar');
+    });
+
+    it('anchors below a top taskbar', function() {
+        taskbar.style.cssText = 'position:fixed;left:0;right:0;top:0;height:40px;';
+        StartMenu.show();
+        assert.equal(menuEl.style.bottom, 'auto', 'not bottom-anchored');
+        assert.ok(parseInt(menuEl.style.top, 10) >= 40, 'opens below the taskbar');
+        assert.ok(parseInt(menuEl.style.maxHeight, 10) <= window.innerHeight - 40, 'height capped to the space left');
+    });
+});
 })();

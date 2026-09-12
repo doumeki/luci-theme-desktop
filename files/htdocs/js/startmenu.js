@@ -139,6 +139,10 @@
         },
 
         bindEvents: function() {
+            // Bind once: a second call would stack duplicate handlers and
+            // every gesture/click would fire twice.
+            if (this._eventsBound) return;
+            this._eventsBound = true;
             var self = this;
             var menuEl = document.getElementById('start-menu');
             if (!menuEl) return;

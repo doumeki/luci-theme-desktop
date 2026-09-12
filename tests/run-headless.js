@@ -316,6 +316,71 @@ function i18nConsistencyCheck() {
         }
     } catch (e) {}
 
+    // Every literal passed to _('...') in the front-end must be in the
+    // dict — the three-way check above only proves the FILES agree with
+    // each other, so a string used in code but never registered silently
+    // renders English on the desktop.
+    try {
+        const jsFiles = [];
+        (function walkJs(d) {
+            fs.readdirSync(d, { withFileTypes: true }).forEach(function(en) {
+                const rel = d + '/' + en.name;
+                if (en.isDirectory()) walkJs(rel);
+                else if (en.name.slice(-3) === '.js') jsFiles.push(rel);
+            });
+        })(path.join(THEME_DIR, 'files/htdocs/js'));
+        const missing = new Set();
+        jsFiles.forEach(function(f) {
+            const src = fs.readFileSync(f, 'utf8');
+            const re = /\b_\(\s*'((?:[^'\\]|\\.)*)'\s*\)/g;
+            let m;
+            while ((m = re.exec(src)) !== null) {
+                // Ignore examples inside comments (doc headers use
+                // _('English string') as illustration).
+                const lineStart = src.lastIndexOf('\n', m.index) + 1;
+                const before = src.slice(lineStart, m.index);
+                if (before.indexOf('//') !== -1 || /^\s*\*/.test(before)) continue;
+                const key = m[1].replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+                // Punctuation-only placeholders (e.g. _('...') as a loading
+                // label) carry nothing to translate.
+                if (!key || !/[A-Za-z\u4e00-\u9fff]/.test(key)) continue;
+                if (!dict.has(key)) missing.add(key);
+            }
+        });
+        if (missing.size) {
+            problems.push('_() strings missing from the i18n dict (UI would show English):\n  ' +
+                [...missing].sort().join('\n  ') + '\n  → files/htdocs/js/i18n.js');
+        }
+    } catch (e) {}
+
+    // Dual-template asset sync: an asset linked by only one header branch
+    // is invisible on the other LuCI runtime (the classic dual-template
+    // bug, previously only guarded for cbi-compat.js).
+    try {
+        const grab = function(src, re) {
+            const out = new Set();
+            let m;
+            while ((m = re.exec(src)) !== null) out.add(m[1]);
+            return out;
+        };
+        const htm = readFile('files/templates/header.htm');
+        const ut  = readFile('files/usr/share/ucode/luci/template/themes/desktop/header.ut');
+        [['css', /href="[^"]*\/css\/([A-Za-z0-9_.-]+\.css)/g],
+         ['js',  /src="[^"]*\/js\/([A-Za-z0-9_.-]+\.js)/g]].forEach(function(pair) {
+            const label = pair[0];
+            const a = grab(htm, new RegExp(pair[1].source, 'g'));
+            const b = grab(ut, new RegExp(pair[1].source, 'g'));
+            const onlyHtm = [...a].filter(x => !b.has(x));
+            const onlyUt  = [...b].filter(x => !a.has(x));
+            if (onlyHtm.length || onlyUt.length) {
+                problems.push('header ' + label + ' assets out of sync (.htm vs .ut):\n' +
+                    (onlyHtm.length ? '  only in header.htm: ' + onlyHtm.join(', ') + '\n' : '') +
+                    (onlyUt.length ? '  only in header.ut: ' + onlyUt.join(', ') + '\n' : '') +
+                    '  → files/templates/header.htm + .../header.ut');
+            }
+        });
+    } catch (e) {}
+
     if (problems.length) {
         console.log('❌ i18n consistency failed:\n\n' + problems.join('\n\n'));
         process.exit(1);
