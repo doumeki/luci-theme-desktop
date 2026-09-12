@@ -450,6 +450,58 @@ function widgetStyleContractCheck() {
     console.log('✅ widget inline-style contract: static styles are CSS-driven');
 }
 
+// ===== test-file manifest check (0.1.0-230) =====
+// tests/js/test-runner.html carries the ordered <script src="*.test.js"> list.
+// A test file that exists on disk but is not listed silently never runs — the
+// failure mode the AGENTS.md rule warns about. The runner now verifies the
+// list against the directory instead of trusting it: extra, missing and
+// duplicated entries all fail with the exact file names to add/remove.
+function testManifestCheck() {
+    const RUNNER_HTML = 'tests/js/test-runner.html';
+    const dir = path.join(THEME_DIR, 'tests/js');
+    let onDisk = [];
+    try {
+        onDisk = fs.readdirSync(dir).filter(function(f) { return /\.test\.js$/.test(f); }).sort();
+    } catch (e) {
+        console.log('❌ cannot read tests/js: ' + e.message);
+        process.exit(1);
+    }
+    let html = '';
+    try { html = readFile(RUNNER_HTML); }
+    catch (e) {
+        console.log('❌ missing ' + RUNNER_HTML);
+        process.exit(1);
+    }
+    const registered = [];
+    const re = /<script src="([^"]+\.test\.js)"><\/script>/g;
+    let m;
+    while ((m = re.exec(html)) !== null) registered.push(m[1]);
+
+    const regSet = new Set(registered);
+    const diskSet = new Set(onDisk);
+    const notRegistered = onDisk.filter(function(f) { return !regSet.has(f); });
+    const notExisting = registered.filter(function(f) { return !diskSet.has(f); });
+    const dupes = registered.filter(function(f, i) { return registered.indexOf(f) !== i; });
+
+    const problems = [];
+    if (notRegistered.length) {
+        problems.push('test file(s) on disk but NOT registered in ' + RUNNER_HTML +
+            ' (they would silently never run):\n  add: ' + notRegistered.join('\n  add: '));
+    }
+    if (notExisting.length) {
+        problems.push('registered in ' + RUNNER_HTML + ' but missing on disk:\n  remove: ' +
+            notExisting.join('\n  remove: '));
+    }
+    if (dupes.length) {
+        problems.push('registered more than once: ' + [...new Set(dupes)].join(', '));
+    }
+    if (problems.length) {
+        console.log('❌ test manifest mismatch:\n\n' + problems.join('\n\n') + '\n  → ' + RUNNER_HTML);
+        process.exit(1);
+    }
+    console.log('✅ test manifest: ' + onDisk.length + ' test files, all registered');
+}
+
 // ===== runtime.lua 双格式规范化单测（tests/lua/test-runtime.lua） =====
 // uci:changes() 的数组/dict 格式规范化是历史最高频 bug 区（0.1.0-84 等），
 // Lua 侧此前零自动化覆盖。本地 lua5.1 可跑（staging hostpkg 或系统 lua5.1）。
@@ -491,6 +543,7 @@ function cleanup() {
         i18nConsistencyCheck();
         i18nDriftCheck();
         widgetStyleContractCheck();
+        testManifestCheck();
         runLuaRuntimeTests();
         killAll();
         await new Promise(res => server.listen(HPORT, '127.0.0.1', res));
