@@ -29,6 +29,13 @@
         return d.innerHTML;
     }
 
+    // esc() is text-node safe only (quotes survive) — data-id below is an
+    // attribute context, so escape quotes there (see desktop-icons.js
+    // escAttr(); the catalog ids are quote-free today, this is a guard).
+    function escAttr(s) {
+        return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function build() {
         overlay = document.createElement('div');
         overlay.className = 'icon-picker-overlay';
@@ -104,7 +111,7 @@
 
         var html = '';
         list.forEach(function(ic) {
-            html += '<div class="icon-picker-option' + (ic.id === state.selectedId ? ' selected' : '') + '" data-id="' + esc(ic.id) + '">' +
+            html += '<div class="icon-picker-option' + (ic.id === state.selectedId ? ' selected' : '') + '" data-id="' + escAttr(ic.id) + '">' +
                 '<span class="icon-picker-emoji">' + ic.emoji + '</span>' +
                 '<span class="icon-picker-title">' + esc(ic.title) + '</span>' +
                 '<span class="icon-picker-id">' + esc(ic.id) + '</span>' +

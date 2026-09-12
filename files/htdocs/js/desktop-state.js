@@ -96,17 +96,29 @@
         } catch(e) {}
     }
 
+    // INVARIANT: every store has TWO sources of truth — the module-level
+    // variable above and the per-tab #desktop-config JSON (the DOM/cache
+    // that loadConfig() reads back). Every save MUST write the store back
+    // to the tab state (setSectionLocal, no POST) BEFORE the backend POST,
+    // otherwise a later load()/reloadConfig() resurrects the stale DOM
+    // value and the next save persists it over UCI.
     function savePins() {
+        try { LuCIDesktop.setSectionLocal(configSection('pins'), pinnedItems); } catch(e) {}
         LuCIDesktop.saveDesktopSection(configSection('pins'), pinnedItems);
     }
 
     // Icon layout persistence (drag position + icon choice, one map).
+    // icon_layout is a desktop-only UCI section but a SHARED map (the
+    // mobile slot lives inside each entry), so it is not configSection()'d.
     function saveIconLayout() {
+        try { LuCIDesktop.setSectionLocal('icon_layout', iconLayout); } catch(e) {}
         LuCIDesktop.saveDesktopSection('icon_layout', iconLayout);
     }
 
     function saveHidden() {
-        // Update in-page config immediately (DOM only — backend POST below)
+        // Update in-page config immediately (DOM only — backend POST below).
+        // NOTE: the API section and the DOM/config key DIFFER on desktop
+        // ("hidden" vs "hidden_icons") — do not collapse them to one name.
         try {
             if (LuCIDesktop.isMobile()) LuCIDesktop.setSectionLocal('mobile_hidden', hiddenIcons);
             else LuCIDesktop.setSectionLocal('hidden_icons', hiddenIcons);

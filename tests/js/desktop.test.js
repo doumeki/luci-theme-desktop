@@ -752,4 +752,74 @@ describe('Desktop public API survives the module split', function() {
         });
     });
 });
+
+// ===== Config write-through invariant (0.1.0-232) =====
+// desktop-state owns THREE stores as module-level variables, and each is
+// mirrored into the per-tab #desktop-config JSON (the DOM/cache that
+// loadConfig()/reloadConfig() reads back). Every save MUST write the store
+// back to the tab state (setSectionLocal — DOM only, no extra POST) BEFORE
+// the backend POST; otherwise the two truths drift, a later reloadConfig()
+// resurrects the stale DOM value, and the next save persists it over UCI
+// (icon choice / pins / hidden list silently reverted).
+describe('Desktop state: store <-> #desktop-config write-through', function() {
+    var S = window.LuCIDesktop.desktopState;
+    var origSave, origMobile, origCfgText;
+
+    function cfg() {
+        return JSON.parse(document.getElementById('desktop-config').textContent);
+    }
+
+    beforeEach(function() {
+        origSave = window.LuCIDesktop.saveDesktopSection;
+        // The backend POST is not under test — only the local write-through.
+        window.LuCIDesktop.saveDesktopSection = function() {};
+        origMobile = window.LuCIDesktop.isMobile;
+        window.LuCIDesktop.isMobile = function() { return false; };   // desktop keys
+        origCfgText = document.getElementById('desktop-config').textContent;
+        document.getElementById('desktop-config').textContent = JSON.stringify({
+            pins: [], hidden_icons: [], icon_layout: {}
+        });
+        S.setPins([]);
+        S.setHidden([]);
+        S.setLayout({});
+    });
+
+    afterEach(function() {
+        window.LuCIDesktop.saveDesktopSection = origSave;
+        window.LuCIDesktop.isMobile = origMobile;
+        document.getElementById('desktop-config').textContent = origCfgText;
+    });
+
+    it('saveIconLayout mirrors the in-memory map into #desktop-config', function() {
+        S.setLayout({ '/a': { icon: 'gost' } });
+        S.saveIconLayout();
+        assert.equal(cfg().icon_layout['/a'].icon, 'gost', 'DOM icon_layout updated');
+        assert.equal(JSON.stringify(cfg().icon_layout), JSON.stringify(S.layout()),
+            'DOM icon_layout === in-memory map');
+    });
+
+    it('savePins mirrors the in-memory pins into #desktop-config', function() {
+        S.setPins([{ url: '/p', title: 'P' }]);
+        S.savePins();
+        assert.equal(JSON.stringify(cfg().pins), JSON.stringify(S.pins()),
+            'DOM pins === in-memory list');
+    });
+
+    it('saveHidden mirrors hidden icons into #desktop-config (desktop key hidden_icons)', function() {
+        S.setHidden(['/h']);
+        S.saveHidden();
+        assert.equal(JSON.stringify(cfg().hidden_icons), JSON.stringify(S.hidden()),
+            'DOM hidden_icons === in-memory list');
+    });
+
+    it('reloadConfig after a save does not resurrect a stale layout (regression)', function() {
+        S.setLayout({ '/a': { icon: 'gost' } });
+        S.saveIconLayout();              // write-through: DOM now has the choice
+        window.Desktop.reloadConfig();   // re-read #desktop-config
+        assert.equal(S.layout()['/a'].icon, 'gost', 'choice survives reloadConfig');
+        S.saveIconLayout();
+        assert.equal(S.layout()['/a'].icon, 'gost', 'memory still has the new icon after save');
+        assert.equal(cfg().icon_layout['/a'].icon, 'gost', 'DOM still has the new icon after save');
+    });
+});
 })();

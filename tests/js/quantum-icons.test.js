@@ -577,4 +577,80 @@ describe('Mobile long-press icon menu (Change Icon entry)', function() {
         assert.equal(chip.textContent, '⚡', 'chosen icon (gost) survives reload');
     });
 });
+
+// ===== Attribute-context escaping (0.1.0-232) =====
+// desktop-icons.js builds its DOM from an HTML string. esc() is the
+// textContent -> innerHTML trick: it escapes & < > but NOT quotes, so a
+// value interpolated into a quoted attribute ("data-url="…"") containing a
+// literal " truncated the attribute. data-url is read back with
+// getAttribute() — on drag (onPositionChange) and on open — so a truncated
+// URL silently wrote the icon_layout entry under the wrong key and the
+// link became undraggable. escAttr() now escapes the attribute context.
+describe('Desktop icons: attribute escaping (data-url round-trip)', function() {
+    var origSave, origCfgText;
+    // a literal double quote, a literal single quote, and an ampersand —
+    // each is a distinct attribute-context hazard
+    var TRICKY_URL = 'https://example.com/a"b\'c?d=1&e=2';
+    var TRICKY_TITLE = 'He said "hi" & <ok>\'s';
+
+    beforeEach(function() {
+        origSave = window.LuCIDesktop.saveDesktopSection;
+        window.LuCIDesktop.saveDesktopSection = function(section, data) {
+            window.__saved = window.__saved || [];
+            window.__saved.push({ section: section, data: data });
+        };
+        window.__saved = [];
+        origCfgText = document.getElementById('desktop-config').textContent;
+        showDesktopIcons(400, 300);
+    });
+
+    afterEach(function() {
+        window.LuCIDesktop.saveDesktopSection = origSave;
+        document.getElementById('desktop-config').textContent = origCfgText;
+        delete window.__saved;
+        delete window.LuCIMenuData;
+        if (window.Desktop._qicons) { window.Desktop._qicons.destroy(); window.Desktop._qicons = null; }
+        resetDesktopIcons();
+    });
+
+    it('data-url with a literal " round-trips verbatim (getAttribute)', function() {
+        document.getElementById('desktop-config').textContent = JSON.stringify({
+            pins: [{ url: TRICKY_URL, title: TRICKY_TITLE, custom: true }],
+            hidden_icons: [],
+            icon_layout: {}
+        });
+        window.Desktop.init();
+
+        var icon = Array.prototype.filter.call(
+            document.querySelectorAll('#desktop-icons .desktop-icon'),
+            function(el) { return el.getAttribute('data-url') === TRICKY_URL; })[0];
+        assert.ok(icon, 'icon rendered for the quote-containing URL');
+        assert.equal(icon.getAttribute('data-url'), TRICKY_URL, 'data-url is byte-for-byte the original URL');
+        assert.equal(icon.getAttribute('title'), TRICKY_TITLE, 'title attribute round-trips verbatim');
+    });
+
+    it('dragging a quote-containing URL persists the icon_layout key under the full URL', function() {
+        document.getElementById('desktop-config').textContent = JSON.stringify({
+            pins: [{ url: TRICKY_URL, title: TRICKY_TITLE, custom: true }],
+            hidden_icons: [],
+            icon_layout: {}
+        });
+        window.Desktop.init();
+
+        var icon = Array.prototype.filter.call(
+            document.querySelectorAll('#desktop-icons .desktop-icon'),
+            function(el) { return el.getAttribute('data-url') === TRICKY_URL; })[0];
+        assert.ok(icon, 'icon rendered');
+
+        dragIcon(icon, 30, 30, 220, 180);
+
+        var saved = (window.__saved || []).filter(function(s) { return s.section === 'icon_layout'; });
+        assert.ok(saved.length >= 1, 'drag persisted icon_layout');
+        var map = saved[saved.length - 1].data;
+        assert.ok(Object.prototype.hasOwnProperty.call(map, TRICKY_URL),
+            'icon_layout key is the full original URL (not a truncated one)');
+        assert.ok(map[TRICKY_URL] && map[TRICKY_URL].desktop,
+            'position written under the full URL');
+    });
+});
 })();

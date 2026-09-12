@@ -126,6 +126,70 @@ describe('Icon picker: desktop integration (choice persistence)', function() {
         assert.equal(chip.textContent, '⚡', 'gost emoji rendered (user choice wins)');
     });
 
+    it('icon change mirrors icon_layout into #desktop-config and survives reloadConfig (regression)', function() {
+        // NEW INVARIANT (0.1.0-232): the in-memory map and the per-tab
+        // #desktop-config JSON must never drift. saveIconLayout() used to
+        // POST only, so a later reloadConfig() resurrected the stale DOM
+        // icon_layout and the next save persisted that over UCI (the icon
+        // choice silently reverted).
+        var URL = '/cgi-bin/luci/admin/network/socat';
+        document.getElementById('desktop-config').textContent = JSON.stringify({
+            pins: [{ url: URL, title: 'Socat' }],
+            hidden_icons: [],
+            icon_layout: {}
+        });
+        window.LuCIMenuData = [{ href: URL }];
+        window.Desktop.init();
+
+        window.Desktop.openIconPicker(URL);
+        var overlay = document.querySelector('.icon-picker-overlay');
+        overlay.querySelector('.icon-picker-option[data-id="gost"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        overlay.querySelector('.icon-picker-confirm').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        // write-through: DOM/cache mirrors the map, no extra POST needed
+        var dom = JSON.parse(document.getElementById('desktop-config').textContent);
+        assert.equal(dom.icon_layout[URL].icon, 'gost', 'DOM icon_layout has the new choice');
+        assert.equal(JSON.stringify(dom.icon_layout),
+            JSON.stringify(window.LuCIDesktop.desktopState.layout()),
+            'DOM icon_layout === in-memory map');
+
+        // a reload must not resurrect the pre-choice layout
+        window.Desktop.reloadConfig();
+        assert.equal(window.LuCIDesktop.desktopState.layout()[URL].icon, 'gost',
+            'choice survives reloadConfig');
+
+        // ...and the next save still carries the new icon (UCI not clobbered)
+        window.__saved = [];
+        window.LuCIDesktop.desktopState.saveIconLayout();
+        var saved = (window.__saved || []).filter(function(s) { return s.section === 'icon_layout'; });
+        assert.equal(saved[saved.length - 1].data[URL].icon, 'gost',
+            'save after reloadConfig keeps the new icon');
+    });
+
+    it('_moveLinkMeta keeps memory and #desktop-config in sync on a URL rename', function() {
+        var OLD = '/cgi-bin/luci/admin/network/socat';
+        var NEW = '/cgi-bin/luci/admin/network/socat-renamed';
+        var layout = {};
+        layout[OLD] = { icon: 'gost' };
+        document.getElementById('desktop-config').textContent = JSON.stringify({
+            pins: [{ url: OLD, title: 'Socat' }],
+            hidden_icons: [],
+            icon_layout: layout
+        });
+        window.LuCIMenuData = [{ href: OLD }];
+        window.Desktop.init();
+
+        window.Desktop._moveLinkMeta(OLD, NEW);
+
+        var map = window.LuCIDesktop.desktopState.layout();
+        assert.equal(map[NEW] && map[NEW].icon, 'gost', 'memory moved to the new url');
+        assert.ok(!map[OLD], 'memory old key gone');
+        var dom = JSON.parse(document.getElementById('desktop-config').textContent);
+        assert.equal(dom.icon_layout[NEW] && dom.icon_layout[NEW].icon, 'gost', 'DOM moved to the new url');
+        assert.ok(!dom.icon_layout[OLD], 'DOM old key gone');
+        assert.equal(JSON.stringify(dom.icon_layout), JSON.stringify(map), 'DOM === memory after rename');
+    });
+
     it('context menu Reset Icon clears the choice', function() {
         document.getElementById('desktop-config').textContent = JSON.stringify({
             pins: [{ url: '/cgi-bin/luci/admin/network/socat', title: 'Socat' }],

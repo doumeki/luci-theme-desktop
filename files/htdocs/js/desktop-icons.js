@@ -17,6 +17,18 @@
         return d.innerHTML;
     }
 
+    // Attribute-context escaping. esc() is TEXT-NODE safe only: its
+    // textContent -> innerHTML round-trip escapes & < > but leaves quotes
+    // intact, so a value containing a literal " would terminate a quoted
+    // attribute early. data-url is the worst case — it is read back with
+    // getAttribute() on drag (onPositionChange) and on open, so a
+    // truncated URL silently writes the icon_layout entry under the wrong
+    // key (and the link becomes undraggable). Use esc() for text nodes,
+    // escAttr() for anything interpolated inside an attribute value.
+    function escAttr(s) {
+        return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     // '#RRGGBB' + alpha -> 'rgba(r,g,b,a)' (for emoji category chip bg)
     function hexToRgba(hex, alpha) {
         var m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
@@ -102,10 +114,11 @@
                 var top = MARGIN_TOP + row * CELL_H;
                 var label = item.title.length > 10 ? item.title.substring(0, 9) + '..' : item.title;
 
+                var titleText = item.title + (item.installable ? ' (' + _('Not installed') + ')' : '');
+
                 html += '<div class="desktop-icon' + (item.installable ? ' installable' : '') +
-                    '" data-url="' + esc(item.url) + '"';
-                html += ' style="left:' + left + 'px;top:' + top + 'px" title="' + esc(item.title) +
-                    (item.installable ? ' (' + _('Not installed') + ')' : '') + '">';
+                    '" data-url="' + escAttr(item.url) + '"';
+                html += ' style="left:' + left + 'px;top:' + top + 'px" title="' + escAttr(titleText) + '">';
                 html += '<div class="desktop-icon-img">';
                 // Emoji rendering: user icon choice (icon_layout.icon)
                 // wins, then the IconConfig url mapping; falls back to the
