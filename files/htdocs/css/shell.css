@@ -642,7 +642,16 @@ html, body {
 }
 .context-arrow { opacity: 0.45; font-size: 11px; line-height: 1; }
 .context-submenu {
-    display: none;
+    /* Kept in the layout (display:block + visibility) instead of
+     * display:none so the HIDE can be delayed. The flyout is separated from
+     * its row by a 4px gap (and starts 5px higher): leaving the row closed
+     * the submenu instantly and it was gone before the pointer crossed the
+     * gap (0.1.0-235, user-reported). visibility stays hit-testable for the
+     * whole 200ms grace, so arriving on the flyout re-arms the parent
+     * :hover and cancels the hide. Show is NOT delayed. */
+    display: block;
+    visibility: hidden;
+    transition: visibility 0s linear 0.2s;
     position: absolute;
     left: 100%;
     top: -5px;
@@ -658,7 +667,10 @@ html, body {
     z-index: 1;
 }
 .context-has-sub:hover > .context-submenu,
-.context-has-sub.open > .context-submenu { display: block; }
+.context-has-sub.open > .context-submenu {
+    visibility: visible;
+    transition: none; /* reveal immediately, only the hide gets the grace */
+}
 /* Near the right screen edge the submenu flips to the LEFT (desktop.js
  * measures before opening) — otherwise it opens off-screen. */
 .context-has-sub.sub-left > .context-submenu {

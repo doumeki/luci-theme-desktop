@@ -450,6 +450,55 @@ function widgetStyleContractCheck() {
     console.log('✅ widget inline-style contract: static styles are CSS-driven');
 }
 
+// ===== context-submenu hover grace (0.1.0-235) =====
+// The "New -> Link" flyout is separated from its row by a 4px gap. Closing it
+// the instant the pointer leaves the row made it unreachable: the submenu was
+// gone before the mouse arrived (user-reported). The fix is CSS-only (no JS
+// state to keep in sync), so guard the declarations that implement it — a
+// later "cleanup" back to display:none would silently restore the bug.
+function submenuHoverGraceCheck() {
+    const rel = 'files/htdocs/css/shell.css';
+    let src = '';
+    try { src = readFile(rel); }
+    catch (e) { console.log('❌ missing ' + rel); process.exit(1); }
+    src = src.replace(/\/\*[\s\S]*?\*\//g, '');   // comments mention display:none by name
+    const base = (/\n\.context-submenu\s*\{([^}]*)\}/.exec(src) || [])[1];
+    const reveal = (/\n\.context-has-sub:hover > \.context-submenu,[\s\S]*?\{([^}]*)\}/.exec(src) || [])[1];
+    const problems = [];
+    const timeToMs = function(v) {
+        const m = /^(\d*\.?\d+)(ms|s)$/.exec(v.trim());
+        return m ? parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1) : 0;
+    };
+
+    if (!base) problems.push('.context-submenu base rule not found');
+    else {
+        if (/display\s*:\s*none/.test(base))
+            problems.push('.context-submenu is display:none again — a hidden box cannot stay hit-testable for the grace period');
+        if (!/visibility\s*:\s*hidden/.test(base))
+            problems.push('.context-submenu base rule must hide via visibility:hidden');
+        const t = (/transition\s*:([^;]*)/.exec(base) || [])[1] || '';
+        const times = t.match(/(?:\d*\.)?\d+(?:ms|s)\b/g) || [];
+        const delay = times.length ? timeToMs(times[times.length - 1]) : 0;
+        if (!/visibility/.test(t) || delay < 100)
+            problems.push('.context-submenu hide must be delayed (transition: visibility 0s linear <delay>) — got "' + t.trim() + '"');
+    }
+    if (!reveal) problems.push('.context-has-sub:hover/.open reveal rule not found');
+    else {
+        if (!/visibility\s*:\s*visible/.test(reveal))
+            problems.push('the reveal rule must set visibility:visible');
+        if (!/transition\s*:\s*none/.test(reveal))
+            problems.push('the reveal must NOT be delayed (transition:none) — only the hide gets the grace');
+    }
+
+    if (problems.length) {
+        console.log('❌ context submenu hover grace contract failed:\n  ' + problems.join('\n  ') +
+            '\n  → the flyout sits 4px away from its row; without a hide delay it closes\n' +
+            '    before the pointer can cross the gap (0.1.0-235 regression)');
+        process.exit(1);
+    }
+    console.log('✅ context submenu: hide delayed 200ms, show instant (hover grace)');
+}
+
 // ===== test-file manifest check (0.1.0-230) =====
 // tests/js/test-runner.html carries the ordered <script src="*.test.js"> list.
 // A test file that exists on disk but is not listed silently never runs — the
@@ -778,7 +827,7 @@ function cleanup() {
 }
 // Static gates are usable on their own (the browser part needs geckodriver):
 //   node -e "require('./tests/run-headless.js').secretScanCheck()"
-module.exports = { secretScanCheck: secretScanCheck };
+module.exports = { secretScanCheck: secretScanCheck, submenuHoverGraceCheck: submenuHoverGraceCheck };
 
 if (require.main === module) (async () => {
     try {
@@ -786,6 +835,7 @@ if (require.main === module) (async () => {
         i18nConsistencyCheck();
         i18nDriftCheck();
         widgetStyleContractCheck();
+        submenuHoverGraceCheck();
         testManifestCheck();
         runLuaRuntimeTests();
         killAll();

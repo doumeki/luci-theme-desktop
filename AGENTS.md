@@ -118,6 +118,7 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 | ttyd 页面 iframe 不撑满 | 新版 luci-app-ttyd 的 iframe 是 JS 延迟注入——`fitTtydIframe` 有重试 |
 | 弹出层开到屏幕外 | **先把内容渲染进去再测量**（空菜单量到 0×0，夹取静默失效）；**宽度和高度都夹**进视口；统一入口 `_makeMenu(x,y,html)`（`desktop-menus.js`，三套右键菜单 + `showPinMenu` 都走它）；`display:none` 的元素量不到尺寸；二级菜单按行位置翻转方向 |
 | 子菜单方向不翻 | 右边缘要翻到左侧（`.sub-left`），鼠标 `mouseenter` 用捕获阶段监听 |
+| 二级菜单移过去就没了 | 行与弹出层之间有 4px 间隙 + 5px 上移——**隐藏必须延迟**：`.context-submenu` 保持 `display:block` + `visibility:hidden`，`transition: visibility 0s linear 0.2s`（显示那条 `transition:none`，不要延迟展开）；`visibility` 在整个宽限期内可命中，鼠标到达弹出层会重新触发父级 `:hover`。run-headless 有静态闸门（改回 `display:none` 直接 fail） |
 | 改 URL 丢图标/位置 | 图标选择、格子位置、隐藏状态都按 URL 存，改 URL 要迁移（`_moveLinkMeta`） |
 | 自定义 pin 被当幽灵删 | 不在菜单树里的 pin 要 `custom:true` 豁免幽灵清理（pins/hidden/icon_layout 三处） |
 | 用假设限制手势 | 先真机实测再定约束——移动端开始菜单列表不滚动，按"会滚动"加的门槛让手势失效 |

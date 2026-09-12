@@ -244,8 +244,10 @@
 
         // Place a context submenu: it opens to the right of its row, but
         // flips to the LEFT when that would run off the screen (the menu is
-        // usually opened near an edge). Measured with the submenu briefly
-        // displayed-but-invisible because a display:none box has no size.
+        // usually opened near an edge). The flyout is laid out but
+        // visibility:hidden in CSS, so it is measurable as-is; forcing
+        // display/visibility here keeps that true even if the stylesheet
+        // failed to load (a display:none box has no size).
         _placeSubmenu: function(parent) {
             if (!parent || !parent.querySelector) return;
             var sub = parent.querySelector('.context-submenu');
