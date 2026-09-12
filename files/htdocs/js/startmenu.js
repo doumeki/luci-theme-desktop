@@ -263,6 +263,28 @@
             if (!menuEl) return;
             menuEl.style.display = '';
             visible = true;
+            // Keep the panel inside the viewport whatever the taskbar
+            // position or the configured height. Measured at open time:
+            // a bottom taskbar anchors the panel above it, a top taskbar
+            // below it, and max-height always leaves the far edge visible
+            // (the fixed CSS height used to push the panel off-screen on
+            // short viewports / large height settings).
+            if (!(window.LuCIDesktop && LuCIDesktop.isMobile())) {
+                var tb = document.getElementById('taskbar');
+                var tbRect = tb ? tb.getBoundingClientRect() : null;
+                var gap = 8;
+                if (tbRect && tbRect.top > window.innerHeight / 2) {
+                    menuEl.style.top = 'auto';
+                    menuEl.style.bottom = Math.max(gap, window.innerHeight - tbRect.top + 4) + 'px';
+                    menuEl.style.maxHeight = Math.max(180, tbRect.top - gap) + 'px';
+                } else if (tbRect) {
+                    menuEl.style.bottom = 'auto';
+                    menuEl.style.top = (tbRect.bottom + 4) + 'px';
+                    menuEl.style.maxHeight = Math.max(180, window.innerHeight - tbRect.bottom - gap) + 'px';
+                } else {
+                    menuEl.style.maxHeight = Math.max(180, window.innerHeight - gap * 2) + 'px';
+                }
+            }
             // Version footer (data-version on #start-menu) refreshes on open
             var verEl = menuEl.querySelector('.menu-footer-ver');
             if (verEl && window.__DESKTOP_THEME_VERSION__) {
