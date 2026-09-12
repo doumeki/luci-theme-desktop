@@ -13,6 +13,45 @@
 
     var visible = false;
 
+    // Top-level LuCI slugs the argon icon font has a glyph for. MUST stay in
+    // sync with the [data-category=...] rules in startmenu.css: a slug listed
+    // here without a CSS rule renders an empty icon box, and vice versa.
+    // Real slugs measured on both test routers: status/system/services/nas/
+    // control/vpn/network/nlbw. The other entries cover common installs.
+    var CAT_GLYPH_SLUGS = {
+        status: 1, system: 1, services: 1, nas: 1, vpn: 1, network: 1,
+        nlbw: 1, docker: 1, statistics: 1, stats: 1, control: 1,
+        asterisk: 1, logout: 1
+    };
+
+    function hasCatGlyph(id) {
+        return !!id && Object.prototype.hasOwnProperty.call(CAT_GLYPH_SLUGS, id);
+    }
+
+    // Fallback for a category the icon font cannot draw: the emoji the shared
+    // LuCI url->icon table maps the first sub-item to (same table the desktop
+    // shortcuts use), else the title's first letter. Never leaves the icon
+    // slot empty.
+    function catFallback(cat) {
+        var sub = cat.subs && cat.subs.length ? cat.subs[0] : null;
+        var href = (sub && sub.href) || cat.href || '';
+        var cfg = DESKTOP.IconConfig;
+        var icon = (href && cfg && typeof cfg.matchUrl === 'function')
+            ? cfg.matchUrl(href) : null;
+        if (icon && icon.emoji) return icon.emoji;
+        return (cat.title || '').charAt(0) || '?';
+    }
+
+    function catIconHTML(cat) {
+        var id = cat && cat.id ? String(cat.id) : '';
+        if (hasCatGlyph(id)) {
+            // Empty node — startmenu.css supplies the glyph via ::before.
+            return '<span class="menu-cat-icon" aria-hidden="true"></span>';
+        }
+        return '<span class="menu-cat-icon menu-cat-icon-fallback" aria-hidden="true">' +
+            escapeHTML(catFallback(cat)) + '</span>';
+    }
+
     var StartMenu = {
         init: function() {
             this.render();
@@ -48,7 +87,8 @@
             // Left panel: categories
             html += '<div class="menu-categories">';
             data.forEach(function(cat, i) {
-                html += '<div class="menu-category-item' + (i === 0 ? ' active' : '') + '" data-category="' + cat.id + '">';
+                html += '<div class="menu-category-item' + (i === 0 ? ' active' : '') + '" data-category="' + escapeHTML(cat.id || '') + '">';
+                html += catIconHTML(cat);
                 html += escapeHTML(cat.title);
                 html += '</div>';
             });

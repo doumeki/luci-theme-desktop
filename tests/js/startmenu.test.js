@@ -96,6 +96,55 @@ describe('StartMenu.render()', function() {
     });
 });
 
+// ===== Category icons: argon glyph for known slugs, emoji/letter fallback =====
+describe('Start menu: category icons', function() {
+    beforeEach(setupStartMenuData);
+    afterEach(cleanup);
+
+    it('renders an icon node for a known slug (argon glyph, no fallback class)', function() {
+        StartMenu.render();
+        var icon = document.querySelector('#start-menu .menu-category-item[data-category="status"] .menu-cat-icon');
+        assert.ok(icon, 'status has an icon node');
+        assert.ok(!icon.classList.contains('menu-cat-icon-fallback'),
+            'known slug uses the icon font, not the fallback');
+        assert.equal((icon.innerHTML || '').trim(), '',
+            'glyph comes from CSS ::before, the node itself stays empty');
+    });
+
+    it('falls back to an emoji from IconConfig for an unknown slug', function() {
+        window.LuCIMenuData.push({
+            title: "未知分类", id: "zzz-unknown",
+            subs: [{title: "概览", href: "/admin/status/overview"}]
+        });
+        StartMenu.render();
+        var icon = document.querySelector('#start-menu .menu-category-item[data-category="zzz-unknown"] .menu-cat-icon');
+        assert.ok(icon, 'unknown category still gets an icon node');
+        assert.ok(icon.classList.contains('menu-cat-icon-fallback'), 'fallback class applied');
+        var expected = LuCIDesktop.IconConfig.matchUrl('/admin/status/overview');
+        assert.ok(expected && expected.emoji, 'test href maps to an emoji');
+        assert.equal(icon.textContent, expected.emoji, 'first sub-item href drives the emoji');
+    });
+
+    it('falls back to the title first letter when no icon matches', function() {
+        window.LuCIMenuData.push({
+            title: "Zzz", id: "zzz-nohref",
+            subs: [{title: "Nothing", href: "/admin/zzz/nomatch"}]
+        });
+        StartMenu.render();
+        var icon = document.querySelector('#start-menu .menu-category-item[data-category="zzz-nohref"] .menu-cat-icon');
+        assert.ok(icon, 'unknown category still gets an icon node');
+        assert.ok(icon.classList.contains('menu-cat-icon-fallback'), 'fallback class applied');
+        assert.equal(icon.textContent, 'Z', 'first letter of the title');
+    });
+
+    it('keeps the category title text next to the icon', function() {
+        StartMenu.render();
+        var item = document.querySelector('#start-menu .menu-category-item[data-category="status"]');
+        assert.contains(item.textContent, '状态', 'title still rendered');
+        assert.ok(item.querySelector('.menu-cat-icon'), 'icon node present');
+    });
+});
+
 describe('StartMenu visibility', function() {
     beforeEach(setupStartMenuData);
     afterEach(cleanup);
