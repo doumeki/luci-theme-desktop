@@ -659,6 +659,14 @@ html, body {
 }
 .context-has-sub:hover > .context-submenu,
 .context-has-sub.open > .context-submenu { display: block; }
+/* Near the right screen edge the submenu flips to the LEFT (desktop.js
+ * measures before opening) — otherwise it opens off-screen. */
+.context-has-sub.sub-left > .context-submenu {
+    left: auto;
+    right: 100%;
+    margin-left: 0;
+    margin-right: 4px;
+}
 
 
 

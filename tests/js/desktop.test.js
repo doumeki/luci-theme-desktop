@@ -682,4 +682,29 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(pins[0].title, 'Overview', 'name updated');
     });
 });
+
+// ===== Context submenu flips near the right edge (0.1.0-221) =====
+describe('Desktop context menu: submenu direction', function() {
+    afterEach(function() {
+        document.querySelectorAll('#desktop-context-menu').forEach(function(el) { el.remove(); });
+    });
+
+    it('flips the submenu left when it would run off the right edge', function() {
+        window.Desktop._showDesktopMenu(window.innerWidth - 20, 60);
+        var menu = document.getElementById('desktop-context-menu');
+        assert.ok(menu, 'menu rendered');
+        var row = menu.querySelector('.context-has-sub');
+        assert.ok(row, 'New row has a submenu');
+        window.Desktop._placeSubmenu(row);
+        assert.equal(row.classList.contains('sub-left'), true, 'flipped to the left near the edge');
+    });
+
+    it('keeps the submenu on the right when there is room', function() {
+        window.Desktop._showDesktopMenu(10, 60);
+        var menu = document.getElementById('desktop-context-menu');
+        var row = menu.querySelector('.context-has-sub');
+        window.Desktop._placeSubmenu(row);
+        assert.equal(row.classList.contains('sub-left'), false, 'opens right when it fits');
+    });
+});
 })();

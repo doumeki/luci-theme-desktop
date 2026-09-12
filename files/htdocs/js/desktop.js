@@ -1014,6 +1014,24 @@
             });
         },
 
+        // Place a context submenu: it opens to the right of its row, but
+        // flips to the LEFT when that would run off the screen (the menu is
+        // usually opened near an edge). Measured with the submenu briefly
+        // displayed-but-invisible because a display:none box has no size.
+        _placeSubmenu: function(parent) {
+            if (!parent || !parent.querySelector) return;
+            var sub = parent.querySelector('.context-submenu');
+            if (!sub) return;
+            var rect = parent.getBoundingClientRect();
+            var prevVis = sub.style.visibility, prevDisp = sub.style.display;
+            sub.style.visibility = 'hidden';
+            sub.style.display = 'block';
+            var w = sub.offsetWidth || 120;
+            sub.style.display = prevDisp;
+            sub.style.visibility = prevVis;
+            parent.classList.toggle('sub-left', rect.right + w + 8 > window.innerWidth);
+        },
+
         _showDesktopMenu: function(x, y) {
             var m = _makeMenu(x, y);
             m.id = 'desktop-context-menu';
@@ -1030,6 +1048,10 @@
                 '<div class="context-separator"></div>' +
                 '<div class="context-item" data-act="rearrange">' + _('Rearrange Icons') + '</div>' +
                 '<div class="context-item" data-act="refresh">' + _('Refresh') + '</div>';
+            m.addEventListener('mouseenter', function(e) {
+                var row = e.target.closest && e.target.closest('.context-has-sub');
+                if (row) Desktop._placeSubmenu(row);
+            }, true);
             m.addEventListener('click', function(e) {
                 var act = e.target.closest('.context-item');
                 if (!act) return;
@@ -1037,6 +1059,7 @@
                 if (a === 'new') {
                     // Touch has no hover — tapping the parent opens the
                     // submenu (and keeps the menu itself open).
+                    Desktop._placeSubmenu(act);
                     act.classList.toggle('open');
                     return;
                 }
