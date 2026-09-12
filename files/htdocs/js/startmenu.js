@@ -110,8 +110,8 @@
         // list (= next), dragging UP walks back; horizontal drags work the
         // same way (left = next). Called repeatedly while dragging, so a
         // long swipe pages several categories instead of one.
-        _swipeNotch: function(acc, vertical) {
-            if (Math.abs(acc) < 48) return 0;
+        _swipeNotch: function(acc, vertical, step) {
+            if (Math.abs(acc) < (step || 48)) return 0;
             var sign = acc > 0 ? 1 : -1;
             return vertical ? sign : -sign;
         },
@@ -186,13 +186,15 @@
             // caret/selection keep working; desktop is untouched (touch
             // events never fire there).
             var tx = 0, ty = 0, tracking = false, acc = 0, vert = true;
-            var STEP = 48;
+            var STEP = 48;   // theme setting 'swipe_step' (read per gesture)
             menuEl.addEventListener('touchstart', function(e) {
                 tracking = false;
                 if (e.touches.length !== 1) return;
                 if (e.target.closest && e.target.closest('.menu-search')) return;
                 tx = e.touches[0].clientX; ty = e.touches[0].clientY;
                 acc = 0; vert = true;
+                // Read per gesture so a settings change applies immediately.
+                STEP = self._readSettingNum('swipe_step', 48);
                 tracking = true;
             }, { passive: true });
             menuEl.addEventListener('touchmove', function(e) {
@@ -204,10 +206,10 @@
                 if (Math.abs(dx) > Math.abs(dy)) { vert = false; acc += dx; }
                 else { vert = true; acc += dy; }
                 while (true) {
-                    var step = self._swipeNotch(acc, vert);
-                    if (!step) break;
-                    if (!self._swipeCategory(step)) { acc = 0; break; }   // hit an end
-                    acc -= (vert ? step : -step) * STEP;
+                    var notch = self._swipeNotch(acc, vert, STEP);
+                    if (!notch) break;
+                    if (!self._swipeCategory(notch)) { acc = 0; break; }   // hit an end
+                    acc -= (vert ? notch : -notch) * STEP;
                 }
             }, { passive: true });
             menuEl.addEventListener('touchend', function() { tracking = false; }, { passive: true });
@@ -399,6 +401,16 @@
                 });
                 cat.style.display = hasVisible ? '' : 'none';
             });
+        },
+
+        // Numeric theme setting (range fields are stored as strings).
+        _readSettingNum: function(key, def) {
+            try {
+                var t = LuCIDesktop.getSection('theme');
+                var v = t ? parseFloat(t[key]) : NaN;
+                if (!isNaN(v) && v >= 8 && v <= 400) return v;   // sane bounds
+            } catch(e) {}
+            return def;
         },
 
         _readSetting: function(key, def) {

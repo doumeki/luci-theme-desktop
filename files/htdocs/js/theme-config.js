@@ -58,6 +58,8 @@
         {id:'bg_angle',  label:_('Angle'), type:'range', min:'0', max:'359', step:'1', def:'135', unit:'deg'},
         // Misc
         {id:'menu_hover_mode', label:_('Menu Hover'), type:'checkbox', def:true},
+        // Mobile start menu: how many px of drag = one category page
+        {id:'swipe_step', label:_('Swipe Step'), type:'range', min:'24', max:'96', step:'8', def:'48', unit:'px'},
         {id:'picsum_auto_refresh', label:_('Picsum Auto Refresh'), type:'hidden', def:'0'}
     ];
 
@@ -71,7 +73,7 @@
         theme: [
             {label:_('App'),  fields:['app_dark_mode','app_primary_color','app_primary_color_dark']},
             {label:_('Icons'), fields:['icon_opacity','icon_bg']},
-            {label:_('Menu'), fields:['menu_hover_mode']},
+            {label:_('Menu'), fields:['menu_hover_mode','swipe_step']},
             {label:_('Login'), fields:['login_wallpaper']}
         ],
         fonts: [

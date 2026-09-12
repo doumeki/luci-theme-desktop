@@ -227,6 +227,13 @@ describe('Start menu: swipe between categories', function() {
 
 // ===== Continuous paging: 48px notch, down/left = next =====
 describe('Start menu: swipe notch', function() {
+    it('honours a configured step size', function() {
+        assert.equal(StartMenu._swipeNotch(40, true, 32), 1, 'smaller step pages sooner');
+        assert.equal(StartMenu._swipeNotch(40, true, 64), 0, 'larger step needs more travel');
+        assert.equal(StartMenu._swipeNotch(47, true), 0, 'no step argument → default 48');
+        assert.equal(StartMenu._swipeNotch(48, true), 1, 'default 48 still pages');
+    });
+
     it('needs a full notch before stepping', function() {
         assert.equal(StartMenu._swipeNotch(47, true), 0, 'below the threshold → no step');
         assert.equal(StartMenu._swipeNotch(-47, true), 0, 'below the threshold (up) → no step');

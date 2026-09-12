@@ -63,6 +63,7 @@
             'Spread': '扩散',
             'Angle': '角度',
             'Menu Hover': '菜单悬停切换',
+            'Swipe Step': '滑动灵敏度',
             'Auto Refresh': '自动刷新',
             'Picsum Auto Refresh': '登录刷新',
             // Layout section labels
