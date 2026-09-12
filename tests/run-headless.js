@@ -502,6 +502,244 @@ function testManifestCheck() {
     console.log('✅ test manifest: ' + onDisk.length + ' test files, all registered');
 }
 
+// ===== sensitive-information scan (public-file gate) =====
+// The theme repo is published to a public remote and the L1 workflow has no
+// secret scanning of its own, so one careless commit of a real device
+// address / credential / private-key path is irreversible. This gate walks
+// every file that WOULD be published (SECRET_SCAN_SCOPE_* minus gitignored
+// and explicitly internal files) and fails on SECRET_SCAN_RULES.
+//
+// Findings print `file:line [rule] <masked>` — the matched value is NEVER
+// shown in clear text, because CI logs are public too. A confirmed false
+// positive is exempted NARROWLY, never by disabling the gate:
+//   * inline on the offending line:  // secret-scan-allow: <rule-id>
+//     (comma-separated ids, or `*` for the whole line); or
+//   * an entry in SECRET_SCAN_ALLOW below.
+const SECRET_SCAN_ALLOW = [
+    // { file: 'files/htdocs/js/example.js', rule: 'ipv4', why: 'SVG path data' },
+];
+const SECRET_SCAN_SCOPE_DIRS = ['files', 'tests', 'tools', 'probe'];
+const SECRET_SCAN_SCOPE_FILES = ['Makefile', '.gitignore', 'AGENTS.md', 'tests/README.md'];
+// Internal / machine-local — never published. probe/.local-env holds the real
+// values on purpose (it is gitignored); probe/.local-env.example is the public
+// template and IS scanned (placeholders only).
+const SECRET_SCAN_EXCLUDE = ['HANDOVER.md', 'probe/.local-env', 'BRANCH-DIFF.md'];
+const SECRET_SCAN_BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
+    '.bmp', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.pdf', '.zip', '.gz', '.xz',
+    '.tar', '.ipk', '.apk', '.so', '.mo', '.bin']);
+
+function secretScanMask(s) {
+    s = String(s);
+    if (s.length <= 4) return '***';
+    if (s.length <= 8) return s.slice(0, 2) + '***' + s.slice(-1);
+    return s.slice(0, 3) + '***' + s.slice(-2);
+}
+
+// A real credential must leave a non-trivial literal after variable
+// references and scheme words are removed — `token $GITHUB_TOKEN`, `${VAR}`,
+// `<placeholder>`, `xxx`, `***`, `REPLACE` and `example` all drop out.
+function secretScanLooksReal(v) {
+    if (!v) return false;
+    const s = String(v).trim();
+    if (!s) return false;
+    if (/^<.*>$/.test(s)) return false;
+    if (/^\$\{[^}]*\}$/.test(s) || /^\$\(.*\)$/.test(s) || /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(s)) return false;
+    if (/^(?:x{3,}|\*+|REPLACE(?:_ME)?|CHANGE_?ME|example|dummy|your[-_].*)$/i.test(s)) return false;
+    // `token = string.format(...)` / `secret = foo.bar` are calls, not literals.
+    if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(s)) return false;
+    const rest = s
+        .replace(/\$\{[^}]*\}/g, ' ').replace(/\$\([^)]*\)/g, ' ')
+        .replace(/\$[A-Za-z_][A-Za-z0-9_]*/g, ' ')
+        .replace(/\b(?:bearer|token|authorization|basic)\b/gi, ' ');
+    const runs = rest.match(/[A-Za-z0-9!@#$%^&*_+=.\/~-]{8,}/g) || [];
+    return runs.some(function(t) {
+        return /[0-9]/.test(t) || /[A-Z]/.test(t) || /[^A-Za-z0-9]/.test(t) || t.length >= 16;
+    });
+}
+
+const SECRET_SCAN_RULES = [
+    {
+        id: 'ipv4',
+        re: /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.])/g,
+        allow: function(ip) {
+            return ip === '127.0.0.1' || ip === '0.0.0.0' || ip === '255.255.255.255' ||
+                /^(?:192\.0\.2|198\.51\.100|203\.0\.113)\./.test(ip);
+        },
+    },
+    {
+        id: 'private-key',
+        // Concatenated so this file never contains the literal header itself.
+        re: new RegExp('-----BEGIN' + '(?: [A-Z0-9]+)* PRIVATE KEY-----' +
+            '|\\bid_(?:rsa|dsa|ecdsa|ed25519|ed\\d+)\\b', 'g'),
+    },
+    {
+        id: 'credential',
+        re: /\b(password|passwd|pass|token|secret|apikey|api_key|bearer|authorization)\b\s*[:=]\s*(?:(["'`])([^"'`\n]{1,200})\2|([^\s"'`{[(<$,;)]{1,200}))/gi,
+        value: function(m) { return m[3] !== undefined ? m[3] : m[4]; },
+        looksReal: secretScanLooksReal,
+    },
+    {
+        id: 'internal-host',
+        re: /\b[a-z0-9][a-z0-9-]*\.(?:wrt\.com|wrt\.local)\b/gi,
+    },
+];
+
+// Inline opt-out: `// secret-scan-allow: ipv4` exempts that single line.
+function secretScanLineMarker(line) {
+    const m = /secret-scan-allow:\s*([A-Za-z0-9_*, -]+)/.exec(line);
+    if (!m) return new Set();
+    return new Set(m[1].split(/[,\s]+/).filter(Boolean));
+}
+
+// Allowlist opt-out: 'path:rule' or { file, rule } exempts a whole file/rule.
+function secretScanAllowed(rel, ruleId) {
+    return SECRET_SCAN_ALLOW.some(function(a) {
+        const parts = typeof a === 'string' ? a.split(':') : null;
+        const file = parts ? parts[0] : a.file;
+        const rule = parts ? parts[1] : a.rule;
+        return file === rel && (!rule || rule === '*' || rule === ruleId);
+    });
+}
+
+function secretScanPublicFiles() {
+    const raw = [];
+    const add = function(rel) {
+        if (SECRET_SCAN_EXCLUDE.indexOf(rel) !== -1) return;
+        if (SECRET_SCAN_BINARY_EXT.has(path.extname(rel).toLowerCase())) return;
+        raw.push(rel);
+    };
+    SECRET_SCAN_SCOPE_FILES.forEach(function(rel) {
+        let st;
+        try { st = fs.statSync(path.join(THEME_DIR, rel)); } catch (e) { return; }
+        if (st.isFile()) add(rel);
+    });
+    SECRET_SCAN_SCOPE_DIRS.forEach(function(dir) {
+        (function walk(d, rel) {
+            let entries;
+            try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
+            entries.forEach(function(en) {
+                if (en.isDirectory()) walk(path.join(d, en.name), rel + '/' + en.name);
+                else if (en.isFile()) add(rel + '/' + en.name);
+            });
+        })(path.join(THEME_DIR, dir), dir);
+    });
+    // Gitignored helpers are machine-local and never pushed — skip them. When
+    // git is unavailable the explicit exclusion list above still applies.
+    const ignored = new Set();
+    try {
+        const { spawnSync } = require('child_process');
+        const r = spawnSync('git', ['-C', THEME_DIR, 'check-ignore', '--stdin'],
+            { input: raw.join('\n'), encoding: 'utf8' });
+        if (r.status === 0) {
+            String(r.stdout || '').split('\n').forEach(function(p) {
+                p = p.trim();
+                if (p) ignored.add(p.replace(/^\.\//, ''));
+            });
+        }
+    } catch (e) {}
+    return raw.filter(function(rel) { return !ignored.has(rel); });
+}
+
+// Real values/domains from the gitignored local env must not appear in any
+// published file. The value itself is never echoed — only its key name.
+function secretScanLocalEnvNeedles() {
+    let raw = '';
+    try { raw = fs.readFileSync(path.join(THEME_DIR, 'probe/.local-env'), 'utf8'); }
+    catch (e) { return { values: [], domains: [] }; }
+    const values = [];
+    raw.split('\n').forEach(function(line) {
+        const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+        if (!m) return;
+        const key = m[1];
+        const val = m[2].trim().replace(/^["']|["']$/g, '');
+        if (!val || key === 'PATH' || val.length < 6) return;
+        values.push({ key: key, val: val });
+    });
+    const publicDomains = /^(?:github\.com|githubusercontent\.com|gist\.github\.com|openwrt\.org|apache\.org|mozilla\.org|example\.(?:com|org|net)|w3\.org|gnu\.org)$/i;
+    const plausibleTld = /(?:^|\.)(?:com|net|org|edu|gov|io|dev|info|biz|cn|local|lan|internal|home|corp|intranet|wrt)$/;
+    const domains = [];
+    // Case-sensitive: keeps identifiers such as `http.extraHeader` out.
+    (raw.match(/\b(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*\b/g) || []).forEach(function(d) {
+        if (!plausibleTld.test(d) || publicDomains.test(d)) return;
+        if (domains.indexOf(d) === -1) domains.push(d);
+    });
+    return { values: values, domains: domains };
+}
+
+function secretScanCheck() {
+    const allFiles = secretScanPublicFiles();
+    const findings = [];
+    allFiles.forEach(function(rel) {
+        let src;
+        try { src = fs.readFileSync(path.join(THEME_DIR, rel), 'utf8'); } catch (e) { return; }
+        const lines = src.split('\n');
+        SECRET_SCAN_RULES.forEach(function(rule) {
+            if (secretScanAllowed(rel, rule.id)) return;
+            lines.forEach(function(line, i) {
+                const marker = secretScanLineMarker(line);
+                if (marker.has('*') || marker.has(rule.id)) return;
+                rule.re.lastIndex = 0;
+                let m;
+                while ((m = rule.re.exec(line)) !== null) {
+                    if (!m[0]) { rule.re.lastIndex++; continue; }
+                    // An address wrapped in angle brackets is a placeholder.
+                    if (line[m.index - 1] === '<' && line[m.index + m[0].length] === '>') continue;
+                    const value = rule.value ? rule.value(m) : m[0];
+                    if (!value) continue;
+                    if (rule.allow && rule.allow(value)) continue;
+                    if (rule.looksReal && !rule.looksReal(value)) continue;
+                    findings.push({ file: rel, line: i + 1, rule: rule.id, value: value });
+                }
+            });
+        });
+    });
+    const needles = secretScanLocalEnvNeedles();
+    allFiles.forEach(function(rel) {
+        let src;
+        try { src = fs.readFileSync(path.join(THEME_DIR, rel), 'utf8'); } catch (e) { return; }
+        const allowValue = secretScanAllowed(rel, 'local-env-value');
+        const allowDomain = secretScanAllowed(rel, 'local-env-domain');
+        src.split('\n').forEach(function(line, i) {
+            const marker = secretScanLineMarker(line);
+            const wildcard = marker.has('*');
+            if (!allowValue && !wildcard && !marker.has('local-env-value')) {
+                needles.values.forEach(function(n) {
+                    if (line.indexOf(n.val) !== -1) {
+                        findings.push({ file: rel, line: i + 1, rule: 'local-env-value', value: n.val, note: n.key });
+                    }
+                });
+            }
+            if (!allowDomain && !wildcard && !marker.has('local-env-domain')) {
+                needles.domains.forEach(function(d) {
+                    const re = new RegExp('\\b' + d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+                    if (re.test(line)) findings.push({ file: rel, line: i + 1, rule: 'local-env-domain', value: d });
+                });
+            }
+        });
+    });
+
+    const seen = new Set();
+    const uniq = findings.filter(function(f) {
+        const k = f.file + ':' + f.line + ':' + f.rule + ':' + f.value;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+    });
+    if (uniq.length) {
+        console.log('❌ secret scan failed: ' + uniq.length + ' finding(s) in files that would be published:\n');
+        uniq.forEach(function(f) {
+            console.log('  ' + f.file + ':' + f.line + '  [' + f.rule + ']  ' + secretScanMask(f.value) +
+                (f.note ? '  (' + f.note + ')' : ''));
+        });
+        console.log('\n  (values masked on purpose — CI logs are public)\n' +
+            '  Confirmed false positive? Exempt it narrowly:\n' +
+            '    * inline on that line:  // secret-scan-allow: <rule-id>\n' +
+            '    * or an entry in SECRET_SCAN_ALLOW at the top of tests/run-headless.js');
+        process.exit(1);
+    }
+    console.log('✅ secret scan: ' + allFiles.length + ' public files, no device addresses/credentials');
+}
+
 // ===== runtime.lua 双格式规范化单测（tests/lua/test-runtime.lua） =====
 // uci:changes() 的数组/dict 格式规范化是历史最高频 bug 区（0.1.0-84 等），
 // Lua 侧此前零自动化覆盖。本地 lua5.1 可跑（staging hostpkg 或系统 lua5.1）。
@@ -538,8 +776,13 @@ function cleanup() {
     try { server.close(); } catch(e) {}
     try { killAll(); } catch(e) {}
 }
-(async () => {
+// Static gates are usable on their own (the browser part needs geckodriver):
+//   node -e "require('./tests/run-headless.js').secretScanCheck()"
+module.exports = { secretScanCheck: secretScanCheck };
+
+if (require.main === module) (async () => {
     try {
+        secretScanCheck();
         i18nConsistencyCheck();
         i18nDriftCheck();
         widgetStyleContractCheck();

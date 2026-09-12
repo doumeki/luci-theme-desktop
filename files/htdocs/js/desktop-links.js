@@ -145,7 +145,7 @@
         // Placeholders in a custom URL, resolved at OPEN time — one
         // shortcut then keeps working whether the router is reached by host
         // name or by IP (the URL is STORED as typed, never expanded):
-        //   {router} → location.hostname  (tec.com | 192.168.1.1)
+        //   {router} → location.hostname  (router.example | 192.0.2.1)
         //   {httpx}  → http | https       (the scheme in use right now)
         //   {port}   → location.port      (LuCI's own port; '' for 80/443)
         //   {origin} → location.origin    (scheme://host:port)

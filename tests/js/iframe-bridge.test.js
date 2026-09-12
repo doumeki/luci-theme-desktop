@@ -538,12 +538,12 @@ describe('IframeBridge.fitTtydIframe', function() {
         // (src :7681) sits directly inside .main-right at ~380px, leaving
         // a band below it. Must be fitted to the container bottom.
         var ttydIframe = {
-            src: 'http://10.0.0.2:7681/',
+            src: 'http://192.0.2.2:7681/',
             style: {},
             getBoundingClientRect: function() { return { top: 146, bottom: 526, height: 380 }; }
         };
         var otherIframe = {
-            src: 'http://10.0.0.2/cgi-bin/luci/admin/status',
+            src: 'http://192.0.2.2/cgi-bin/luci/admin/status',
             style: {},
             getBoundingClientRect: function() { return { top: 0, bottom: 100, height: 100 }; }
         };

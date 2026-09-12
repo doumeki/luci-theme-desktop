@@ -62,8 +62,8 @@ rowsEqUnordered(runtime.getChanges(mkCursor({ fw = {
     'lua dict: add/set/remove semantics')
 
 -- 4) dict list 操作：option 值为 table → list-add（每项一行）
-rowsEq(runtime.getChanges(mkCursor({ net = { lan = { ipaddr = { '10.0.0.1', '10.0.0.2' } } } })),
-    { 'net|lan|ipaddr|10.0.0.1|list-add', 'net|lan|ipaddr|10.0.0.2|list-add' }, 'dict list-add')
+rowsEq(runtime.getChanges(mkCursor({ net = { lan = { ipaddr = { '192.0.2.1', '192.0.2.2' } } } })),
+    { 'net|lan|ipaddr|192.0.2.1|list-add', 'net|lan|ipaddr|192.0.2.2|list-add' }, 'dict list-add')
 
 -- 5) dict secs 层非 table（raw value → set）
 rowsEq(runtime.getChanges(mkCursor({ misc = { rawsec = 'rawvalue' } })),

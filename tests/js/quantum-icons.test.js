@@ -57,7 +57,7 @@ describe('Quantum icons: IconConfig catalog', function() {
     });
 
     it('remaps the REAL menu tree (58 urls dumped from 1.1/253)', function() {
-        // Real menu hrefs captured on 192.168.1.1 and 192.168.2.253
+        // Real menu hrefs captured on the two test routers
         // (identical on both) — 2026-08-29.
         var ic = window.LuCIDesktop.IconConfig;
         var menu = [

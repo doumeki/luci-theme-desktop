@@ -477,7 +477,7 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(D.normalizeUrl('admin/status/overview'), '/admin/status/overview', 'bare LuCI path gets a slash');
         assert.equal(D.normalizeUrl('https://example.com/x'), 'https://example.com/x', 'https kept');
         assert.equal(D.normalizeUrl('example.com'), 'http://example.com', 'bare host → http://');
-        assert.equal(D.normalizeUrl('192.168.1.1:8080'), 'http://192.168.1.1:8080', 'bare host:port → http://');
+        assert.equal(D.normalizeUrl('192.0.2.1:8080'), 'http://192.0.2.1:8080', 'bare host:port → http://');
         assert.equal(D.normalizeUrl('javascript:alert(1)'), null, 'javascript: refused');
         assert.equal(D.normalizeUrl('data:text/html,x'), null, 'data: refused');
         assert.equal(D.normalizeUrl('//evil.example.com'), null, 'protocol-relative refused');

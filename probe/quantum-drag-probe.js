@@ -3,8 +3,8 @@
  *
  * Usage:
  *   node probe/quantum-drag-probe.js                       # 1.1 direct (passwordless curl)
- *   PROBE_ROUTER=192.168.2.253 PROBE_SSH=192.168.2.253 \
- *     PROBE_SSH_KEY=~/.ssh/id_ed253 node probe/quantum-drag-probe.js   # 253 (ssh-forged session)
+ *   PROBE_ROUTER=<router-ip-or-host> PROBE_SSH=<ssh-host> \
+ *     PROBE_SSH_KEY=<path-to-private-key> node probe/quantum-drag-probe.js   # 253 (ssh-forged session)
  *
  * Login cookie name follows the LuCI runtime, not the device: Lua track sets
  * `sysauth`, ucode track sets `sysauth_http` (Runtime.cookieName()). lib.login()

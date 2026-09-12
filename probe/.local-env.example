@@ -8,8 +8,27 @@ LEDE_ROOT=
 # Router 1 (device alias "1.1"; passwordless root). The LuCI runtime track is
 # whatever its firmware currently runs — devices drift, never assume a track
 # from the device name. Cookie name follows the runtime (runtime.lua).
-ROUTER_1=192.168.1.1
+# 192.0.2.0/24 is the RFC 5737 documentation range — replace with your device.
+ROUTER_1=192.0.2.1
 
 # Router 2 (device alias "253"; ssh key auth)
-ROUTER_2=192.168.2.253
-SSH_KEY_2=~/.ssh/id_ed253
+ROUTER_2=192.0.2.2
+SSH_KEY_2=~/.ssh/<your-router-key>
+
+# --- Per-run overrides (environment variables, optional) ---------------------
+# probe/lib.js reads these from the PROCESS ENVIRONMENT (not from this file),
+# so set them on the command line when invoking a probe, e.g.
+#   PROBE_ROUTER=<ip-or-host> node probe/wallpaper-smoke.js
+# Each one wins over the ROUTER_*/SSH_KEY_* values above. Placeholders only —
+# never put real device addresses, keys or tokens in this file.
+
+# PROBE_ROUTER — pick the target device for this run (default: ROUTER_1).
+# PROBE_ROUTER=<router-ip-or-host>
+
+# PROBE_SSH — log in through the ssh-forged-session path against this host
+# (Lua track with a root password) instead of the passwordless curl login.
+# PROBE_SSH=<ssh-host>
+
+# PROBE_SSH_KEY — ssh private key used by PROBE_SSH; when unset it falls back
+# to SSH_KEY_2 above.
+# PROBE_SSH_KEY=<path-to-private-key>
