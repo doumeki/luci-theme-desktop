@@ -104,15 +104,17 @@
             menuEl.innerHTML = html;
         },
 
-        // Which category step does this gesture mean? 0 = it is not a
-        // category swipe (leave it to the browser: scrolling etc.).
-        _swipeStep: function(dx, dy, atTop, atBottom) {
+        // Which category step does this gesture mean? 0 = not a category
+        // swipe. Vertical is NOT gated on scroll edges: the mobile menu
+        // list does not scroll in practice (verified on device), so an
+        // up/down swipe is free to switch (up = next, down = previous).
+        // Desktop is unaffected — these handlers are touch-only.
+        _swipeStep: function(dx, dy) {
             if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
                 return dx < 0 ? 1 : -1;                    // swipe left → next
             }
-            if (Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx) * 1.5) {
-                if (dy > 0 && atTop) return -1;            // pull down at the top → previous
-                if (dy < 0 && atBottom) return 1;          // push up at the bottom → next
+            if (Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+                return dy < 0 ? 1 : -1;                    // swipe up → next
             }
             return 0;
         },
@@ -176,30 +178,22 @@
             });
 
             // ===== Touch gestures: change category by swipe =====
-            // Horizontal swipe (clearly sideways) always switches. A VERTICAL
-            // swipe only switches when the scroller was ALREADY at the
-            // matching edge — otherwise up/down is the list's own scroll:
-            //   list already at the top    + swipe down → previous category
-            //   list already at the bottom + swipe up   → next category
-            // The search field is excluded so caret/selection keep working.
-            var tx = 0, ty = 0, tracking = false, atTop = false, atBottom = false;
+            // Any clearly directional swipe switches category: left/right
+            // or up (= next) / down (= previous). The menu list does not
+            // scroll on mobile in practice, so up/down is free to use. The
+            // search field is excluded so caret/selection keep working.
+            var tx = 0, ty = 0, tracking = false;
             menuEl.addEventListener('touchstart', function(e) {
                 tracking = false;
                 if (e.touches.length !== 1) return;
                 if (e.target.closest && e.target.closest('.menu-search')) return;
                 tx = e.touches[0].clientX; ty = e.touches[0].clientY;
-                var sc = e.target.closest && e.target.closest('.menu-items, .menu-categories');
-                atTop = true; atBottom = true;
-                if (sc && sc.scrollHeight > sc.clientHeight) {
-                    atTop = sc.scrollTop <= 0;
-                    atBottom = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1;
-                }
                 tracking = true;
             }, { passive: true });
             menuEl.addEventListener('touchmove', function(e) {
                 if (!tracking || e.touches.length !== 1) return;
                 var dx = e.touches[0].clientX - tx, dy = e.touches[0].clientY - ty;
-                var step = self._swipeStep(dx, dy, atTop, atBottom);
+                var step = self._swipeStep(dx, dy);
                 if (!step) return;
                 tracking = false;
                 self._swipeCategory(step);
