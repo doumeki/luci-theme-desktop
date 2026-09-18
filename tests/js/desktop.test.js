@@ -622,6 +622,33 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(window.Desktop._customUrlSet()['https://example.com'], true, 'custom url set kept');
     });
 
+    it('desktop custom-link layout survives a mobile-mode boot (cross-layout regression)', function() {
+        // icon_layout is shared between desktop and mobile, but custom links
+        // live in pins/mobile_pins separately. A mobile boot used to prune
+        // every layout entry whose URL was not in mobile_pins and not in the
+        // menu tree — including a custom link created on the desktop. Every
+        // phone visit silently reset that link's chosen icon/position.
+        var origMobile = window.LuCIDesktop.isMobile;
+        window.LuCIDesktop.isMobile = function() { return true; };
+        try {
+            window.LuCIMenuData = [{ href: '/cgi-bin/luci/admin/status/overview', title: 'Overview', subs: [] }];
+            setConfig({
+                pins: [{ url: 'https://example.com', title: 'My Link', custom: true, newTab: true }],
+                mobile_pins: [],
+                hidden_icons: [],
+                mobile_hidden: [],
+                icon_layout: { 'https://example.com': { icon: 'link', desktop: { col: 1, row: 0 } } },
+                widgets: {}, theme: {}, wallpaper: {}
+            });
+            window.Desktop.init();
+            var layout = window.LuCIDesktop.desktopState.layout();
+            assert.ok(layout['https://example.com'], 'desktop custom-link layout not pruned in mobile mode');
+            assert.equal(layout['https://example.com'].icon, 'link', 'chosen icon survives');
+        } finally {
+            window.LuCIDesktop.isMobile = origMobile;
+        }
+    });
+
     it('opens external links in a browser tab and apps in a desktop window', function() {
         var tabs = [], windows = [];
         window.open = function(u) { tabs.push(u); return null; };

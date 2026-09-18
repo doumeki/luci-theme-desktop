@@ -33,9 +33,26 @@
         // are NOT in the LuCI menu tree, so every menu-driven cleanup must
         // skip them — otherwise the user's own link is deleted as a
         // "ghost" on the next page load.
+        //
+        // icon_layout is shared between desktop and mobile, but pins are
+        // separate (pins vs mobile_pins). Read BOTH lists: a custom link
+        // created on the desktop must keep its icon/position when the page
+        // boots in mobile mode, and vice versa. Reading only State.pins()
+        // made a mobile visit prune the desktop custom-link layout entry.
         _customUrlSet: function() {
             var set = {};
-            State.pins().forEach(function(p) { if (p && p.custom) set[p.url] = true; });
+            var add = function(list) {
+                if (!list || typeof list.forEach !== 'function') return;
+                list.forEach(function(p) {
+                    if (p && p.custom && p.url) set[p.url] = true;
+                });
+            };
+            try {
+                var c = DESKTOP.getConfig();
+                add(c.pins);
+                add(c.mobile_pins);
+            } catch(e) {}
+            add(State.pins());   // live writer wins if a save is in flight
             return set;
         },
 
