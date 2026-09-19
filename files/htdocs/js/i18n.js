@@ -250,6 +250,8 @@
             'Network Traffic': '网络流量',
             'Interface': '接口',
             'Download': '下载',
+            'IP': 'IP 地址',
+            'Uptime': '已运行时间',
 
             // ===== tray.js =====
             'Tray item requires an id': '托盘项需要 id',

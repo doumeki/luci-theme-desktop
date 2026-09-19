@@ -49,6 +49,8 @@ describe('net-traffic widget', function() {
         assert.contains(el.textContent, 'Network Traffic', 'title');
         assert.equal(el.querySelector('.nt-rx').textContent, '--', 'rx placeholder');
         assert.equal(el.querySelector('.nt-tx').textContent, '--', 'tx placeholder');
+        assert.equal(el.querySelector('.nt-ip').textContent, '--', 'IP placeholder');
+        assert.equal(el.querySelector('.nt-uptime').textContent, '--', 'uptime placeholder');
         assert.equal(el.querySelector('.nt-iface').textContent, 'wan', 'default iface shown');
     });
 

@@ -624,6 +624,12 @@ msgstr ""
 msgid "Download"
 msgstr ""
 
+msgid "IP"
+msgstr ""
+
+msgid "Uptime"
+msgstr ""
+
 # tray.js
 msgid "Tray item requires an id"
 msgstr ""

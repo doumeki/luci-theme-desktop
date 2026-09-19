@@ -89,11 +89,33 @@
         return v.toFixed(0) + ' b/s';
     }
 
+    function fmtUptime(seconds) {
+        if (seconds == null || isNaN(seconds)) return '--';
+        seconds = Math.max(0, Math.floor(seconds));
+        var d = Math.floor(seconds / 86400);
+        var h = Math.floor((seconds % 86400) / 3600);
+        var m = Math.floor((seconds % 3600) / 60);
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+        if (m > 0) return m + 'm';
+        return seconds + 's';
+    }
+
     function renderRate(el, rate) {
         var rxEl = el.querySelector('.nt-rx');
         var txEl = el.querySelector('.nt-tx');
         if (rxEl) rxEl.textContent = fmtRate(rate ? rate.rx : null);
         if (txEl) txEl.textContent = fmtRate(rate ? rate.tx : null);
+    }
+
+    // IP + interface uptime for the currently selected port. The controller
+    // obtains these from ubus network.interface (l3_device/device mapping);
+    // older controller versions omit the fields, so show '--' then.
+    function renderIfaceMeta(el, cur) {
+        var ipEl = el.querySelector('.nt-ip');
+        var upEl = el.querySelector('.nt-uptime');
+        if (ipEl) ipEl.textContent = (cur && cur.ip) ? cur.ip : '--';
+        if (upEl) upEl.textContent = (cur && cur.uptime != null) ? fmtUptime(cur.uptime) : '--';
     }
 
     // Picker options, sorted by the SAME rule as auto-adopt (ifaceScore:
@@ -178,6 +200,10 @@
                         _('Download') + '</span><span class="value nt-rx">--</span></div>' +
                     '<div class="widget-card-row"><span class="label nt-tx-label">&#8593; ' +
                         _('Upload') + '</span><span class="value nt-tx">--</span></div>' +
+                    '<div class="widget-card-row"><span class="label nt-ip-label">' +
+                        _('IP') + '</span><span class="value nt-ip">--</span></div>' +
+                    '<div class="widget-card-row"><span class="label nt-uptime-label">' +
+                        _('Uptime') + '</span><span class="value nt-uptime">--</span></div>' +
                 '</div>';
         },
         // Async update: return the fetch Promise. WM prevents overlapping
@@ -204,11 +230,13 @@
                         if (api && api.saveConfig) api.saveConfig();
                         cur = all[data.iface];
                     }
-                    if (!cur) { renderRate(el, null); return; }
+                    if (!cur) { renderRate(el, null); renderIfaceMeta(el, null); return; }
                     renderRate(el, selfDiff(data, cur));
+                    renderIfaceMeta(el, cur);
                 })
                 .catch(function() {
                     renderRate(el, null);
+                    renderIfaceMeta(el, null);
                 });
         }
     });

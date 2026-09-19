@@ -315,6 +315,42 @@ function action_interfaces()
     luci.http.write_json(ifaces)
 end
 
+-- Interface metadata for the net-traffic widget: IPv4 address + uptime
+-- for the selected netdev. /proc/net/dev lists physical/device names, while
+-- ubus network.interface returns logical-interface records with
+-- ipv4-address, uptime, l3_device and device. Map both l3_device and the
+-- underlying device so selecting eth3 (WAN physical port) still shows the
+-- WAN IP/uptime from the pppoe-wan logical record.
+local function iface_meta_map()
+    local map = {}
+    local raw = ""
+    local p = io.popen("ubus call network.interface dump 2>/dev/null")
+    if p then raw = p:read("*a") or ""; p:close() end
+    if raw == "" then return map end
+    local jsonc = luci.jsonc or luci.json
+    if not jsonc then return map end
+    local ok, parsed = pcall(jsonc.parse, raw)
+    if not ok or type(parsed) ~= "table" then return map end
+    local list = parsed["interface"]
+    if type(list) ~= "table" then return map end
+    for _, rec in ipairs(list) do
+        if type(rec) == "table" then
+            local ip = nil
+            local addrs = rec["ipv4-address"]
+            if type(addrs) == "table" and type(addrs[1]) == "table" then
+                ip = addrs[1].address
+            end
+            local info = { ip = ip, uptime = tonumber(rec.uptime) }
+            local function put(name)
+                if name and name ~= "" and not map[name] then map[name] = info end
+            end
+            put(rec.l3_device)
+            put(rec.device)
+        end
+    end
+    return map
+end
+
 -- Widget data: cumulative rx/tx bytes per interface, straight from
 -- /proc/net/dev. The widget diffs two samples for the rate — no nlbwmon
 -- needed (the device may not have it installed).
@@ -327,6 +363,7 @@ end
 function action_bandwidth()
     luci.http.prepare_content("application/json")
     local out = {}
+    local meta = iface_meta_map()
     for line in io.lines("/proc/net/dev") do
         local name = line:match("^%s*([%w%.%-]+):")
         if name then
@@ -339,7 +376,12 @@ function action_bandwidth()
                 local f = io.open("/sys/class/net/" .. name .. "/device")
                 local phy = f ~= nil
                 if f then f:close() end
-                out[name] = { rx = nums[1], tx = nums[9], phy = phy }
+                local m = meta[name]
+                out[name] = {
+                    rx = nums[1], tx = nums[9], phy = phy,
+                    ip = m and m.ip or nil,
+                    uptime = m and m.uptime or nil
+                }
             end
         end
     end

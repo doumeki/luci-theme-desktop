@@ -799,18 +799,17 @@ describe('Widget API: resizable (opt-in px width/height)', function() {
         assert.equal(inst.height, natural.h, 'height clamped at content height');
     });
 
-    it('net-traffic min height is its content — not a fixed 120px floor', function() {
-        // Regression: net-traffic renders only 2 rows (~90px natural), but
-        // the shared 120px floor stopped the drag early, leaving a card
-        // with ~30px of empty space below the rows.
+    it('net-traffic min height is its content (not the old fixed 120px floor)', function() {
+        // Regression: the shared 120px floor used to stop the drag early.
+        // net-traffic now renders four rows (rates + IP + uptime); the drag
+        // floor must still follow the card's natural content height.
         WidgetManager.enable('net-traffic');
         var inst = WidgetManager.instances['net-traffic-1'];
         dragHandle(inst, 0, -1000);
-        assert.ok(inst.height < 120, 'shrinks below the old fixed 120px floor');
         // Headless layout quirk: the title sits exactly on the wrap
         // boundary at the content width (one line more after the drag than
-        // the measurement at drag start, 63 vs 84 here). Both satisfy the
-        // intent — content floor, not a fixed 120 — so allow one line.
+        // the measurement at drag start). Both satisfy the intent — content
+        // floor, not a fixed 120 — so allow one line.
         var natural = naturalCardSize(inst).h;
         assert.ok(Math.abs(inst.height - natural) <= 25,
             'clamped at the card content height (got ' + inst.height + ', natural ' + natural + ')');
@@ -855,12 +854,13 @@ describe('Widget API: resizable (opt-in px width/height)', function() {
         // change, iface switch) — the resize silently undid itself.
         WidgetManager.enable('net-traffic');
         var inst = WidgetManager.instances['net-traffic-1'];
-        inst.width = 100; inst.height = 100;
+        var naturalH = naturalCardSize(inst).h;
+        inst.width = 100; inst.height = naturalH;
         dragHandle(inst, 200, 0);   // → 300px wide
         assert.equal(inst.el.style.width, '300px', 'dragged width applied');
         inst._api.rerender();
         assert.equal(inst.el.style.width, '300px', 'width survives re-render');
-        assert.equal(inst.el.style.height, '100px', 'height survives re-render');
+        assert.equal(inst.el.style.height, naturalH + 'px', 'height survives re-render');
         assert.equal(inst.el.querySelector('.nt-rx').textContent, '--',
             'card rebuilt after re-render');
         // render() wipes innerHTML — the resize handle is a direct child

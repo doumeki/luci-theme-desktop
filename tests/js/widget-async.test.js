@@ -30,6 +30,20 @@ function sleep(ms) {
     return new Promise(function(res) { setTimeout(res, ms); });
 }
 
+/* Conditional wait: poll `cond` every 10ms until it is truthy, or give up
+ * after `timeoutMs` so the following assertions report the real failure.
+ * Used instead of a fixed sleep so a slow machine cannot make these tests
+ * flaky (net-traffic baseline tick / async option fill). */
+function waitFor(cond, timeoutMs) {
+    var deadline = Date.now() + (timeoutMs || 3000);
+    return new Promise(function(res) {
+        (function poll() {
+            if (cond() || Date.now() > deadline) return res();
+            setTimeout(poll, 10);
+        })();
+    });
+}
+
 function registerAsyncWidget(id, updateFn) {
     WidgetManager.register({
         id: id,
@@ -100,7 +114,7 @@ describe('Widget API: async update runtime', function() {
     it('net-traffic update renders rates from the desktop bandwidth endpoint', function() {
         var origFetch = window.fetch;
         var lastUrl = null;
-        var sample = { rx: 1000, tx: 200, phy: true };
+        var sample = { rx: 10000, tx: 2000, phy: true, ip: '192.0.2.10', uptime: 3600 };
         window.fetch = function(url) {
             // New protocol: /desktop/bandwidth returns cumulative per-iface
             // bytes { iface: { rx, tx, phy } }; the widget diffs samples.
@@ -109,19 +123,33 @@ describe('Widget API: async update runtime', function() {
         };
         WidgetManager.enable('net-traffic', { data: { iface: 'eth0' } });
         var inst = WidgetManager.instances['net-traffic-1'];
+        // Stop enable()'s 1s auto-poll: these tests drive update() manually,
+        // and a background tick racing the assertions is flaky — observed it
+        // rewriting the first-tick '--' baseline to '0 b/s' on a slow machine.
+        clearInterval(inst._timer);
         var d = WidgetManager.registry['net-traffic'];
-        var first = d.update.call(d, inst.el, inst.data, inst._api);
-        return first.then(function() {
+        // enable() already fired the first tick synchronously — that IS the
+        // baseline. Wait for it to settle (poll, not a fixed sleep) instead
+        // of racing it with a second update: when the two diffs fall in
+        // different milliseconds the later one renders '0 b/s', which is the
+        // flake this used to hit on slow machines.
+        return waitFor(function() { return !inst._updating; }, 3000).then(function() {
             assert.equal(lastUrl, '/cgi-bin/luci/admin/desktop/bandwidth',
                 'rates come from the theme bandwidth endpoint');
             assert.equal(inst.el.querySelector('.nt-rx').textContent, '--', 'first tick is baseline');
             assert.equal(inst.el.querySelector('.nt-tx').textContent, '--', 'first tick is baseline');
-            // Second tick after a real time gap: bytes grew by 1000 rx /
-            // 200 tx over ~1s → ≈8 kb/s / ≈2 kb/s. (selfDiff needs dt > 0;
-            // the exact figure wobbles with the sleep duration, so match
-            // the unit-level value, not an exact string.)
+            assert.equal(inst.el.querySelector('.nt-ip').textContent, '192.0.2.10',
+                'selected iface IP rendered on first tick');
+            assert.equal(inst.el.querySelector('.nt-uptime').textContent, '1h',
+                'selected iface uptime rendered on first tick');
+            // Second tick after a real time gap: rx/tx grew by 10000/2000
+            // bytes over ~1s → ≈73 kb/s / ≈15 kb/s. selfDiff needs dt > 0, and
+            // the deltas are sized so the formatted unit stays kb/s even if a
+            // slow machine stretches the sleep (2000 bytes × 8 / dt ≥ 1000
+            // holds up to dt ≈ 16s); match the unit-level value, not an exact
+            // string.
             return sleep(1100).then(function() {
-                sample = { rx: 2000, tx: 400, phy: true };
+                sample = { rx: 20000, tx: 4000, phy: true, ip: '192.0.2.10', uptime: 3660 };
                 return d.update.call(d, inst.el, inst.data, inst._api);
             });
         }).then(function() {
@@ -129,6 +157,10 @@ describe('Widget API: async update runtime', function() {
                 'rx rate rendered (got ' + inst.el.querySelector('.nt-rx').textContent + ')');
             assert.ok(/^\d+ kb\/s$/.test(inst.el.querySelector('.nt-tx').textContent),
                 'tx rate rendered (got ' + inst.el.querySelector('.nt-tx').textContent + ')');
+            assert.equal(inst.el.querySelector('.nt-ip').textContent, '192.0.2.10',
+                'IP remains after later ticks');
+            assert.equal(inst.el.querySelector('.nt-uptime').textContent, '1h 1m',
+                'uptime refreshes on later ticks');
         }).then(function() {
             window.fetch = origFetch;
         }, function(e) {
@@ -144,6 +176,10 @@ describe('Widget API: async update runtime', function() {
         };
         WidgetManager.enable('net-traffic', { data: { iface: 'eth0' } });
         var inst = WidgetManager.instances['net-traffic-1'];
+        // Stop enable()'s 1s auto-poll: these tests drive update() manually,
+        // and a background tick racing the assertions is flaky — observed it
+        // rewriting the first-tick '--' baseline to '0 b/s' on a slow machine.
+        clearInterval(inst._timer);
         var d = WidgetManager.registry['net-traffic'];
         return d.update.call(d, inst.el, inst.data, inst._api).then(function() {
             assert.equal(inst.el.querySelector('.nt-rx').textContent, '--');
@@ -172,6 +208,10 @@ describe('Widget API: async update runtime', function() {
         };
         WidgetManager.enable('net-traffic', { data: { iface: 'wan' } });   // default, not on device
         var inst = WidgetManager.instances['net-traffic-1'];
+        // Stop enable()'s 1s auto-poll: these tests drive update() manually,
+        // and a background tick racing the assertions is flaky — observed it
+        // rewriting the first-tick '--' baseline to '0 b/s' on a slow machine.
+        clearInterval(inst._timer);
         var d = WidgetManager.registry['net-traffic'];
         return d.update.call(d, inst.el, inst.data, inst._api).then(function() {
             assert.equal(inst.data.iface, 'pppoe-wan', 'switched to first real iface');
@@ -206,7 +246,9 @@ describe('Widget API: async update runtime', function() {
         assert.ok(sel, 'iface select in panel');
         assert.ok(sel.hasAttribute('data-load-options'), 'flagged for async fill');
         assert.equal(sel.querySelectorAll('option').length, 2, 'static fallback renders first');
-        return sleep(50).then(function() {
+        return waitFor(function() {
+            return sel.querySelectorAll('option').length > 2;
+        }, 3000).then(function() {
             var values = {};
             sel.querySelectorAll('option').forEach(function(o) { values[o.value] = o.textContent; });
             assert.equal(values['br-lan'], 'br-lan', 'dynamic iface loaded');
@@ -236,7 +278,9 @@ describe('Widget API: async update runtime', function() {
         WidgetManager.openSettings();
         var sel = document.querySelector('select[data-option-key="iface"]');
         assert.equal(sel.value, 'br-lan', 'persisted value shown BEFORE async fill');
-        return sleep(50).then(function() {
+        return waitFor(function() {
+            return sel.querySelectorAll('option').length > 2;
+        }, 3000).then(function() {
             assert.equal(sel.value, 'br-lan', 'still selected after dynamic fill');
             WidgetManager.closeSettings();
         }).then(function() {
@@ -265,8 +309,17 @@ describe('Widget API: async update runtime', function() {
         };
         WidgetManager.enable('net-traffic', { data: { iface: 'eth5' } });
         var inst = WidgetManager.instances['net-traffic-1'];
+        // Stop enable()'s 1s auto-poll: these tests drive update() manually,
+        // and a background tick racing the assertions is flaky — observed it
+        // rewriting the first-tick '--' baseline to '0 b/s' on a slow machine.
+        clearInterval(inst._timer);
         var d = WidgetManager.registry['net-traffic'];
-        return sleep(50).then(function() {
+        // Wait for the enable-time first tick (baseline) to fully drain before
+        // counting this manual update's fetches. Poll the widget's in-flight
+        // flag instead of sleeping a fixed 50ms: on a slow machine the first
+        // tick could still be running, leak its fetches into `calls` and fail
+        // the "no bandwidth refetch" assertion below.
+        return waitFor(function() { return !inst._updating; }, 3000).then(function() {
             calls.length = 0;   // drop the enable-time first update
             return d.update.call(d, inst.el, inst.data, inst._api);
         }).then(function() {

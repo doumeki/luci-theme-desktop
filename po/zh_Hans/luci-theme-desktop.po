@@ -624,6 +624,12 @@ msgstr "接口"
 msgid "Download"
 msgstr "下载"
 
+msgid "IP"
+msgstr "IP 地址"
+
+msgid "Uptime"
+msgstr "已运行时间"
+
 # tray.js
 msgid "Tray item requires an id"
 msgstr "托盘项需要 id"
