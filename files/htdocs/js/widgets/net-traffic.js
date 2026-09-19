@@ -171,6 +171,7 @@
             accent:       { type: 'color', label: _('Accent color'), default: '#ffffff' },
             bg:           { type: 'color', label: _('Card background'), default: '#0a0e14' },
             hideBgAtZero: { type: 'checkbox', label: _('Hide background at 0% opacity'), default: false },
+            showIfaceInfo:{ type: 'checkbox', label: _('Interface info'), default: true },
             iface: {
                 type: 'select',
                 label: _('Interface'),
@@ -192,6 +193,14 @@
             // the user's dragged width. A resizable instance gets its px size
             // from the drag (config width, restored by enable).
             prevSample = null;   // iface/render changed — restart diffing
+            var infoHtml = '';
+            if (data.showIfaceInfo !== false) {
+                infoHtml =
+                    '<div class="widget-card-row"><span class="label nt-ip-label">' +
+                        _('IP') + '</span><span class="value nt-ip">--</span></div>' +
+                    '<div class="widget-card-row"><span class="label nt-uptime-label">' +
+                        _('Uptime') + '</span><span class="value nt-uptime">--</span></div>';
+            }
             el.innerHTML =
                 '<div class="widget-card">' +
                     '<div class="widget-card-title">' + _('Network Traffic') +
@@ -200,10 +209,7 @@
                         _('Download') + '</span><span class="value nt-rx">--</span></div>' +
                     '<div class="widget-card-row"><span class="label nt-tx-label">&#8593; ' +
                         _('Upload') + '</span><span class="value nt-tx">--</span></div>' +
-                    '<div class="widget-card-row"><span class="label nt-ip-label">' +
-                        _('IP') + '</span><span class="value nt-ip">--</span></div>' +
-                    '<div class="widget-card-row"><span class="label nt-uptime-label">' +
-                        _('Uptime') + '</span><span class="value nt-uptime">--</span></div>' +
+                    infoHtml +
                 '</div>';
         },
         // Async update: return the fetch Promise. WM prevents overlapping

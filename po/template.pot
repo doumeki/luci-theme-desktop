@@ -621,6 +621,9 @@ msgstr ""
 msgid "Interface"
 msgstr ""
 
+msgid "Interface info"
+msgstr ""
+
 msgid "Download"
 msgstr ""
 

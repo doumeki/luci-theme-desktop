@@ -621,6 +621,9 @@ msgstr "网络流量"
 msgid "Interface"
 msgstr "接口"
 
+msgid "Interface info"
+msgstr "接口信息"
+
 msgid "Download"
 msgstr "下载"
 

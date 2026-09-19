@@ -41,6 +41,9 @@ describe('net-traffic widget', function() {
         assert.equal(d.options.iface.type, 'select');
         assert.equal(d.options.iface.default, 'wan');
         assert.equal(typeof d.options.iface.loadOptions, 'function', 'dynamic interface list');
+        assert.ok(d.options.showIfaceInfo, 'interface-info toggle declared');
+        assert.equal(d.options.showIfaceInfo.type, 'checkbox');
+        assert.equal(d.options.showIfaceInfo.default, true, 'shown by default');
     });
 
     it('render builds the skeleton with placeholders', function() {
@@ -58,6 +61,15 @@ describe('net-traffic widget', function() {
         WidgetManager.enable('net-traffic', { data: { iface: 'br-lan' } });
         var el = WidgetManager.instances['net-traffic-1'].el;
         assert.equal(el.querySelector('.nt-iface').textContent, 'br-lan');
+    });
+
+    it('Interface info checkbox controls the IP/uptime rows', function() {
+        WidgetManager.enable('net-traffic', { data: { showIfaceInfo: false } });
+        var el = WidgetManager.instances['net-traffic-1'].el;
+        assert.ok(!el.querySelector('.nt-ip'), 'IP row hidden when disabled');
+        assert.ok(!el.querySelector('.nt-uptime'), 'uptime row hidden when disabled');
+        assert.ok(el.querySelector('.nt-rx') && el.querySelector('.nt-tx'),
+            'rate rows stay visible');
     });
 });
 

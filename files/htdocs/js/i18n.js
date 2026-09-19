@@ -249,6 +249,7 @@
             // ===== widgets/net-traffic.js =====
             'Network Traffic': '网络流量',
             'Interface': '接口',
+            'Interface info': '接口信息',
             'Download': '下载',
             'IP': 'IP 地址',
             'Uptime': '已运行时间',
