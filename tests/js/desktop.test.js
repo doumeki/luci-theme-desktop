@@ -471,14 +471,18 @@ describe('Desktop custom URL shortcuts', function() {
         document.querySelectorAll('.link-dialog-overlay').forEach(function(el) { el.remove(); });
     });
 
-    it('normalizes what the user typed into an openable URL', function() {
+    it('normalizes what the user typed without adding an http:// prefix', function() {
         var D = window.Desktop;
         assert.equal(D.normalizeUrl('  /cgi-bin/luci/admin/status/overview '), '/cgi-bin/luci/admin/status/overview', 'LuCI path kept');
         assert.equal(D.normalizeUrl('admin/status/overview'), '/admin/status/overview', 'bare LuCI path gets a slash');
         assert.equal(D.normalizeUrl('https://example.com/x'), 'https://example.com/x', 'https kept');
-        assert.equal(D.normalizeUrl('example.com'), 'http://example.com', 'bare host → http://');
-        assert.equal(D.normalizeUrl('192.0.2.1:8080'), 'http://192.0.2.1:8080', 'bare host:port → http://');
+        assert.equal(D.normalizeUrl('example.com'), 'example.com', 'bare host stored as typed');
+        assert.equal(D.normalizeUrl('example.com:8080'), 'example.com:8080', 'domain:port is not a scheme');
+        assert.equal(D.normalizeUrl('192.0.2.1:8080'), '192.0.2.1:8080', 'bare IP:port stored as typed');
+        assert.equal(D.normalizeUrl('{noproto}//example.com:8080'), '{noproto}//example.com:8080', 'noproto marker preserved');
+        assert.equal(D.normalizeUrl('{noproto}mailto:x@example.com'), '{noproto}mailto:x@example.com', 'noproto allows non-http schemes');
         assert.equal(D.normalizeUrl('javascript:alert(1)'), null, 'javascript: refused');
+        assert.equal(D.normalizeUrl('{noproto}javascript:alert(1)'), null, 'noproto still refuses javascript:');
         assert.equal(D.normalizeUrl('data:text/html,x'), null, 'data: refused');
         assert.equal(D.normalizeUrl('//evil.example.com'), null, 'protocol-relative refused');
         assert.equal(D.normalizeUrl('   '), null, 'empty refused');
@@ -489,6 +493,8 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(D.isExternalUrl('/cgi-bin/luci/admin/status/overview'), false, 'LuCI path is local');
         assert.equal(D.isExternalUrl(location.origin + '/luci-static/desktop/x.css'), false, 'same origin is local');
         assert.equal(D.isExternalUrl('https://example.com/'), true, 'other origin is external');
+        assert.equal(D.isExternalUrl('example.com:3000'), true, 'bare host is external');
+        assert.equal(D.isExternalUrl('{noproto}//example.com:3000'), true, 'noproto marker ignored for scope check');
     });
 
     it('stores a custom link as a pin flagged custom', function() {
@@ -549,6 +555,7 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(D.resolveUrlVars('{origin}/cgi-bin/luci/admin/status/overview'), location.origin + '/cgi-bin/luci/admin/status/overview', '{origin}');
         assert.equal(D.resolveUrlVars('{httpx}://{router}:{port}/x'), (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':' + location.port + '/x', '{port}');
         assert.equal(D.resolveUrlVars('https://example.com/x'), 'https://example.com/x', 'no placeholders → untouched');
+        assert.equal(D.resolveUrlVars('{noproto}{router}:300'), location.hostname + ':300', 'noproto marker stripped');
         assert.equal(D.resolveUrlVars('/cgi-bin/luci/admin/status/overview'), '/cgi-bin/luci/admin/status/overview', 'plain path untouched');
     });
 
@@ -590,6 +597,24 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(savedPins()[0].url, '{httpx}://{router}:300', 'stored as typed (works via IP or domain)');
         window.Desktop.openShortcut('{httpx}://{router}:300', 'App');
         assert.equal(tabs[0], (location.protocol === 'https:' ? 'https' : 'http') + '://' + location.hostname + ':300', 'expanded at open time');
+    });
+
+    it('adds http:// only at open time for a bare host', function() {
+        var tabs = [];
+        window.open = function(u) { tabs.push(u); return null; };
+        window.Desktop.addCustomUrl('App', 'example.com:3000', true);
+        assert.equal(savedPins()[0].url, 'example.com:3000', 'stored without an http:// prefix');
+        window.Desktop.openShortcut('example.com:3000', 'App');
+        assert.equal(tabs[0], 'http://example.com:3000', 'http:// added at open time');
+    });
+
+    it('{noproto} disables the open-time http:// prefix', function() {
+        var tabs = [];
+        window.open = function(u) { tabs.push(u); return null; };
+        window.Desktop.addCustomUrl('App', '{noproto}//example.com:3000', true);
+        assert.equal(savedPins()[0].url, '{noproto}//example.com:3000', 'marker stored');
+        window.Desktop.openShortcut('{noproto}//example.com:3000', 'App');
+        assert.equal(tabs[0], '//example.com:3000', 'target kept verbatim (marker stripped)');
     });
 
     it('opens a {router} link in a desktop window when the tab box is off', function() {

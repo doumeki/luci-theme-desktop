@@ -179,7 +179,7 @@
                             _('LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.') +
                         '</div>' +
                         '<div class="link-hint">' +
-                            _('{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000') +
+                            _('{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. {noproto} = keep the address exactly as typed (no automatic http:// prefix). Example: {httpx}://{router}:3000') +
                         '</div>' +
                         '<div class="link-error"></div>' +
                     '</div>' +

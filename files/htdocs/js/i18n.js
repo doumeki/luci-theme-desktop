@@ -173,7 +173,7 @@
             'Open in a new browser tab': '在新标签页中打开',
             'LuCI pages (/cgi-bin/luci/…) open inside the desktop; external sites open in a browser tab.': 'LuCI 页面（/cgi-bin/luci/…）在桌面窗口内打开；外部站点在新标签页打开。',
             'Enter a valid http(s) address or a LuCI path.': '请输入有效的 http(s) 地址或 LuCI 路径。',
-            '{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000': '{router} = 当前访问的主机名，{httpx} = http 或 https，{port} = 当前端口，{origin} = 协议://主机:端口。示例：{httpx}://{router}:3000',
+            '{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. {noproto} = keep the address exactly as typed (no automatic http:// prefix). Example: {httpx}://{router}:3000': '{router} = 当前访问的主机名，{httpx} = http 或 https，{port} = 当前端口，{origin} = 协议://主机:端口。{noproto} = 地址按原样保留（不自动添加 http:// 前缀）。示例：{httpx}://{router}:3000',
 
             // ===== wm.js =====
             'Untitled': '无标题',

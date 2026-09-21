@@ -438,7 +438,7 @@ msgstr ""
 msgid "Enter a valid http(s) address or a LuCI path."
 msgstr ""
 
-msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. Example: {httpx}://{router}:3000"
+msgid "{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. {noproto} = keep the address exactly as typed (no automatic http:// prefix). Example: {httpx}://{router}:3000"
 msgstr ""
 
 # wm.js

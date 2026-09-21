@@ -12,6 +12,19 @@
     if (!DESKTOP) { console.error('desktop-links.js: LuCIDesktop namespace not found'); return; }
     var State = DESKTOP.desktopState;
 
+    // 'example.com:3000' is a host:port, not an explicit scheme. Without
+    // this distinction the old scheme regex classified such links as
+    // 'example.com:' and rejected them (or prefixed them as http:// at save
+    // time). Keep the distinction in one place, used by normalizeUrl() and
+    // the open-time prefix logic.
+    function hostPortLike(u) {
+        return /^[a-z0-9][a-z0-9.\-]*:\d+(?:[\/?#]|$)/i.test(u || '');
+    }
+    function explicitScheme(u) {
+        if (!u || hostPortLike(u)) return null;
+        return /^([a-z][a-z0-9+.\-]*):/i.exec(u);
+    }
+
     var links = {
         // Build the set of URLs registered in the LuCI menu tree.
         menuUrls: function() {
@@ -126,9 +139,15 @@
 
         // ===== Custom URL shortcuts =====
 
-        // Normalize what the user typed into an openable URL, or null when
-        // it must not be opened (never javascript:/data:, never
-        // protocol-relative).
+        // Validate and store what the user typed. Bare hosts are stored
+        // exactly as typed — the automatic http:// prefix is applied only
+        // at OPEN time (openTarget), so the edit dialog no longer rewrites
+        // the user's input. Use a leading {noproto} marker to disable even
+        // that open-time prefix.
+        //
+        // Still refuses javascript:/data:/vbscript:/file: and bare
+        // protocol-relative URLs (the noproto marker is the explicit,
+        // auditable opt-in for special cases).
         normalizeUrl: function(raw) {
             var u = (raw || '').replace(/^\s+|\s+$/g, '');
             if (!u) return null;
@@ -137,26 +156,31 @@
             //   {httpx}://host:3000   keep (scheme placeholder)
             //   {origin}/cgi-bin/...  keep (already scheme://host:port)
             //   {router}:3000         host → add http:// like any bare host
+            //   {noproto}//host:3000  keep verbatim (no http:// at open)
             var lead = /^\{[a-z][a-z0-9]*\}/i.exec(u);
             if (lead) {
                 var name = lead[0].slice(1, -1).toLowerCase();
                 var rest = u.slice(lead[0].length);
+                if (name === 'noproto') {
+                    if (!rest || /^(javascript|data|vbscript|file):/i.test(rest)) return null;
+                    return lead[0] + rest;
+                }
                 if (name === 'httpx') {
                     if (rest.indexOf('://') === 0) return u;
                     if (rest.indexOf('//') === 0) return lead[0] + ':' + rest;   // {httpx}//host
                     return lead[0] + '://' + rest;                               // {httpx}host
                 }
                 if (name === 'origin') return u;
-                if (/^:\/\//.test(rest) || /^[a-z][a-z0-9+.\-]*:/i.test(rest)) return u;
+                if (/^:\/\//.test(rest) || explicitScheme(rest)) return u;
                 return 'http://' + u;
             }
-            if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) {          // explicit scheme
+            if (explicitScheme(u)) {                         // real scheme (not host:port)
                 return /^https?:/i.test(u) ? u : null;
             }
             if (u.indexOf('//') === 0) return null;          // protocol-relative
             if (u.charAt(0) === '/') return u;               // LuCI / static path
             if (/^(admin|cgi-bin)\//.test(u)) return '/' + u;
-            return 'http://' + u;                            // bare host or IP
+            return u;                                        // bare host/IP: store verbatim
         },
 
         // Placeholders in a custom URL, resolved at OPEN time — one
@@ -173,6 +197,7 @@
             if (!url || url.indexOf('{') === -1) return url;
             if (typeof location === 'undefined') return url;
             return url
+                .replace(/\{noproto\}/gi, '')
                 .replace(/\{(?:router|host|hostname)\}/gi, location.hostname)
                 .replace(/\{httpx\}/gi, (location.protocol || '').replace(':', ''))
                 .replace(/\{port\}/gi, location.port || '')
@@ -180,10 +205,18 @@
         },
 
         // A URL that leaves this LuCI origin (default: open in a new tab).
+        // {noproto} is a storage marker, not part of the target — strip it
+        // before deciding, otherwise it always looks like a non-local URL.
         isExternalUrl: function(url) {
-            if (!url || url.charAt(0) === '/') return false;
+            var u = (url || '').replace(/^\{noproto\}/i, '');
+            if (!u) return false;
+            // A single leading slash is a same-origin LuCI path; a double
+            // slash is protocol-relative and therefore external unless its
+            // resolved origin matches the current one.
+            if (u.charAt(0) === '/' && u.charAt(1) !== '/') return false;
             if (typeof location === 'undefined') return true;
-            return url.indexOf(location.origin + '/') !== 0;
+            if (u.indexOf('//') === 0) u = (location.protocol || 'http:') + u;
+            return u.indexOf(location.origin + '/') !== 0;
         },
 
         addCustomUrl: function(title, url, newTab) {
@@ -211,7 +244,15 @@
         // desktop window like any app. {host}-style placeholders expand
         // here, against the address the shell was opened with.
         openShortcut: function(url, title) {
+            // Prefix only the OPEN target, never the stored URL. This keeps
+            // the edit dialog faithful to what the user typed while links
+            // like 'example.com:3000' still open as http://example.com:3000.
+            // {noproto} is the explicit opt-out.
+            var noProto = /^\{noproto\}/i.test(url || '');
             var target = this.resolveUrlVars(url);
+            if (!noProto && target && target.charAt(0) !== '/' && !explicitScheme(target)) {
+                target = 'http://' + target;
+            }
             var pinnedItems = State.pins();
             for (var i = 0; i < pinnedItems.length; i++) {
                 var p = pinnedItems[i];
