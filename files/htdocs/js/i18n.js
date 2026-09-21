@@ -177,6 +177,7 @@
 
             // ===== wm.js =====
             'Untitled': '无标题',
+            'Router': '路由器',
             'Applying…': '正在应用…',
             'Minimize': '最小化',
             'Pin to top': '窗口置顶',

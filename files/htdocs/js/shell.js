@@ -180,9 +180,21 @@ window.LuCIDesktop = (function() {
         document.body.appendChild(banner);
     };
 
+    // Browser tab title: <router hostname> Router, using the theme's own
+    // i18n dictionary (Router -> 路由器 in zh_cn). The header injects
+    // __ROUTER_HOSTNAME__ server-side; document.title is intentionally
+    // owned here, not by WM.open (which must not rewrite it per user
+    // request 2026-09-18). Exposed as a small helper for the test suite.
+    self._applyRouterTitle = function() {
+        var host = window.__ROUTER_HOSTNAME__ ||
+            (typeof location !== 'undefined' && location.hostname) || 'OpenWrt';
+        document.title = host + ' ' + _('Router');
+    };
+
     // Boot sequence: called from footer.htm after all JS loaded
     self.boot = function() {
         document.documentElement.classList.add('desktop-ready');
+        self._applyRouterTitle();
         // Clear any drag overlay / disabled iframes left by an interrupted drag
         if (self.hideDragOverlay) self.hideDragOverlay();
         // Apply theme defaults, merge any saved values on top — no dependency on CSS :root

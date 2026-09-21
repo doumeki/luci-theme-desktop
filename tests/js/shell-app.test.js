@@ -56,4 +56,39 @@ describe('Direct-visit app boot (__DESKTOP_BOOT_APP__)', function() {
         assert.equal(m[1], 'admin/status/overview', 'path extracted');
     });
 });
+
+// ===== Browser tab title: <hostname> Router (translated) =====
+// The header injects __ROUTER_HOSTNAME__; shell.boot() applies the theme
+// i18n dictionary (zh_cn: Router -> 路由器). WM.open must not touch it.
+describe('Router browser title', function() {
+    var origLang, origHost, origTitle;
+
+    beforeEach(function() {
+        origLang = document.documentElement.getAttribute('lang');
+        origHost = window.__ROUTER_HOSTNAME__;
+        origTitle = document.title;
+    });
+
+    afterEach(function() {
+        if (origLang === null) document.documentElement.removeAttribute('lang');
+        else document.documentElement.setAttribute('lang', origLang);
+        if (typeof origHost === 'undefined') delete window.__ROUTER_HOSTNAME__;
+        else window.__ROUTER_HOSTNAME__ = origHost;
+        document.title = origTitle;
+    });
+
+    it('uses hostname + translated Router in zh_cn', function() {
+        document.documentElement.setAttribute('lang', 'zh_Hans');
+        window.__ROUTER_HOSTNAME__ = 'TestRouter';
+        DESKTOP._applyRouterTitle();
+        assert.equal(document.title, 'TestRouter 路由器');
+    });
+
+    it('uses hostname + Router in English', function() {
+        document.documentElement.setAttribute('lang', 'en');
+        window.__ROUTER_HOSTNAME__ = 'TestRouter';
+        DESKTOP._applyRouterTitle();
+        assert.equal(document.title, 'TestRouter Router');
+    });
+});
 })();

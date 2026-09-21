@@ -445,6 +445,9 @@ msgstr "{router} = 当前访问的主机名，{httpx} = http 或 https，{port} 
 msgid "Untitled"
 msgstr "无标题"
 
+msgid "Router"
+msgstr "路由器"
+
 msgid "Applying…"
 msgstr "正在应用…"
 
