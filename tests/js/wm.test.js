@@ -340,11 +340,10 @@ describe('WM window height ceiling', function() {
     });
 });
 
-// ===== Browser tab title follows the opened app (2026-08-16) =====
-// User report: the browser tab shows LuCI's internal page title ("概况")
-// instead of the app name the user opened (argon shows the menu name).
-// WM.open must set document.title to the app title; closing the last
-// window restores the default shell title.
+// ===== Browser tab title stays under LuCI/owner control =====
+// User request (2026-09-18): WM must not override document.title. The
+// window titlebar/taskbar still receives the passed app title, but the
+// browser tab keeps whatever LuCI/the page set.
 describe('WM document.title', function() {
     var origTitle;
 
@@ -357,24 +356,23 @@ describe('WM document.title', function() {
         document.title = origTitle;
     });
 
-    it('WM.open sets document.title to the app title', function() {
-        WM.open('/cgi-bin/luci/admin/status', 'Status');
-        assert.equal(document.title, 'Status', 'tab title = opened app name');
+    it('WM.open leaves document.title unchanged', function() {
+        document.title = 'Original Tab Title';
+        var id = WM.open('/cgi-bin/luci/admin/status', 'Status');
+        assert.equal(document.title, 'Original Tab Title', 'tab title not overridden');
+        // window/taskbar title is still the app name
+        var w = LuCIDesktop.windows[id];
+        assert.ok(w && w.el.querySelector('.window-title').textContent === 'Status',
+            'window title still uses the passed app name');
     });
 
-    it('opening a second window updates the tab title to the focused app', function() {
-        WM.open('/cgi-bin/luci/admin/status', 'Status');
-        WM.open('/cgi-bin/luci/admin/system', 'System');
-        assert.equal(document.title, 'System', 'tab title follows the newest/focused window');
-    });
-
-    it('closing the last window restores the default shell title', function() {
+    it('opening and closing windows never touches document.title', function() {
+        document.title = 'Original Tab Title';
         var id = WM.open('/cgi-bin/luci/admin/status', 'Status');
         WM.close(id);
-        // finish animation then check
         var w = document.querySelector('.window');
         if (w) finishAnimation(w);
-        assert.ok(document.title !== 'Status', 'tab title no longer the closed app');
+        assert.equal(document.title, 'Original Tab Title', 'close does not restore/rewrite title');
     });
 });
 

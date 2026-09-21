@@ -151,6 +151,10 @@
         normalizeUrl: function(raw) {
             var u = (raw || '').replace(/^\s+|\s+$/g, '');
             if (!u) return null;
+            // Raw markup only makes sense through the explicit {noproto}
+            // embed path (openShortcut); typing it as a plain URL used to
+            // navigate to a LuCI route and produce a confusing 404.
+            if (u.charAt(0) === '<') return null;
             // A leading placeholder may already BE the scheme or the whole
             // origin — never prefix http:// over it:
             //   {httpx}://host:3000   keep (scheme placeholder)
@@ -209,6 +213,9 @@
         // before deciding, otherwise it always looks like a non-local URL.
         isExternalUrl: function(url) {
             var u = (url || '').replace(/^\{noproto\}/i, '');
+            // Raw {noproto}<html> snippets render in a desktop window; they
+            // are not an external page URL for the new-tab checkbox.
+            if (/^\s*</.test(u)) return false;
             if (!u) return false;
             // A single leading slash is a same-origin LuCI path; a double
             // slash is protocol-relative and therefore external unless its
@@ -244,6 +251,15 @@
         // desktop window like any app. {host}-style placeholders expand
         // here, against the address the shell was opened with.
         openShortcut: function(url, title) {
+            // {noproto}<iframe ...></iframe> is an explicit raw-HTML embed.
+            // Open it in a desktop window via a data: URL so a pasted embed
+            // fragment never becomes a LuCI route lookup (user report:
+            // "No page is registered at '/<iframe...'").
+            if (/^\{noproto\}\s*</i.test(url || '')) {
+                var html = (url || '').replace(/^\{noproto\}/i, '');
+                WM.open('data:text/html;charset=utf-8,' + encodeURIComponent(html), title);
+                return;
+            }
             // Prefix only the OPEN target, never the stored URL. This keeps
             // the edit dialog faithful to what the user typed while links
             // like 'example.com:3000' still open as http://example.com:3000.

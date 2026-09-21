@@ -485,6 +485,9 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(D.normalizeUrl('{noproto}javascript:alert(1)'), null, 'noproto still refuses javascript:');
         assert.equal(D.normalizeUrl('data:text/html,x'), null, 'data: refused');
         assert.equal(D.normalizeUrl('//evil.example.com'), null, 'protocol-relative refused');
+        assert.equal(D.normalizeUrl('<iframe src="about:blank"></iframe>'), null, 'raw HTML without marker refused');
+        assert.equal(D.normalizeUrl('{noproto}<iframe src="about:blank"></iframe>'),
+            '{noproto}<iframe src="about:blank"></iframe>', 'noproto raw HTML kept');
         assert.equal(D.normalizeUrl('   '), null, 'empty refused');
     });
 
@@ -495,6 +498,8 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(D.isExternalUrl('https://example.com/'), true, 'other origin is external');
         assert.equal(D.isExternalUrl('example.com:3000'), true, 'bare host is external');
         assert.equal(D.isExternalUrl('{noproto}//example.com:3000'), true, 'noproto marker ignored for scope check');
+        assert.equal(D.isExternalUrl('{noproto}<iframe src="about:blank"></iframe>'), false,
+            'raw HTML embed opens as a desktop window, not a new tab');
     });
 
     it('stores a custom link as a pin flagged custom', function() {
@@ -615,6 +620,19 @@ describe('Desktop custom URL shortcuts', function() {
         assert.equal(savedPins()[0].url, '{noproto}//example.com:3000', 'marker stored');
         window.Desktop.openShortcut('{noproto}//example.com:3000', 'App');
         assert.equal(tabs[0], '//example.com:3000', 'target kept verbatim (marker stripped)');
+    });
+
+    it('{noproto} raw HTML opens as a desktop window via a data: URL', function() {
+        var windows = [];
+        window.WM.open = function(u) { windows.push(u); return 'win'; };
+        var html = '<iframe src="about:blank" width="1205" height="480"></iframe>';
+        var url = '{noproto}' + html;
+        window.Desktop.addCustomUrl('Embed', url, true);   // newTab ignored for raw HTML
+        window.Desktop.openShortcut(url, 'Embed');
+        assert.equal(windows.length, 1, 'raw HTML opens in one desktop window');
+        var prefix = 'data:text/html;charset=utf-8,';
+        assert.equal(windows[0].indexOf(prefix), 0, 'data: URL used for raw HTML');
+        assert.equal(decodeURIComponent(windows[0].slice(prefix.length)), html, 'HTML payload preserved');
     });
 
     it('opens a {router} link in a desktop window when the tab box is off', function() {

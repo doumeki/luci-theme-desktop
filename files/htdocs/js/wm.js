@@ -88,14 +88,10 @@
 
             var id = DESKTOP.nextId();
             title = title || _('Untitled');
-            // Browser tab title = the app the user opened (argon parity:
-            // tab shows the menu name, not LuCI's internal page title like
-            // "概况"). Remember the shell's original title once so the last
-            // window close can restore it (see close()).
-            if (!document.querySelector('head title').__desktopTitle) {
-                document.querySelector('head title').__desktopTitle = document.title;
-            }
-            document.title = title;
+            // Do NOT change document.title here. LuCI/renderer owns the
+            // browser tab title; the desktop window titlebar/taskbar uses
+            // the passed title only. (User request 2026-09-18: stop
+            // overriding the page title; keep the original behavior.)
             var slot = cascadeSlot();
             var winH = maxWindowHeight(slot.y);
 
@@ -245,12 +241,6 @@
                     DESKTOP.activeWindowId = null;
                 }
                 delete DESKTOP.windows[id];
-                // Last window closed → restore the default shell tab title
-                // (set by WM.open; header <title> is the LuCI page name).
-                if (Object.keys(DESKTOP.windows).length === 0) {
-                    var hdr = document.querySelector('head title');
-                    if (hdr && hdr.__desktopTitle) document.title = hdr.__desktopTitle;
-                }
                 if (DESKTOP.emit) DESKTOP.emit('window-closed', {id: id});
             };
             // Mobile (or already-hidden windows): close instantly — the
