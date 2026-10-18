@@ -272,7 +272,9 @@ function i18nConsistencyCheck() {
     // shipped regular file must be group/other-readable and every shipped
     // directory group/other-searchable (uhttpd serves as a non-owner
     // identity; owner-only bits still 403 — 0.1.0-212 实锤).
-    (function walkShipped(dir) {
+    // POSIX bits don't exist on Windows (all-always 666) — dev runs there
+    // skip this contract; it still runs on the Linux build/test hosts.
+    if (process.platform !== 'win32') (function walkShipped(dir) {
         let st;
         try { st = fs.statSync(path.join(THEME_DIR, dir)); } catch (e) { return; }
         if ((st.mode & 0o011) === 0) {
@@ -407,7 +409,10 @@ function i18nDriftCheck() {
     [['po/template.pot', r.pot], ['po/zh_Hans/luci-theme-desktop.po', r.po]].forEach(function(pair) {
         let disk = '';
         try { disk = readFile(pair[0]); } catch (e) {}
-        if (disk !== pair[1]) stale.push('  ' + pair[0]);
+        // Byte-exact by design, but line endings must not participate: a
+        // Windows checkout (core.autocrlf) turns CRLF mismatches into a
+        // false "dict changed without regeneration" fail.
+        if (disk.replace(/\r\n/g, '\n') !== pair[1].replace(/\r\n/g, '\n')) stale.push('  ' + pair[0]);
     });
     if (stale.length) {
         console.log('❌ i18n catalog is stale (dict changed without regeneration):\n' +
