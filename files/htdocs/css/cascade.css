@@ -1343,6 +1343,15 @@ small {
   font-size: 1.2rem;
   color: #5e72e4 !important;
   color: var(--primary) !important;
+  /* CBI sortable tables render these as value-less <input type=button>:
+     ::before/::after content cannot draw on an input element, so the glyph
+     must be painted on the background (old argon assigned the 'argon' font
+     but an empty input has no text to render — the buttons looked blank).
+     A down-chevron is drawn for both; .cbi-button-up rotates it 180°. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235e72e4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 1em 1em;
 }
 .cbi-optionals {
   padding: 1rem 1rem 0 1rem;

@@ -271,6 +271,13 @@ table>thead>tr>th {
   background-color: #252526 !important;
 }
 
+/* SVG glyph for value-less CBI move buttons (see cascade.css — the rule is
+   duplicated here at equal specificity; dark.css wins by document order) */
+.cbi-button-up,
+.cbi-button-down {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a6b0d0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+}
+
 .cbi-section-node {
   background: none;
   border-radius: 0 0 .375rem .375rem;
