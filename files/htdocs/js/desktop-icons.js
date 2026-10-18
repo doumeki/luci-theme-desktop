@@ -34,10 +34,30 @@
         var m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
         if (!m) return 'rgba(255,255,255,0.1)';
         var n = parseInt(m[1], 16);
-        return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + (alpha || 0.16) + ')';
+        return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + ((n & 255)) + ',' + (alpha || 0.16) + ')';
+    }
+
+    // Mobile icon order: on mobile #desktop-icons is a CSS grid (mobile.css,
+    // 4 columns), so the visual order IS the DOM order. The persisted order
+    // lives in each icon_layout entry's reserved `mobile` field as {col,row}
+    // (grid cell — the shape desktop-state v2 already documented). Entries
+    // without a slot keep their default relative order, placed after all
+    // positioned icons.
+    var MOBILE_COLS = 4;
+    var MOBILE_SLOTS_BIG = 1e6;
+
+    function mobileSlotOf(entry) {
+        if (entry && entry.mobile &&
+            typeof entry.mobile.col === 'number' && typeof entry.mobile.row === 'number') {
+            return entry.mobile.row * MOBILE_COLS + entry.mobile.col;
+        }
+        return null;
     }
 
     var icons = {
+        // Exposed for tests (mobile reorder ordering); see mobileSlotOf.
+        mobileSlotOf: function(entry) { return mobileSlotOf(entry); },
+
         renderShortcuts: function() {
             var container = document.getElementById('desktop-icons');
             if (!container) return;
@@ -74,6 +94,22 @@
             var html = '';
             // Filter out hidden icons
             var visible = all.filter(function(item) { return hiddenIcons.indexOf(item.url) === -1; });
+
+            // Mobile: CSS-grid order == item order here — sort by the
+            // persisted mobile slot; icons WITHOUT one fall back to their
+            // implicit default index, so dragging to the END of the grid
+            // works too (positioned/unpositioned share one number line).
+            // Desktop keeps its own absolute grid and reads
+            // layoutEntry.desktop further below, unchanged.
+            if (DESKTOP.isMobile()) {
+                visible = visible
+                    .map(function(item, i) {
+                        var slot = mobileSlotOf(iconLayout[item.url]);
+                        return { item: item, key: (slot === null) ? i : slot };
+                    })
+                    .sort(function(a, b) { return a.key - b.key; })
+                    .map(function(x) { return x.item; });
+            }
 
             // Current viewport grid: stored positions from a LARGER window
             // (or a reinstall) must be clamped into the visible grid or
@@ -201,16 +237,16 @@
             });
         },
 
-        // Reset every icon back to the auto layout: 4 columns, top-to-bottom
-        // from [0,0]. Clears the persisted drag positions (UCI) so the
-        // auto layout sticks until the user drags again.
+        // Reset every icon back to the auto layout: clear the stored
+        // DESKTOP grid cells but keep the icon choice — and on mobile also
+        // clear the persisted mobile slots, since that IS the mobile auto
+        // layout the user is rearranging.
         rearrangeIcons: function() {
-            // Reset every icon back to the auto layout: clear the stored
-            // DESKTOP grid cells but keep the icon choice and the mobile
-            // position.
+            var mobile = LuCIDesktop.isMobile();
             var iconLayout = State.layout();
             Object.keys(iconLayout).forEach(function(u) {
                 delete iconLayout[u].desktop;
+                if (mobile) delete iconLayout[u].mobile;
                 if (Object.keys(iconLayout[u]).length === 0) delete iconLayout[u];
             });
             State.saveIconLayout();
@@ -259,6 +295,111 @@
             }
         },
 
+        // ===== Mobile drag-reorder =====
+        // The quantum engine is intentionally NOT instantiated on mobile
+        // (desktop.js); icons are CSS-grid items whose visual order is their
+        // DOM order. Gesture contract mirrors the long-press menu above:
+        //   press + move >= 12px (before the 500ms menu timer fires)
+        //                              -> drag-reorder (menu cancelled)
+        //   press held ~500ms steady   -> context menu; that touch never
+        //                                 becomes a drag
+        //   tap (no move)              -> opens the icon (unchanged)
+        _resetDragState: function() {
+            this._dragIcon = null;
+            this._dragActive = false;
+            this._dragBarred = false;
+            this._dragGrab = null;
+            this._dragOrigin = null;
+        },
+
+        // Paint the icon under the finger; transform is relative to the
+        // node's static grid position (re-based after each DOM swap).
+        _paintMobileDrag: function(t) {
+            var icon = this._dragIcon;
+            if (!icon || !this._dragGrab || !this._dragOrigin) return;
+            icon.style.transform =
+                'translate(' + Math.round(t.clientX - this._dragGrab.x - this._dragOrigin.x) + 'px,' +
+                Math.round(t.clientY - this._dragGrab.y - this._dragOrigin.y) + 'px)';
+        },
+
+        // Engage: grab offsets are passed IN — the long-press start coords
+        // live on the facade (`self._lpSX`), not on this module object, and
+        // bindEvents may be invoked as a facade method (0.1.0-177 rake).
+        _engageMobileDrag: function(icon, sx, sy) {
+            var rect = icon.getBoundingClientRect();
+            this._dragActive = true;
+            icon.classList.add('drag-reorder');
+            this._dragGrab = { x: sx - rect.left, y: sy - rect.top };
+            this._dragOrigin = { x: rect.left, y: rect.top };
+        },
+
+        // Paint the icon under the finger; transform is relative to the
+        // node's static grid position (re-based after each DOM swap).
+
+        // Reorder preview: map the pointer onto the grid — cell math mirrors
+        // mobile.css (4 columns, 92px rows, 2px row / 4px column gap, 10px
+        // padding) — and move the node into that slot.
+        _reorderMobileDrag: function(t) {
+            var icon = this._dragIcon;
+            var container = document.getElementById('desktop-icons');
+            if (!icon || !container || icon.parentNode !== container) return;
+            var r = container.getBoundingClientRect();
+            var kids = Array.prototype.slice.call(container.querySelectorAll('.desktop-icon'));
+            var count = kids.length;
+            if (count < 2 || icon.parentNode !== container) return;
+            var stride = (r.width - 20 - 4 * (MOBILE_COLS - 1)) / MOBILE_COLS + 4; // px column pitch
+            var col = Math.floor((t.clientX - r.left - 10) / stride);
+            col = Math.max(0, Math.min(MOBILE_COLS - 1, col));
+            var pitch = 94; // 92px row + 2px gap
+            var row = Math.max(0, Math.min(Math.ceil(count / MOBILE_COLS) - 1,
+                Math.floor((t.clientY - r.top - 10) / pitch)));
+            var target = kids[row * MOBILE_COLS + col];
+            if (!target || target === icon) return;
+            if (kids.indexOf(target) < kids.indexOf(icon)) {
+                container.insertBefore(icon, target);
+            } else {
+                container.insertBefore(icon, target.nextSibling);
+            }
+            // Re-base the painted transform onto the node's new static spot:
+            // clear the transform, measure the fresh grid position, repaint.
+            icon.style.transform = '';
+            var rect = icon.getBoundingClientRect();
+            this._dragOrigin = { x: rect.left, y: rect.top };
+            this._paintMobileDrag(t);
+        },
+
+        // Persist the visual order: grid cell == DOM index. Writes each
+        // entry's mobile {col,row} into icon_layout. Returns whether the
+        // layout changed (caller re-renders to snap; a re-run with the same
+        // order writes nothing).
+        _finishMobileDrag: function() {
+            var icon = this._dragIcon;
+            if (icon) {
+                icon.classList.remove('drag-reorder');
+                icon.style.transform = '';
+            }
+            this._dragActive = false;
+            this._dragIcon = null;
+            var container = document.getElementById('desktop-icons');
+            if (!container) return false;
+            var layout = State.layout();
+            var dirty = false;
+            Array.prototype.slice.call(container.querySelectorAll('.desktop-icon'))
+                .forEach(function(el, i) {
+                    var url = el.getAttribute('data-url');
+                    if (!url) return;
+                    var entry = layout[url] || {};
+                    var col = i % MOBILE_COLS;
+                    var row = Math.floor(i / MOBILE_COLS);
+                    var m = entry.mobile;
+                    if (!m || m.col !== col || m.row !== row) {
+                        layout[url] = Object.assign({}, entry, { mobile: { col: col, row: row } });
+                        dirty = true;
+                    }
+                });
+            return dirty;
+        },
+
         bindEvents: function() {
             // init() may run more than once (re-boot, tests) — never bind
             // a second set of click/dblclick/touch handlers on top of the
@@ -291,7 +432,14 @@
 
             // Mobile: long-press an icon → the same icon context menu as
             // right-click on desktop (Change Icon / Reset Icon / Open /
-            // Hide / pin actions). Movement cancels the press.
+            // Hide / pin actions). Movement >=12px BEFORE the timer fires
+            // engages drag-reorder instead (one shared threshold).
+            //
+            // `self` here is whatever bindEvents was called on — from
+            // Desktop.init that is the FACADE, which mirrors the pre-existing
+            // fields but not the NEW mobile-drag state. Store new state on
+            // the module object `icons` (closure) or the methods below are
+            // unreachable (0.1.0-177 rake, again).
             container.addEventListener('touchstart', function(e) {
                 if (!LuCIDesktop.isMobile()) return;
                 var icon = e.target.closest('.desktop-icon');
@@ -300,6 +448,8 @@
                 if (!t) return;
                 self._lpSX = t.clientX;
                 self._lpSY = t.clientY;
+                icons._resetDragState();
+                icons._dragIcon = icon;
                 clearTimeout(self._lpTimer);
                 self._lpTimer = setTimeout(function() {
                     self._lpTimer = null;
@@ -316,24 +466,60 @@
                     } else {
                         self._showDefaultIconMenu(rect.left + rect.width / 2, rect.bottom + 4, url, title, icon);
                     }
+                    // the menu touch must never turn into a drag
+                    icons._dragBarred = true;
                     // swallow the tap that follows the long-press
                     self._suppressTapOpen = true;
                 }, 500);
             }, { passive: true });
 
             container.addEventListener('touchmove', function(e) {
-                if (!self._lpTimer) return;
+                if (!LuCIDesktop.isMobile()) return;
                 var t = e.touches[0];
                 if (!t) return;
-                if (Math.abs(t.clientX - self._lpSX) > 12 || Math.abs(t.clientY - self._lpSY) > 12) {
+                if (icons._dragActive && icons._dragIcon) {
+                    e.preventDefault();
+                    icons._paintMobileDrag(t);
+                    return;
+                }
+                if (!self._lpTimer) return;
+                var dx = t.clientX - self._lpSX;
+                var dy = t.clientY - self._lpSY;
+                if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
                     clearTimeout(self._lpTimer);
                     self._lpTimer = null;
+                    // moving before the menu timer fires supersedes it
+                    if (icons._dragIcon && !icons._dragBarred) {
+                        icons._engageMobileDrag(icons._dragIcon, self._lpSX, self._lpSY);
+                        icons._reorderMobileDrag(t);
+                    }
                 }
-            }, { passive: true });
+            }, { passive: false });
 
-            container.addEventListener('touchend', function() {
+            container.addEventListener('touchend', function(e) {
                 clearTimeout(self._lpTimer);
                 self._lpTimer = null;
+                if (icons._dragActive && icons._dragIcon) {
+                    e.preventDefault();   // no synthetic click after a move
+                    if (icons._finishMobileDrag()) self.renderShortcuts();
+                    // the grid moved under this touch — never open the app
+                    self._suppressTapOpen = true;
+                }
+                icons._resetDragState();
+            }, { passive: false });
+
+            container.addEventListener('touchcancel', function() {
+                clearTimeout(self._lpTimer);
+                self._lpTimer = null;
+                if (icons._dragActive && icons._dragIcon) {
+                    // Drag reorder only touched the DOM mid-gesture — State
+                    // is untouched until touchend, so re-rendering restores
+                    // the stored order.
+                    icons._dragIcon.classList.remove('drag-reorder');
+                    icons._dragIcon.style.transform = '';
+                    self.renderShortcuts();
+                }
+                icons._resetDragState();
             });
 
             container.addEventListener('click', function(e) {

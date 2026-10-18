@@ -25,7 +25,8 @@
     //            url->icon mapping from icon-url-map.js, which serves as
     //            the default when unset — not persisted, follows updates)
     //   desktop: {col, row} grid cell indices on the desktop
-    //   mobile:  {col, row} reserved for a future mobile layout
+    //   mobile:  {col, row} cell in the mobile CSS grid (drag-reorder;
+    //            absent = default order, after all positioned icons)
     // }
     var iconLayout = {};
 

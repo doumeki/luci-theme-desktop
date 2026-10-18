@@ -391,6 +391,20 @@
         line-height: 1.2 !important;
         max-width: 100%;
     }
+    /* Icon drag-reorder (desktop-icons.js): #desktop itself never scrolls
+       (fixed + overflow:hidden), so icon touches are all ours — no
+       scroll/pan gesture will ever steal the move. */
+    #desktop-icons .desktop-icon {
+        touch-action: none;
+    }
+    .desktop-icon.drag-reorder {
+        /* lifted while following the finger; the translate itself is
+           inline (per-frame values) */
+        z-index: 40;
+        pointer-events: none;      /* nothing under the finger gets jostled */
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        background: rgba(255, 255, 255, 0.1) !important;
+    }
 
     /* ===== Toasts: bottom, near-full width ===== */
     .desktop-toast {
