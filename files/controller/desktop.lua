@@ -264,35 +264,56 @@ function action_system_status()
     end
     physmem = load_physical_memory()
 
-    -- Temperature: prefer the CPU package zone — the first readable zone
-    -- is often the board/ACPI sensor (acpitz), which reads well below the
-    -- CPU (e.g. 27.8°C vs 43°C on an Intel box). CPU zones: x86_pkg_temp
-    -- (Intel), cpu-thermal/tsens (ARM SoCs). Fall back to the first
-    -- readable zone when no CPU-named zone exists (AMD k10temp etc.).
+    -- Temperature: SAME source as the Status overview's CPU-info row.
+    -- That row is fed by the firmware's /sbin/cpuinfo script, which reads
+    --   `sensors coretemp-*` → first "Package id |Core" reading (Intel)
+    --   `sensors k*temp-*`   → Tdie (AMD)
+    -- so speak the same pipeline first; without the `sensors` binary
+    -- (VMs, busybox-only images) fall back to the sysfs CPU-zone
+    -- preference below — the first readable zone is often the board/ACPI
+    -- sensor (acpitz), which reads well below the CPU (e.g. 27.8°C vs
+    -- 43°C on an Intel box). CPU zones: x86_pkg_temp (Intel),
+    -- cpu-thermal/tsens (ARM SoCs). Fall back to the first readable zone
+    -- when no CPU-named zone exists (AMD k10temp etc.).
     local thermal = {}
     local temp_first = nil
-    for i = 0, 9 do
-        local zpath = "/sys/class/thermal/thermal_zone" .. i
-        local fp = io.open(zpath .. "/temp")
-        if fp then
-            local raw = fp:read("*l")
-            fp:close()
-            local t = raw and tonumber(raw)
-            if t then
-                if not temp_first then temp_first = t end
-                local tf = io.open(zpath .. "/type")
-                local ztype = tf and (tf:read("*l") or "") or ""
-                if tf then tf:close() end
-                local zl = ztype:lower()
-                if zl:find("pkg") or zl:find("cpu") or zl:find("tsens") then
-                    thermal[1] = { temp = string.format("%.1f", t / 1000) .. "°C" }
-                    break
+    local stemp = sys.exec(
+        "sensors 'coretemp-*' 2>/dev/null | grep -E 'Package id |Core ' " ..
+        "| grep -Eo '\\+[0-9.]*°C' | head -n1 | tr -d '+'")
+    if not (stemp and #stemp > 0) then
+        stemp = sys.exec(
+            "sensors 'k*temp-*' 2>/dev/null | awk '/Tdie/ {print $2}' " ..
+            "| head -n1 | tr -d '+'")
+    end
+    stemp = stemp and stemp:match("^%s*(.-)%s*$") or ""
+    if #stemp > 0 then
+        if not stemp:find("°C$") then stemp = stemp .. "°C" end
+        thermal[1] = { temp = stemp }
+    end
+    if not thermal[1] then
+        for i = 0, 9 do
+            local zpath = "/sys/class/thermal/thermal_zone" .. i
+            local fp = io.open(zpath .. "/temp")
+            if fp then
+                local raw = fp:read("*l")
+                fp:close()
+                local t = raw and tonumber(raw)
+                if t then
+                    if not temp_first then temp_first = t end
+                    local tf = io.open(zpath .. "/type")
+                    local ztype = tf and (tf:read("*l") or "") or ""
+                    if tf then tf:close() end
+                    local zl = ztype:lower()
+                    if zl:find("pkg") or zl:find("cpu") or zl:find("tsens") then
+                        thermal[1] = { temp = string.format("%.1f", t / 1000) .. "°C" }
+                        break
+                    end
                 end
             end
         end
-    end
-    if not thermal[1] and temp_first then
-        thermal[1] = { temp = string.format("%.1f", temp_first / 1000) .. "°C" }
+        if not thermal[1] and temp_first then
+            thermal[1] = { temp = string.format("%.1f", temp_first / 1000) .. "°C" }
+        end
     end
 
     luci.http.write_json({
