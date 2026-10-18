@@ -140,5 +140,62 @@ describe('Mobile icon drag-reorder', function() {
         assert.ok(icons()._finishMobileDrag(), 'first pass dirty');
         assert.equal(icons()._finishMobileDrag(), false, 'second pass clean');
     });
+
+    // Geometry-dependent: _reorderMobileDrag maps the pointer onto the
+    // grid of #desktop-icons (mobile.css: 4 cols, 94px row pitch, 10px
+    // padding). The runner is real Firefox, so rect stubs are enough:
+    // a fake container rect {left:0,top:0,width:500,height:400} yields
+    // a 121px column stride and 94px row pitch; x=400 lands on cell 3 in
+    // the 4-icon case. These tests guard the wiring contract
+    // (0.1.0-247 regression: the touchmove active branch painted only and
+    // never called this, so the drag did nothing — slot math was tested,
+    // this path was not).
+    function stubRects(c) {
+        var kids = Array.prototype.slice.call(c.querySelectorAll('.desktop-icon'));
+        c.getBoundingClientRect = function() {
+            return { left: 0, top: 0, width: 500, height: 400 };
+        };
+        kids.forEach(function(el) {
+            el.getBoundingClientRect = function() {
+                return { left: 0, top: 0, width: 0, height: 0 };
+            };
+        });
+        return kids;
+    }
+
+    it('_reorderMobileDrag swaps the dragged icon into the hovered cell', function() {
+        window.__IS_MOBILE__ = true;
+        var c = makeContainer(['/a', '/b', '/c', '/d']);
+        var kids = stubRects(c);
+        var m = icons();
+        m._dragIcon = kids[0];
+        m._dragGrab = { x: 0, y: 0 };
+        m._dragOrigin = { x: 0, y: 0 };
+        m._reorderMobileDrag({ clientX: 400, clientY: 10 });   // cell 3 (col 3, row 0)
+        var order = Array.prototype.slice.call(c.querySelectorAll('.desktop-icon'))
+            .map(function(el) { return el.getAttribute('data-url'); });
+        assert.equal(JSON.stringify(order), JSON.stringify(['/b', '/c', '/d', '/a']),
+            'a swapped past d: insertBefore(d.nextSibling)');
+    });
+
+    it('_reorderMobileDrag ignores empty cells and the dragged cell itself', function() {
+        window.__IS_MOBILE__ = true;
+        var c = makeContainer(['/a', '/b']);
+        var kids = stubRects(c);
+        var m = icons();
+        m._dragIcon = kids[0];
+        m._dragGrab = { x: 0, y: 0 };
+        m._dragOrigin = { x: 0, y: 0 };
+        // empty cell in row 0 (col 2 of 2 icons) → kids[2] undefined → no-op
+        m._reorderMobileDrag({ clientX: 300, clientY: 10 });
+        var order1 = Array.prototype.slice.call(c.querySelectorAll('.desktop-icon'))
+            .map(function(el) { return el.getAttribute('data-url'); });
+        assert.equal(JSON.stringify(order1), JSON.stringify(['/a', '/b']), 'empty cell no-op');
+        // the dragged icon's own cell → target === icon → no-op
+        m._reorderMobileDrag({ clientX: 10, clientY: 10 });
+        var order2 = Array.prototype.slice.call(c.querySelectorAll('.desktop-icon'))
+            .map(function(el) { return el.getAttribute('data-url'); });
+        assert.equal(JSON.stringify(order2), JSON.stringify(['/a', '/b']), 'same cell no-op');
+    });
 });
 })();

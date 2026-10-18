@@ -479,6 +479,13 @@
                 if (!t) return;
                 if (icons._dragActive && icons._dragIcon) {
                     e.preventDefault();
+                    // Per-move: pointer decides where the icon will land.
+                    // Swap into the hovered cell live (_reorderMobileDrag
+                    // re-bases + repaints when it swaps); the paint below
+                    // covers frames where the cell didn't change. Without
+                    // the swap call the DOM order never changes and the
+                    // drop math ends up a no-op (0.1.0-247).
+                    icons._reorderMobileDrag(t);
                     icons._paintMobileDrag(t);
                     return;
                 }
@@ -501,7 +508,11 @@
                 self._lpTimer = null;
                 if (icons._dragActive && icons._dragIcon) {
                     e.preventDefault();   // no synthetic click after a move
-                    if (icons._finishMobileDrag()) self.renderShortcuts();
+                    if (icons._finishMobileDrag()) {
+                        State.saveIconLayout();   // the drop must survive a
+                        // reload — same contract as the icon-chooser path
+                        self.renderShortcuts();
+                    }
                     // the grid moved under this touch — never open the app
                     self._suppressTapOpen = true;
                 }
