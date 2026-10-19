@@ -42,7 +42,22 @@
     }
 
     var DESKTOP = window.LuCIDesktop;
-    if (!DESKTOP) { console.error('iframe-bridge.js: LuCIDesktop namespace not found'); return; }
+    if (!DESKTOP) {
+        // Context triage (0.1.0-250, plans/01 #2): embedded-page copies run
+        // without shell.js BY DESIGN (shell branch is never loaded there), so
+        // a missing namespace in an embed context is normal flow, not an
+        // incident - route it through the DBG gate. The shell-page copy
+        // SHOULD always find the namespace (shell.js defines it before this
+        // file loads); keep the loud console.error there as the sentinel.
+        var embedCopy = /(?:^|[?&])embed=1(?:&|$)/.test(String(window.location.search || ''));
+        var msg = 'iframe-bridge.js: LuCIDesktop namespace not found';
+        if (embedCopy && typeof DBG === 'function') {
+            DBG(msg);
+        } else {
+            console.error(msg);
+        }
+        return;
+    }
 
     var messageRegistered = false;
 
