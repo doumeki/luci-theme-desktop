@@ -149,6 +149,136 @@
         xhr.send();
     }
 
+
+    // Preview helper: uses disk cache path (deterministic), optional direct URL
+    function _previewWallpaper(mode, directUrl) {
+        var box = document.getElementById('bg-preview-box');
+        var preview = document.getElementById('wp-preview-img');
+        if (!box || !preview) return;
+        // Toggle class on parent box — CSS hides/shows dots declaratively
+        if (mode === 'gradient') {
+            DBG('[preview] mode=gradient (hide preview, show dots)');
+            box.classList.remove('wp-remote');
+            preview.style.display = 'none';
+            window.__wp_preview_url = '';
+        } else {
+            box.classList.add('wp-remote');
+            // Direct URL (from Refresh XHR): apply immediately
+            if (directUrl) {
+                window.__wp_preview_url = directUrl;
+                preview.style.display = '';
+                preview.style.backgroundImage = 'url("' + directUrl + '")';
+                preview.style.backgroundSize = 'cover';
+                preview.style.backgroundPosition = 'center';
+                return;
+            }
+            // builtin: pick from preloaded list (no XHR — instant)
+            if (mode === 'builtin') {
+                try {
+                    var dc = LuCIDesktop.getSection('wallpaper');
+                    DBG('[preview] builtin dc.wp.mode=' + dc.mode + ' builtin_ct=' + (dc.builtin && dc.builtin.length));
+                    if (dc.builtin && dc.builtin.length > 0) {
+                        var url = (dc.mode === 'builtin' && dc.url)
+                            ? dc.url
+                            : dc.builtin[Math.floor(Math.random() * dc.builtin.length)];
+                        DBG('[preview] builtin url=' + url);
+                        window.__wp_preview_url = url;
+                        preview.style.display = '';
+                        preview.style.backgroundImage = 'url("' + url + '")';
+                        preview.style.backgroundSize = 'cover';
+                        preview.style.backgroundPosition = 'center';
+                        return;
+                    }
+                } catch(e) { DBG('[preview] builtin error:', e); }
+                window.__wp_preview_url = '';
+                return;
+            }
+            // bing / picsum: _desktop.jpg on open (guaranteed by header.htm), cache after Refresh
+            var url = '/luci-static/desktop/cache/wallpaper_' + mode + '_desktop.jpg';
+            window.__wp_preview_url = url;
+            preview.style.display = '';
+            preview.style.backgroundImage = 'url("' + url + '")';
+            preview.style.backgroundSize = 'cover';
+            preview.style.backgroundPosition = 'center';
+            DBG('[preview] mode=' + mode + ' url=' + url);
+        }
+    }
+
+    // Preview state machine (bing/picsum):
+    //  1. _desktop.jpg exists (confirmed desktop) → preview snaps
+    //     back to the desktop image — a previous Refresh is
+    //     REVOKED (Refresh is only "take a look", apply decides).
+    //  2. No _desktop, but a remembered first-time candidate exists
+    //     (localStorage) → keep showing it, no re-download.
+    //  3. Neither → download the first-time candidate and remember it.
+    // Refresh (manual button) always shows the fresh image but does
+    // NOT remember it — without Apply it is revoked on next open.
+    function _ensurePreviewDownload(mode) {
+        if (mode !== 'bing' && mode !== 'picsum') return;
+        var cacheUrl = '/luci-static/desktop/cache/wallpaper_' + mode + '.jpg';
+        var desktopUrl = '/luci-static/desktop/cache/wallpaper_' + mode + '_desktop.jpg';
+        var memKey = '__desktop_wp_candidate_' + mode;
+
+        // 1. Confirmed desktop image exists → snap preview back to it
+        var dProbe = new Image();
+        dProbe.onload = function() {
+            DBG('[preview] confirmed desktop exists, snap back');
+            _previewWallpaper(mode, desktopUrl + '?v=' + Date.now());
+            _checkSavedState();
+        };
+        dProbe.onerror = function() {
+            // 2. Remembered first-time candidate?
+            var remembered = false;
+            try { remembered = !!localStorage.getItem(memKey); } catch(e) {}
+            if (remembered) {
+                var cProbe = new Image();
+                cProbe.onload = function() {
+                    DBG('[preview] first-time candidate kept');
+                    _previewWallpaper(mode, cacheUrl + '?v=' + Date.now());
+                    _checkSavedState();
+                };
+                cProbe.onerror = function() {
+                    try { localStorage.removeItem(memKey); } catch(e) {}
+                    downloadFirstCandidate();
+                };
+                cProbe.src = cacheUrl + '?v=' + Date.now();
+                return;
+            }
+            // 3. No candidate at all → download and remember
+            downloadFirstCandidate();
+        };
+        dProbe.src = desktopUrl + '?v=' + Date.now();
+
+        function downloadFirstCandidate() {
+            DBG('[preview] no candidate, downloading first-time ' + mode + '...');
+            if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Downloading preview…'), type: 'info', duration: 4000});
+            var preview = document.getElementById('wp-preview-img');
+            if (preview) preview.classList.add('wp-loading');
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/cgi-bin/luci/admin/desktop/random_wallpaper?mode=' + encodeURIComponent(mode) + '&preview=1', true);
+            xhr.onload = function() {
+                if (preview) preview.classList.remove('wp-loading');
+                try {
+                    if (xhr.status !== 200) {
+                        if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Preview download failed'), type: 'warn', duration: 4000});
+                        return;
+                    }
+                    var r = JSON.parse(xhr.responseText);
+                    if (!r.url) return;
+                    _previewWallpaper(mode, r.url);
+                    try { localStorage.setItem(memKey, '1'); } catch(e) {}
+                    if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Preview ready'), type: 'info', duration: 4000});
+                    _checkSavedState();
+                } catch(e) { DBG('[preview] download error:', e.message); }
+            };
+            xhr.onerror = function() {
+                if (preview) preview.classList.remove('wp-loading');
+                if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Network error, check connection'), type: 'error', duration: 4000});
+            };
+            xhr.send();
+        };
+    }
+
     // ===== Open =====
     window.ThemeSettings = {
         open: function() {
@@ -165,135 +295,6 @@
             // Preview does not touch desktop; no snapshot needed.
             // _applyWallpaper is called directly on Apply/OK to sync desktop.
             var wpEl = document.getElementById('desktop-wallpaper');
-
-            // Preview helper: uses disk cache path (deterministic), optional direct URL
-            function _previewWallpaper(mode, directUrl) {
-                var box = document.getElementById('bg-preview-box');
-                var preview = document.getElementById('wp-preview-img');
-                if (!box || !preview) return;
-                // Toggle class on parent box — CSS hides/shows dots declaratively
-                if (mode === 'gradient') {
-                    DBG('[preview] mode=gradient (hide preview, show dots)');
-                    box.classList.remove('wp-remote');
-                    preview.style.display = 'none';
-                    window.__wp_preview_url = '';
-                } else {
-                    box.classList.add('wp-remote');
-                    // Direct URL (from Refresh XHR): apply immediately
-                    if (directUrl) {
-                        window.__wp_preview_url = directUrl;
-                        preview.style.display = '';
-                        preview.style.backgroundImage = 'url("' + directUrl + '")';
-                        preview.style.backgroundSize = 'cover';
-                        preview.style.backgroundPosition = 'center';
-                        return;
-                    }
-                    // builtin: pick from preloaded list (no XHR — instant)
-                    if (mode === 'builtin') {
-                        try {
-                            var dc = LuCIDesktop.getSection('wallpaper');
-                            DBG('[preview] builtin dc.wp.mode=' + dc.mode + ' builtin_ct=' + (dc.builtin && dc.builtin.length));
-                            if (dc.builtin && dc.builtin.length > 0) {
-                                var url = (dc.mode === 'builtin' && dc.url)
-                                    ? dc.url
-                                    : dc.builtin[Math.floor(Math.random() * dc.builtin.length)];
-                                DBG('[preview] builtin url=' + url);
-                                window.__wp_preview_url = url;
-                                preview.style.display = '';
-                                preview.style.backgroundImage = 'url("' + url + '")';
-                                preview.style.backgroundSize = 'cover';
-                                preview.style.backgroundPosition = 'center';
-                                return;
-                            }
-                        } catch(e) { DBG('[preview] builtin error:', e); }
-                        window.__wp_preview_url = '';
-                        return;
-                    }
-                    // bing / picsum: _desktop.jpg on open (guaranteed by header.htm), cache after Refresh
-                    var url = '/luci-static/desktop/cache/wallpaper_' + mode + '_desktop.jpg';
-                    window.__wp_preview_url = url;
-                    preview.style.display = '';
-                    preview.style.backgroundImage = 'url("' + url + '")';
-                    preview.style.backgroundSize = 'cover';
-                    preview.style.backgroundPosition = 'center';
-                    DBG('[preview] mode=' + mode + ' url=' + url);
-                }
-            }
-
-            // Preview state machine (bing/picsum):
-            //  1. _desktop.jpg exists (confirmed desktop) → preview snaps
-            //     back to the desktop image — a previous Refresh is
-            //     REVOKED (Refresh is only "take a look", apply decides).
-            //  2. No _desktop, but a remembered first-time candidate exists
-            //     (localStorage) → keep showing it, no re-download.
-            //  3. Neither → download the first-time candidate and remember it.
-            // Refresh (manual button) always shows the fresh image but does
-            // NOT remember it — without Apply it is revoked on next open.
-            function _ensurePreviewDownload(mode) {
-                if (mode !== 'bing' && mode !== 'picsum') return;
-                var cacheUrl = '/luci-static/desktop/cache/wallpaper_' + mode + '.jpg';
-                var desktopUrl = '/luci-static/desktop/cache/wallpaper_' + mode + '_desktop.jpg';
-                var memKey = '__desktop_wp_candidate_' + mode;
-
-                // 1. Confirmed desktop image exists → snap preview back to it
-                var dProbe = new Image();
-                dProbe.onload = function() {
-                    DBG('[preview] confirmed desktop exists, snap back');
-                    _previewWallpaper(mode, desktopUrl + '?v=' + Date.now());
-                    _checkSavedState();
-                };
-                dProbe.onerror = function() {
-                    // 2. Remembered first-time candidate?
-                    var remembered = false;
-                    try { remembered = !!localStorage.getItem(memKey); } catch(e) {}
-                    if (remembered) {
-                        var cProbe = new Image();
-                        cProbe.onload = function() {
-                            DBG('[preview] first-time candidate kept');
-                            _previewWallpaper(mode, cacheUrl + '?v=' + Date.now());
-                            _checkSavedState();
-                        };
-                        cProbe.onerror = function() {
-                            try { localStorage.removeItem(memKey); } catch(e) {}
-                            downloadFirstCandidate();
-                        };
-                        cProbe.src = cacheUrl + '?v=' + Date.now();
-                        return;
-                    }
-                    // 3. No candidate at all → download and remember
-                    downloadFirstCandidate();
-                };
-                dProbe.src = desktopUrl + '?v=' + Date.now();
-
-                function downloadFirstCandidate() {
-                    DBG('[preview] no candidate, downloading first-time ' + mode + '...');
-                    if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Downloading preview…'), type: 'info', duration: 4000});
-                    var preview = document.getElementById('wp-preview-img');
-                    if (preview) preview.classList.add('wp-loading');
-                    var xhr = new XMLHttpRequest();
-                    xhr.open('GET', '/cgi-bin/luci/admin/desktop/random_wallpaper?mode=' + encodeURIComponent(mode) + '&preview=1', true);
-                    xhr.onload = function() {
-                        if (preview) preview.classList.remove('wp-loading');
-                        try {
-                            if (xhr.status !== 200) {
-                                if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Preview download failed'), type: 'warn', duration: 4000});
-                                return;
-                            }
-                            var r = JSON.parse(xhr.responseText);
-                            if (!r.url) return;
-                            _previewWallpaper(mode, r.url);
-                            try { localStorage.setItem(memKey, '1'); } catch(e) {}
-                            if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Preview ready'), type: 'info', duration: 4000});
-                            _checkSavedState();
-                        } catch(e) { DBG('[preview] download error:', e.message); }
-                    };
-                    xhr.onerror = function() {
-                        if (preview) preview.classList.remove('wp-loading');
-                        if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Network error, check connection'), type: 'error', duration: 4000});
-                    };
-                    xhr.send();
-                };
-            }
 
             // Build tab bar
             var tabBarHtml = '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;">';
