@@ -576,6 +576,7 @@
     <script type="text/plain" id="__desktop-dark-data">{{ embed_dark_css }}</script>
     {% endif %}
     <link rel="stylesheet" href="{{ media }}/css/embedded.css?v={{ theme_ver }}">
+    <script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/color_calc-argon.js?v={{ theme_ver }}"></script>
     <link rel="icon" type="image/png" href="{{ media }}/favorit.png">
     <link rel="shortcut icon" href="{{ media }}/favicon.ico">
@@ -585,7 +586,6 @@
     {% if (css): %}
         <style title="text/css">{{ css }}</style>
     {% endif %}
-    <script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/i18n.js?v={{ theme_ver }}"></script>
     <!-- LuCI JS translation dictionary (window.TR) — stock themes load this
          before cbi.js; without it every client-side L() call falls back to

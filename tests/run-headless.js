@@ -510,6 +510,50 @@ function submenuHoverGraceCheck() {
 // failure mode the AGENTS.md rule warns about. The runner now verifies the
 // list against the directory instead of trusting it: extra, missing and
 // duplicated entries all fail with the exact file names to add/remove.
+function debugGateOrderCheck() {
+    // Debug-first contract (0.1.0-249): debug.js must be the FIRST theme /js/
+    // script in every header template branch. Regression basis: the embed
+    // branch loads color_calc-argon.js BEFORE i18n, so an i18n-anchored
+    // placement let its top-level DBG() call throw ReferenceError.
+    // (tests/js/test-runner.html does not load color_calc -> L1 blind, hence
+    // this static gate.)
+    const problems = [];
+    try {
+        const specs = [
+            { f: 'files/templates/header.htm',
+              dbg: '<script src="<%=media%>/js/debug.js"></script>' },
+            { f: 'files/usr/share/ucode/luci/template/themes/desktop/header.ut',
+              dbg: '<script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>' },
+        ];
+        specs.forEach(function(spec) {
+            const t = readFile(spec.f);
+            const dbgi = t.indexOf(spec.dbg);
+            if (dbgi < 0) {
+                problems.push('debug.js script missing from ' + spec.f);
+                return;
+            }
+            const re = /<script src="([^"]+)"[^>]*>/g;
+            let m;
+            while ((m = re.exec(t)) !== null) {
+                if (m.index >= dbgi) continue;
+                const srcAttr = m[1];
+                if (srcAttr.indexOf('/js/debug.js') !== -1) continue;
+                if (srcAttr.indexOf('/js/') !== -1) {
+                    problems.push('theme script loads before debug.js in ' + spec.f +
+                        ' (' + srcAttr + ') — top-level DBG() callers would throw ReferenceError');
+                }
+            }
+        });
+    } catch (e) {
+        problems.push('debugGateOrderCheck failed: ' + e.message);
+    }
+    if (problems.length) {
+        console.log('❌ debug gate order broken:\n' + problems.map(function(p) { return '  ' + p; }).join('\n') + '\n  → plans/01-console-log-dbg.md');
+        process.exit(1);
+    }
+    console.log('✅ debug gate order: debug.js precedes every theme js script in both header templates');
+}
+
 function testManifestCheck() {
     const RUNNER_HTML = 'tests/js/test-runner.html';
     const dir = path.join(THEME_DIR, 'tests/js');
@@ -841,6 +885,7 @@ if (require.main === module) (async () => {
         i18nDriftCheck();
         widgetStyleContractCheck();
         submenuHoverGraceCheck();
+        debugGateOrderCheck();
         testManifestCheck();
         runLuaRuntimeTests();
         killAll();
