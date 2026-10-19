@@ -115,6 +115,40 @@
         });
     }
 
+    // Check if current PREVIEW image is already saved to builtin
+    function _checkSavedState() {
+        var saveBtn = document.getElementById('wp-save-btn');
+        if (!saveBtn) return;
+        var mode = (document.getElementById('ts-desktop_wallpaper') || {}).value || '';
+        if (mode !== 'bing' && mode !== 'picsum') return;
+        // Check the actual preview image (not cache file behind the scenes)
+        // Strip any ?v= cache-buster — the check endpoint takes a filename.
+        var previewFile = (window.__wp_preview_url || '').split('/').pop().split('?')[0];
+        if (!previewFile) return;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/cgi-bin/luci/admin/desktop/check_saved?mode=' + encodeURIComponent(mode) +
+                 '&file=' + encodeURIComponent(previewFile), true);
+        xhr.onload = function() {
+            try {
+                var r = JSON.parse(xhr.responseText);
+                if (r.saved) {
+                    saveBtn.textContent = _('Saved');
+                    saveBtn.style.background = 'rgba(255,255,255,0.08)';
+                    saveBtn.style.color = '#888';
+                    saveBtn.disabled = true;
+                    saveBtn.title = _('Already in Built-in: ') + r.name;
+                } else {
+                    saveBtn.textContent = _('Save');
+                    saveBtn.style.background = 'rgba(45,206,137,0.85)';
+                    saveBtn.style.color = '#fff';
+                    saveBtn.disabled = false;
+                    saveBtn.title = _('Save to Built-in');
+                }
+            } catch(e) {}
+        };
+        xhr.send();
+    }
+
     // ===== Open =====
     window.ThemeSettings = {
         open: function() {
@@ -206,7 +240,7 @@
                 dProbe.onload = function() {
                     DBG('[preview] confirmed desktop exists, snap back');
                     _previewWallpaper(mode, desktopUrl + '?v=' + Date.now());
-                    checkSavedState();
+                    _checkSavedState();
                 };
                 dProbe.onerror = function() {
                     // 2. Remembered first-time candidate?
@@ -217,7 +251,7 @@
                         cProbe.onload = function() {
                             DBG('[preview] first-time candidate kept');
                             _previewWallpaper(mode, cacheUrl + '?v=' + Date.now());
-                            checkSavedState();
+                            _checkSavedState();
                         };
                         cProbe.onerror = function() {
                             try { localStorage.removeItem(memKey); } catch(e) {}
@@ -250,7 +284,7 @@
                             _previewWallpaper(mode, r.url);
                             try { localStorage.setItem(memKey, '1'); } catch(e) {}
                             if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Preview ready'), type: 'info', duration: 4000});
-                            checkSavedState();
+                            _checkSavedState();
                         } catch(e) { DBG('[preview] download error:', e.message); }
                     };
                     xhr.onerror = function() {
@@ -359,40 +393,7 @@
             // first-time preview download happens if nothing is cached
             if (initialMode === 'bing' || initialMode === 'picsum') _ensurePreviewDownload(initialMode);
 
-            // Check if current PREVIEW image is already saved to builtin
-            function checkSavedState() {
-                var saveBtn = document.getElementById('wp-save-btn');
-                if (!saveBtn) return;
-                var mode = (document.getElementById('ts-desktop_wallpaper') || {}).value || '';
-                if (mode !== 'bing' && mode !== 'picsum') return;
-                // Check the actual preview image (not cache file behind the scenes)
-                // Strip any ?v= cache-buster — the check endpoint takes a filename.
-                var previewFile = (window.__wp_preview_url || '').split('/').pop().split('?')[0];
-                if (!previewFile) return;
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', '/cgi-bin/luci/admin/desktop/check_saved?mode=' + encodeURIComponent(mode) +
-                         '&file=' + encodeURIComponent(previewFile), true);
-                xhr.onload = function() {
-                    try {
-                        var r = JSON.parse(xhr.responseText);
-                        if (r.saved) {
-                            saveBtn.textContent = _('Saved');
-                            saveBtn.style.background = 'rgba(255,255,255,0.08)';
-                            saveBtn.style.color = '#888';
-                            saveBtn.disabled = true;
-                            saveBtn.title = _('Already in Built-in: ') + r.name;
-                        } else {
-                            saveBtn.textContent = _('Save');
-                            saveBtn.style.background = 'rgba(45,206,137,0.85)';
-                            saveBtn.style.color = '#fff';
-                            saveBtn.disabled = false;
-                            saveBtn.title = _('Save to Built-in');
-                        }
-                    } catch(e) {}
-                };
-                xhr.send();
-            }
-            checkSavedState();
+            _checkSavedState();
 
             // Tab switching
             p.querySelectorAll('.ts-tab').forEach(function(btn) {
@@ -439,7 +440,7 @@
                     var saveBtn = document.getElementById('wp-save-btn');
                     if (saveBtn) {
                         saveBtn.style.display = (mode === 'bing' || mode === 'picsum') ? '' : 'none';
-                        if (mode === 'bing' || mode === 'picsum') checkSavedState();
+                        if (mode === 'bing' || mode === 'picsum') _checkSavedState();
                     }
                     // Preview only — desktop unchanged until Apply
                     _previewWallpaper(mode);
@@ -497,7 +498,7 @@
                             // Update preview only — desktop-config untouched (Apply/OK handles it)
                             _previewWallpaper(mode, r.url);
                             markDirty();
-                            checkSavedState();
+                            _checkSavedState();
                         } catch(e) { DBG('[refresh] error:', e.message); }
                     };
                     xhr.onerror = function() {
@@ -838,7 +839,7 @@
                 if (paDiv) paDiv.style.display = (dMode === 'picsum') ? '' : 'none';
                 var saveBtn = document.getElementById('wp-save-btn');
                 if (saveBtn) saveBtn.style.display = (dMode === 'bing' || dMode === 'picsum') ? '' : 'none';
-                if (dMode === 'bing' || dMode === 'picsum') checkSavedState();
+                if (dMode === 'bing' || dMode === 'picsum') _checkSavedState();
             });
         }
     };
