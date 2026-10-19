@@ -115,7 +115,7 @@
         // Merge stored values over defaults (handles falsy correctly)
         mergeDefaults: function(stored) {
             var d = this.getDefaults();
-            if (!stored) { console.log('[theme] mergeDefaults: no stored values, using defaults'); return d; }
+            if (!stored) { DBG('[theme] mergeDefaults: no stored values, using defaults'); return d; }
             var merged = 0;
             for (var k in stored) {
                 if (stored[k] !== undefined && stored[k] !== null && stored[k] !== '') {
@@ -123,7 +123,7 @@
                     merged++;
                 }
             }
-            console.log('[theme] mergeDefaults: merged ' + merged + ' values, taskbar_color=' + d.taskbar_color);
+            DBG('[theme] mergeDefaults: merged ' + merged + ' values, taskbar_color=' + d.taskbar_color);
             return d;
         },
 
@@ -136,7 +136,7 @@
                 if (f.type === 'checkbox') { vals[f.id] = el.checked ? '1' : '0'; }
                 else { vals[f.id] = el.value; }
             });
-            console.log('[theme] readFromDOM: taskbar_color=' + vals.taskbar_color + ' taskbar_opacity=' + vals.taskbar_opacity +
+            DBG('[theme] readFromDOM: taskbar_color=' + vals.taskbar_color + ' taskbar_opacity=' + vals.taskbar_opacity +
                         ' titlebar_color=' + vals.titlebar_color + ' startmenu_color=' + vals.startmenu_color +
                         ' wallpaper=' + vals.desktop_wallpaper + ' dark=' + vals.app_dark_mode);
             return vals;
@@ -174,7 +174,7 @@
         // Apply values as CSS variables on <html>
         applyCss: function(vals) {
             var r = document.documentElement.style;
-            console.log('[theme] applyCss: taskbar_color=' + vals.taskbar_color + ' taskbar_opacity=' + vals.taskbar_opacity +
+            DBG('[theme] applyCss: taskbar_color=' + vals.taskbar_color + ' taskbar_opacity=' + vals.taskbar_opacity +
                         ' titlebar_color=' + vals.titlebar_color + ' startmenu_color=' + vals.startmenu_color +
                         ' dark=' + vals.app_dark_mode);
 
@@ -264,7 +264,7 @@
             r.setProperty('--picker-input-bg', smYiq >= 150 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)');
 
             // Log actual CSS vars after apply
-            console.log('[theme] after apply: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+            DBG('[theme] after apply: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                         ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
                         ' --startmenu-bg=' + r.getPropertyValue('--startmenu-bg').trim());
 
@@ -289,10 +289,10 @@
         readFromConfig: function() {
             try {
                 var t = LuCIDesktop.getSection('theme');
-                console.log('[theme] readFromConfig: taskbar_color=' + t.taskbar_color + ' taskbar_opacity=' + t.taskbar_opacity +
+                DBG('[theme] readFromConfig: taskbar_color=' + t.taskbar_color + ' taskbar_opacity=' + t.taskbar_opacity +
                             ' titlebar_color=' + t.titlebar_color + ' wallpaper=' + t.desktop_wallpaper);
                 return t;
-            } catch(e) { console.log('[theme] readFromConfig error:', e.message); return {}; }
+            } catch(e) { DBG('[theme] readFromConfig error:', e.message); return {}; }
         },
 
         // ===== ThemeSession: unified preview / commit / rollback =====

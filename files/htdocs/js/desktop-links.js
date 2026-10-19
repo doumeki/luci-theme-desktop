@@ -74,7 +74,7 @@
         cleanGhostApps: function() {
             var validUrls = this.menuUrls();
             if (Object.keys(validUrls).length === 0) {
-                console.log('[ghost-clean] no menu data, skip');
+                DBG('[ghost-clean] no menu data, skip');
                 return;
             }
             var customUrls = this._customUrlSet();
@@ -89,13 +89,13 @@
                 if (p.custom) return true;   // user's own link — never a ghost
                 if (!validUrls[p.url]) {
                     removedPins.push(p.url);
-                    console.log('[ghost-clean] pin ghost: ' + p.url + ' title="' + p.title + '"');
+                    DBG('[ghost-clean] pin ghost: ' + p.url + ' title="' + p.title + '"');
                     return false;
                 }
                 return true;
             }));
             if (removedPins.length > 0) {
-                console.log('[ghost-clean] removed ' + removedPins.length + ' pins: ' + removedPins.join(', '));
+                DBG('[ghost-clean] removed ' + removedPins.length + ' pins: ' + removedPins.join(', '));
                 State.savePins();
             }
 
@@ -106,13 +106,13 @@
                 if (customUrls[h]) return true;   // hiding a custom link is valid
                 if (!validUrls[h]) {
                     removedHidden.push(h);
-                    console.log('[ghost-clean] hidden ghost: ' + h);
+                    DBG('[ghost-clean] hidden ghost: ' + h);
                     return false;
                 }
                 return true;
             }));
             if (removedHidden.length > 0) {
-                console.log('[ghost-clean] removed ' + removedHidden.length + ' hidden: ' + removedHidden.join(', '));
+                DBG('[ghost-clean] removed ' + removedHidden.length + ' hidden: ' + removedHidden.join(', '));
                 State.saveHidden();
             }
 
@@ -124,16 +124,16 @@
                 if (!validUrls[u]) {
                     delete iconLayout[u];
                     removedLayout++;
-                    console.log('[ghost-clean] icon layout ghost: ' + u);
+                    DBG('[ghost-clean] icon layout ghost: ' + u);
                 }
             });
             if (removedLayout > 0) {
-                console.log('[ghost-clean] removed ' + removedLayout + ' icon layout entries');
+                DBG('[ghost-clean] removed ' + removedLayout + ' icon layout entries');
                 State.saveIconLayout();
             }
 
             if (removedPins.length === 0 && removedHidden.length === 0) {
-                console.log('[ghost-clean] all clean, no ghosts (checked ' + oldPinLen + ' pins + ' + oldHiddenLen + ' hidden)');
+                DBG('[ghost-clean] all clean, no ghosts (checked ' + oldPinLen + ' pins + ' + oldHiddenLen + ' hidden)');
             }
         },
 

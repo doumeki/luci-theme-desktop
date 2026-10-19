@@ -23,7 +23,7 @@
             list.forEach(function(name) { disabled[name] = true; });
         } catch(e) {}
         snapshot = cloneSet(disabled);
-        console.log('[wp-manager] open: snapshot ' + listKeys(snapshot));
+        DBG('[wp-manager] open: snapshot ' + listKeys(snapshot));
     }
 
     function listKeys(obj) {
@@ -50,7 +50,7 @@
         var arr = [];
         for (var k in disabled) { if (disabled[k]) arr.push(k); }
         arr.sort();
-        console.log('[wp-manager] commit: disabled=' + JSON.stringify(arr));
+        DBG('[wp-manager] commit: disabled=' + JSON.stringify(arr));
         // Update desktop-config
         try {
             var cfg = LuCIDesktop.getConfig();
@@ -72,7 +72,7 @@
             var prevUrl = window.__wp_preview_url || '';
             var prevName = prevUrl.split('/').pop();
             if (prevName && disabled[prevName] && enabled.length > 0) {
-                console.log('[wp-manager] preview ' + prevName + ' now disabled, re-pick');
+                DBG('[wp-manager] preview ' + prevName + ' now disabled, re-pick');
                 var newUrl = enabled[Math.floor(Math.random() * enabled.length)];
                 window.__wp_preview_url = newUrl;
                 var preview = document.getElementById('wp-preview-img');
@@ -82,13 +82,13 @@
                     preview.style.backgroundPosition = 'center';
                 }
             }
-        } catch(e) { console.log('[wp-manager] commit error:', e.message); }
+        } catch(e) { DBG('[wp-manager] commit error:', e.message); }
         LuCIDesktop.saveDesktopSection('settings', {builtin_disabled: JSON.stringify(arr)});
     }
 
     function revert() {
         disabled = cloneSet(snapshot);
-        console.log('[wp-manager] revert: restored ' + listKeys(disabled));
+        DBG('[wp-manager] revert: restored ' + listKeys(disabled));
         // Restore desktop-config to original snapshot (no UCI write)
         try {
             var arr = [];
@@ -107,7 +107,7 @@
                 return !snapshot[url.split('/').pop()];
             });
             LuCIDesktop.setSectionLocal('wallpaper', cfg.wallpaper);
-        } catch(e) { console.log('[wp-manager] revert error:', e.message); }
+        } catch(e) { DBG('[wp-manager] revert error:', e.message); }
     }
 
     var WallpaperManager = {
@@ -158,21 +158,21 @@
 
             // X (top-right) = same as Cancel
             panel.querySelector('#wps-close').addEventListener('click', function() {
-                console.log('[wp-manager] close (X) — reverting');
+                DBG('[wp-manager] close (X) — reverting');
                 revert();
                 panel.remove(); panel = null;
             });
 
             // Cancel (bottom) = revert + close
             panel.querySelector('#wps-cancel').addEventListener('click', function() {
-                console.log('[wp-manager] Cancel — reverting');
+                DBG('[wp-manager] Cancel — reverting');
                 revert();
                 panel.remove(); panel = null;
             });
 
             // OK (bottom-right) = commit + close
             panel.querySelector('#wps-ok').addEventListener('click', function() {
-                console.log('[wp-manager] OK — committing');
+                DBG('[wp-manager] OK — committing');
                 commit();
                 panel.remove(); panel = null;
             });
@@ -181,7 +181,7 @@
             var checkAll = panel.querySelector('#wps-check-all');
             checkAll.addEventListener('change', function() {
                 var check = this.checked;
-                console.log('[wp-manager] ' + (check ? 'check' : 'uncheck') + ' all');
+                DBG('[wp-manager] ' + (check ? 'check' : 'uncheck') + ' all');
                 var cbs = panel.querySelectorAll('.wps-cb');
                 cbs.forEach(function(cb) {
                     cb.checked = check;
@@ -291,7 +291,7 @@
                             }
                             // Update check-all state
                             updateCheckAll();
-                            console.log('[wp-manager] staged: ' + name + ' ' + (disabled[name] ? 'disabled' : 'enabled') +
+                            DBG('[wp-manager] staged: ' + name + ' ' + (disabled[name] ? 'disabled' : 'enabled') +
                                         ' total_disabled=' + listKeys(disabled));
                         });
 

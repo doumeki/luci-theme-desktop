@@ -300,6 +300,6 @@
         return translated.replace(/%[ds]/g, function() { return args.length ? String(args.shift()) : ''; });
     };
 
-    console.log('[i18n] lang=' + (getLang() || '(default en)') + ' strings=' +
+    DBG('[i18n] lang=' + (getLang() || '(default en)') + ' strings=' +
         Object.keys((window.__I18N[getLang()] || {})).length);
 })();

@@ -92,7 +92,7 @@
             };
             document.addEventListener('desktop-icons-rendered', this._onRendered);
 
-            console.log('[QuantumIcons] init ok: grid=' + this.gridCols + 'x' + this.gridRows +
+            DBG('[QuantumIcons] init ok: grid=' + this.gridCols + 'x' + this.gridRows +
                 ' icons=' + this.container.querySelectorAll(this.config.iconSelector).length);
         },
 
@@ -282,7 +282,7 @@
         _press: function(icon, clientX, clientY, e, isTouch) {
             var self = this;
             if (this.isDragging) return;
-            console.log('[QuantumIcons] mousedown icon=' + (icon.getAttribute('data-url') || '?') +
+            DBG('[QuantumIcons] mousedown icon=' + (icon.getAttribute('data-url') || '?') +
                 ' enabled=' + this.config.enabled + ' at=' + clientX + ',' + clientY);
 
             // Remember the cell the icon started from — the drop-swap
@@ -310,7 +310,7 @@
                         Math.abs(dy) < self.config.dragThreshold) return;
                     // threshold crossed → take over the gesture
                     engaged = true;
-                    console.log('[QuantumIcons] drag engaged (dx=' + (cx - startX) + ',dy=' + (cy - startY) + ')');
+                    DBG('[QuantumIcons] drag engaged (dx=' + (cx - startX) + ',dy=' + (cy - startY) + ')');
                     self.isDragging = true;
                     self.dragTarget = icon;
                     var rect = icon.getBoundingClientRect();
@@ -372,24 +372,27 @@
                     }
                 });
                 if (occupant) {
-                    // Animated swap: let the displaced icon glide to the
-                    // dragged icon's old cell (same quantum bounce easing
-                    // as the drag), then drop the transient transition.
+                    // Animated swap: the displaced icon waits 0.1s after
+                    // the drop, THEN glides to the dragged icon's old cell
+                    // (transition-delay keeps it parked on its cell while
+                    // the drop settles), same quantum bounce easing as the
+                    // drag. The transient transition is cleared after
+                    // delay + duration so later snaps stay crisp.
                     occupant.style.transition =
-                        'left 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), ' +
-                        'top 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                        'left 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s, ' +
+                        'top 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s';
                     self.snapIconToGrid(occupant, startCol, startRow, true);
                     setTimeout(function() {
                         occupant.style.transition = '';
-                    }, 240);
-                    console.log('[QuantumIcons] swap: ' + (occupant.getAttribute('data-url') || '?') +
+                    }, 340);
+                    DBG('[QuantumIcons] swap: ' + (occupant.getAttribute('data-url') || '?') +
                         ' -> ' + startCol + ',' + startRow);
                     if (typeof self.config.onPositionChange === 'function') {
                         self.config.onPositionChange(occupant, startCol, startRow);
                     }
                 }
 
-                console.log('[QuantumIcons] drag end col=' + col + ' row=' + row +
+                DBG('[QuantumIcons] drag end col=' + col + ' row=' + row +
                     ' left=' + icon.style.left + ' top=' + icon.style.top);
                 if (typeof self.config.onPositionChange === 'function') {
                     self.config.onPositionChange(icon, col, row);

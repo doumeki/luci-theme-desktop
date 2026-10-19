@@ -23,16 +23,16 @@
         var id = el.id.replace('ts-','');
         if (el.type === 'color') {
             el.title = el.value;
-            console.log('[theme] field change: ' + id + '=' + el.value + ' (color)');
+            DBG('[theme] field change: ' + id + '=' + el.value + ' (color)');
         } else if (el.type === 'range') {
             var lbl = document.getElementById('tsv-' + id);
             var f = C.byId[id];
             if (lbl && f) lbl.textContent = C.formatValue(f, el.value);
-            console.log('[theme] field change: ' + id + '=' + el.value + ' (range)');
+            DBG('[theme] field change: ' + id + '=' + el.value + ' (range)');
         } else if (el.type === 'checkbox') {
-            console.log('[theme] field change: ' + id + '=' + (el.checked ? '1' : '0') + ' (checkbox)');
+            DBG('[theme] field change: ' + id + '=' + (el.checked ? '1' : '0') + ' (checkbox)');
         } else {
-            console.log('[theme] field change: ' + id + '=' + el.value);
+            DBG('[theme] field change: ' + id + '=' + el.value);
         }
         markDirty();
         C.applyCss(C.readFromDOM());
@@ -123,7 +123,7 @@
 
             dirty = false;
             var cfg = C.readFromConfig();
-            console.log('[panel] open: wallpaper=' + cfg.desktop_wallpaper +
+            DBG('[panel] open: wallpaper=' + cfg.desktop_wallpaper +
                         ' taskbar_color=' + cfg.taskbar_color +
                         ' wp_url=' + ((cfg.wallpaper && cfg.wallpaper.url) || '(none)'));
             var vals = C.mergeDefaults(cfg);
@@ -139,7 +139,7 @@
                 if (!box || !preview) return;
                 // Toggle class on parent box — CSS hides/shows dots declaratively
                 if (mode === 'gradient') {
-                    console.log('[preview] mode=gradient (hide preview, show dots)');
+                    DBG('[preview] mode=gradient (hide preview, show dots)');
                     box.classList.remove('wp-remote');
                     preview.style.display = 'none';
                     window.__wp_preview_url = '';
@@ -158,12 +158,12 @@
                     if (mode === 'builtin') {
                         try {
                             var dc = LuCIDesktop.getSection('wallpaper');
-                            console.log('[preview] builtin dc.wp.mode=' + dc.mode + ' builtin_ct=' + (dc.builtin && dc.builtin.length));
+                            DBG('[preview] builtin dc.wp.mode=' + dc.mode + ' builtin_ct=' + (dc.builtin && dc.builtin.length));
                             if (dc.builtin && dc.builtin.length > 0) {
                                 var url = (dc.mode === 'builtin' && dc.url)
                                     ? dc.url
                                     : dc.builtin[Math.floor(Math.random() * dc.builtin.length)];
-                                console.log('[preview] builtin url=' + url);
+                                DBG('[preview] builtin url=' + url);
                                 window.__wp_preview_url = url;
                                 preview.style.display = '';
                                 preview.style.backgroundImage = 'url("' + url + '")';
@@ -171,7 +171,7 @@
                                 preview.style.backgroundPosition = 'center';
                                 return;
                             }
-                        } catch(e) { console.log('[preview] builtin error:', e); }
+                        } catch(e) { DBG('[preview] builtin error:', e); }
                         window.__wp_preview_url = '';
                         return;
                     }
@@ -182,7 +182,7 @@
                     preview.style.backgroundImage = 'url("' + url + '")';
                     preview.style.backgroundSize = 'cover';
                     preview.style.backgroundPosition = 'center';
-                    console.log('[preview] mode=' + mode + ' url=' + url);
+                    DBG('[preview] mode=' + mode + ' url=' + url);
                 }
             }
 
@@ -204,7 +204,7 @@
                 // 1. Confirmed desktop image exists → snap preview back to it
                 var dProbe = new Image();
                 dProbe.onload = function() {
-                    console.log('[preview] confirmed desktop exists, snap back');
+                    DBG('[preview] confirmed desktop exists, snap back');
                     _previewWallpaper(mode, desktopUrl + '?v=' + Date.now());
                     checkSavedState();
                 };
@@ -215,7 +215,7 @@
                     if (remembered) {
                         var cProbe = new Image();
                         cProbe.onload = function() {
-                            console.log('[preview] first-time candidate kept');
+                            DBG('[preview] first-time candidate kept');
                             _previewWallpaper(mode, cacheUrl + '?v=' + Date.now());
                             checkSavedState();
                         };
@@ -232,7 +232,7 @@
                 dProbe.src = desktopUrl + '?v=' + Date.now();
 
                 function downloadFirstCandidate() {
-                    console.log('[preview] no candidate, downloading first-time ' + mode + '...');
+                    DBG('[preview] no candidate, downloading first-time ' + mode + '...');
                     if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Downloading preview…'), type: 'info', duration: 4000});
                     var preview = document.getElementById('wp-preview-img');
                     if (preview) preview.classList.add('wp-loading');
@@ -251,7 +251,7 @@
                             try { localStorage.setItem(memKey, '1'); } catch(e) {}
                             if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Preview ready'), type: 'info', duration: 4000});
                             checkSavedState();
-                        } catch(e) { console.log('[preview] download error:', e.message); }
+                        } catch(e) { DBG('[preview] download error:', e.message); }
                     };
                     xhr.onerror = function() {
                         if (preview) preview.classList.remove('wp-loading');
@@ -464,7 +464,7 @@
                     var wrapper = btn.parentNode;
                     var sel = wrapper ? wrapper.querySelector('select') : null;
                     var mode = sel ? sel.value : 'picsum';
-                    console.log('[refresh] mode=' + mode + ' forcing download...');
+                    DBG('[refresh] mode=' + mode + ' forcing download...');
                     btn.textContent = _('...');
                     btn.disabled = true;
                     btn.style.opacity = '0.5';
@@ -482,30 +482,30 @@
                         if (preview) preview.classList.remove('wp-loading');
                         try {
                             if (xhr.status !== 200) {
-                                console.log('[refresh] XHR failed: ' + xhr.status);
+                                DBG('[refresh] XHR failed: ' + xhr.status);
                                 if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Refresh failed (server error)'), type: 'warn', key: 'wp-refresh-failed'});
                                 return;
                             }
                             var r = JSON.parse(xhr.responseText);
-                            console.log('[refresh] got url=' + (r.url || '').substring(0, 60) + ' debug=' + (r.debug || ''));
+                            DBG('[refresh] got url=' + (r.url || '').substring(0, 60) + ' debug=' + (r.debug || ''));
                             if (!r.url) return;
                             // Detect server-side download failure (network issue with picsum API)
                             if (r.debug && r.debug.indexOf('download=fail') !== -1) {
-                                console.log('[refresh] server download failed, using cached image');
+                                DBG('[refresh] server download failed, using cached image');
                                 if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Picsum unreachable, showing cached image'), type: 'warn', key: 'wp-picsum-unreachable'});
                             }
                             // Update preview only — desktop-config untouched (Apply/OK handles it)
                             _previewWallpaper(mode, r.url);
                             markDirty();
                             checkSavedState();
-                        } catch(e) { console.log('[refresh] error:', e.message); }
+                        } catch(e) { DBG('[refresh] error:', e.message); }
                     };
                     xhr.onerror = function() {
                         btn.textContent = _('Refresh');
                         btn.disabled = false;
                         btn.style.opacity = '';
                         if (preview) preview.classList.remove('wp-loading');
-                        console.log('[refresh] network error');
+                        DBG('[refresh] network error');
                         if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Network error, check connection'), type: 'error'});
                     };
                     xhr.send();
@@ -526,7 +526,7 @@
                     if (wpSaveBtn.disabled) return;
                     var mode = (document.getElementById('ts-desktop_wallpaper') || {}).value || '';
                     if (mode !== 'bing' && mode !== 'picsum') return;
-                    console.log('[save-to-builtin] mode=' + mode);
+                    DBG('[save-to-builtin] mode=' + mode);
                     wpSaveBtn.textContent = '...';
                     wpSaveBtn.disabled = true;
                     var xhr = new XMLHttpRequest();
@@ -535,7 +535,7 @@
                     xhr.onload = function() {
                         try {
                             var r = JSON.parse(xhr.responseText);
-                            console.log('[save-to-builtin] ok=' + r.ok + ' name=' + (r.name || r.msg || ''));
+                            DBG('[save-to-builtin] ok=' + r.ok + ' name=' + (r.name || r.msg || ''));
                             if (r.ok) {
                                 wpSaveBtn.textContent = _('✓ Saved');
                                 wpSaveBtn.style.background = 'rgba(45,206,137,0.2)';
@@ -673,13 +673,13 @@
             p.querySelector('#ts-close').addEventListener('click', function() {
                 var cfg = C.readFromConfig();
                 var r = document.documentElement.style;
-                console.log('[close] BEFORE revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                DBG('[close] BEFORE revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
                             ' wallpaper=' + cfg.desktop_wallpaper +
                             ' builtin_ct=' + (cfg.builtin && cfg.builtin.length));
                 C.applyCss(cfg);
                 var oldWp = wpEl ? wpEl.style.backgroundImage : '';
-                console.log('[close] AFTER revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                DBG('[close] AFTER revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' wp_bg=' + oldWp.substring(0, 60));
                 p.remove();
             });
@@ -694,7 +694,7 @@
 
             p.querySelector('#ts-apply').addEventListener('click', function() {
                 var r = document.documentElement.style;
-                console.log('[apply] BEFORE: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                DBG('[apply] BEFORE: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim());
                 var v = C.readFromDOM();
                 C.saveToConfig(v);
@@ -702,7 +702,7 @@
                 var m = _getWallpaperMode();
                 var u = _getPreviewUrl();
                 if (m === 'builtin' && u.indexOf('/background/') === -1) u = '';
-                console.log('[apply] AFTER: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                DBG('[apply] AFTER: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
                             ' select_mode=' + m + ' preview_url=' + u);
                 // bing/picsum: only confirm (cache→_desktop) when the preview
@@ -714,7 +714,7 @@
                 if (m === 'bing' || m === 'picsum') {
                     if (u.indexOf('_desktop.jpg') !== -1) {
                         // Preview = confirmed desktop → nothing to confirm
-                        console.log('[apply] preview is desktop image, desktop unchanged');
+                        DBG('[apply] preview is desktop image, desktop unchanged');
                         LuCIDesktop._applyWallpaper({mode: m, url: u});
                         markClean();
                     } else {
@@ -743,12 +743,12 @@
                 var u = _getPreviewUrl();
                 if (m === 'builtin' && u.indexOf('/background/') === -1) u = '';
                 var r = document.documentElement.style;
-                console.log('[ok] --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                DBG('[ok] --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' select_mode=' + m + ' preview_url=' + u);
                 if (m === 'bing' || m === 'picsum') {
                     if (u.indexOf('_desktop.jpg') !== -1) {
                         // Preview = confirmed desktop → desktop unchanged
-                        console.log('[ok] preview is desktop image, desktop unchanged');
+                        DBG('[ok] preview is desktop image, desktop unchanged');
                         LuCIDesktop._applyWallpaper({mode: m, url: u});
                         p.remove();
                     } else {
@@ -802,7 +802,7 @@
 
             p.querySelector('#ts-reset').addEventListener('click', function() {
                 var d = C.getDefaults();
-                console.log('[reset] applying defaults: taskbar_color=' + d.taskbar_color);
+                DBG('[reset] applying defaults: taskbar_color=' + d.taskbar_color);
                 C.writeToDOM(d);
                 C.applyCss(d);
                 // Broadcast to iframes (same path as Apply)

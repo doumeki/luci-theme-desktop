@@ -154,7 +154,7 @@
                 (function probeNext(cands, idx) {
                     if (idx >= cands.length) {
                         cands.forEach(function(u) { self._unavailable[u] = true; });
-                        console.log('[probe] hiding default shortcut 404: ' + cands.join(', '));
+                        DBG('[probe] hiding default shortcut 404: ' + cands.join(', '));
                         self._finishProbeRender();
                         return;
                     }

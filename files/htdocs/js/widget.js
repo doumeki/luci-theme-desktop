@@ -149,14 +149,14 @@
             if (!def) throw new Error('Widget "' + typeId + '" not registered');
 
             if (!def.multi && this._instancesOf(typeId).length > 0) {
-                console.log('[widget] enable ' + typeId + ' — already active (single-instance)');
+                DBG('[widget] enable ' + typeId + ' — already active (single-instance)');
                 return;
             }
 
             var activeCount = this._instancesOf(typeId).length;
             var max = def.maxInstances || 3;
             if (def.multi && activeCount >= max && !(overrides && overrides.id && this._preservedConfigs[overrides.id])) {
-                console.log('[widget] enable ' + typeId + ' — max ' + max + ' instances reached');
+                DBG('[widget] enable ' + typeId + ' — max ' + max + ' instances reached');
                 if (window.LuCIDesktop && LuCIDesktop.emit) {
                     LuCIDesktop.emit('toast', {msg: _('Max ') + max + _(' instances of ') + _(def.name), type: 'warn', key: 'widget-max'});
                 }
@@ -170,7 +170,7 @@
             if (preserved) {
                 overrides = Object.assign({}, preserved, overrides || {});
                 delete this._preservedConfigs[instanceId];
-                console.log('[widget] enable ' + instanceId + ' — restored preserved config');
+                DBG('[widget] enable ' + instanceId + ' — restored preserved config');
             }
 
             var cfg = Object.assign({}, def.defaults, overrides || {});
@@ -265,7 +265,7 @@
             setTimeout(function() { self._clampOne(inst); }, 50);
             if (!_skipSave) this.saveConfig();
             DESKTOP.emit('widget-enabled', {id: instanceId, typeId: typeId});
-            console.log('[widget] enable ' + instanceId + ' total=' + this._instancesOf(typeId).length);
+            DBG('[widget] enable ' + instanceId + ' total=' + this._instancesOf(typeId).length);
         },
 
         disable: function(instanceId, _skipSave) {
@@ -280,7 +280,7 @@
 
             // Preserve config before removing instance (mark inactive)
             this._preservedConfigs[instanceId] = this._buildConfig(inst, false);
-            console.log('[widget] disable ' + instanceId + ' — config preserved');
+            DBG('[widget] disable ' + instanceId + ' — config preserved');
 
             delete this.instances[instanceId];
             // _skipSave: restore-time sync (stickynote syncSlots) must not
@@ -472,7 +472,7 @@
             }
             delete this._preservedConfigs[instanceId];
             this.saveConfig();
-            console.log('[widget] clearPreserved ' + instanceId);
+            DBG('[widget] clearPreserved ' + instanceId);
         },
 
         // ===== Per-instance controls =====
@@ -574,7 +574,7 @@
                 // Only re-enable if it was active when saved
                 if (cfg.active !== false) {
                     try { self.enable(typeId, cfg, true); } catch(e) {
-                        console.log('[widget] loadConfig error for ' + cfg.id + ': ' + e.message);
+                        DBG('[widget] loadConfig error for ' + cfg.id + ': ' + e.message);
                         failed++;
                     }
                 } else {
@@ -590,7 +590,7 @@
             // (real bug on 1.1 mobile track, fixed by removing the write-
             // back + serializing _saveToUCI). Normalization is idempotent
             // and happens in memory on every load; nothing needs persisting.
-            console.log('[widget] loadConfig: ' + Object.keys(self.instances).length + ' active, ' +
+            DBG('[widget] loadConfig: ' + Object.keys(self.instances).length + ' active, ' +
                         Object.keys(self._preservedConfigs).length + ' preserved' +
                         (failed ? ', ' + failed + ' restore FAILED (config kept)' : ''));
         },
@@ -621,7 +621,7 @@
             var key = (LuCIDesktop.isMobile() ? 'mobile_widgets' : 'widgets');
             this._sendSave(key, data);
 
-            console.log('[widget] _saveToUCI: ' + data.instances.length + ' total (active=' +
+            DBG('[widget] _saveToUCI: ' + data.instances.length + ' total (active=' +
                         Object.keys(this.instances).length + ' preserved=' + Object.keys(this._preservedConfigs).length + ')');
         },
 

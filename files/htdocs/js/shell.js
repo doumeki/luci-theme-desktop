@@ -222,7 +222,7 @@ window.LuCIDesktop = (function() {
         // Detect new session (login) vs same-session refresh (F5/Ctrl+R)
         self._isNewSession = !sessionStorage.getItem('_desktop_sid');
         if (self._isNewSession) sessionStorage.setItem('_desktop_sid', '1');
-        console.log('[boot] ' + (self._isNewSession ? 'new session (login)' : 'page refresh (F5)'));
+        DBG('[boot] ' + (self._isNewSession ? 'new session (login)' : 'page refresh (F5)'));
         // Apply desktop wallpaper image (fast path: cached URL only, no XHR)
         self._applyWallpaper({forceRefresh: false});
         // 登录后静默检查新图（有新图才换，失败保持旧图）；F5 永不刷新——
@@ -491,7 +491,7 @@ window.LuCIDesktop = (function() {
             var m = qs.match(/[?&]app=([^&]+)/);
             if (!m) return;
             var app = decodeURIComponent(m[1]);
-            console.log('[app-url] ?app=' + app);
+            DBG('[app-url] ?app=' + app);
             // Normalize: strip leading /cgi-bin/luci/ if present
             var appPath = app.replace(/^\/cgi-bin\/luci\//, '');
             // Build full URL
@@ -506,22 +506,22 @@ window.LuCIDesktop = (function() {
                         for (var j = 0; j < cat.subs.length; j++) {
                             if (cat.subs[j].href && cat.subs[j].href.indexOf(appPath) !== -1) {
                                 title = cat.subs[j].title;
-                                console.log('[app-url] found title: ' + title + ' in ' + cat.id);
+                                DBG('[app-url] found title: ' + title + ' in ' + cat.id);
                                 break;
                             }
                         }
                     }
                     if (!title && cat.href && cat.href.indexOf(appPath) !== -1) {
                         title = cat.title;
-                        console.log('[app-url] found title: ' + title + ' (top-level)');
+                        DBG('[app-url] found title: ' + title + ' (top-level)');
                     }
                 }
             }
             if (window.WM) {
                 WM.open(url, title || appPath);
-                console.log('[app-url] WM.open: ' + url + ' title="' + (title || appPath) + '"');
+                DBG('[app-url] WM.open: ' + url + ' title="' + (title || appPath) + '"');
             }
-        } catch(e) { console.log('[app-url] error:', e.message); }
+        } catch(e) { DBG('[app-url] error:', e.message); }
     };
 
     // Direct visit to a non-landing page: the header injects
@@ -534,14 +534,14 @@ window.LuCIDesktop = (function() {
         try {
             var app = window.__DESKTOP_BOOT_APP__;
             if (!app) return;
-            console.log('[boot-app] opening: ' + app);
+            DBG('[boot-app] opening: ' + app);
             var appPath = app.replace(/^\/cgi-bin\/luci\//, '');
             var url = (appPath.indexOf('/cgi-bin/') === 0) ? appPath : '/cgi-bin/luci/' + appPath;
             if (window.WM) {
                 WM.open(url, appPath);
-                console.log('[boot-app] WM.open: ' + url);
+                DBG('[boot-app] WM.open: ' + url);
             }
-        } catch(e) { console.log('[boot-app] error:', e.message); }
+        } catch(e) { DBG('[boot-app] error:', e.message); }
     };
 
     // Apply desktop wallpaper (reads wallpaper config, picks randomly via crypto.getRandomValues)
@@ -558,10 +558,10 @@ window.LuCIDesktop = (function() {
                        (c.theme && c.theme.desktop_wallpaper) ||
                        (c.wallpaper && c.wallpaper.mode) || 'gradient';
 
-            console.log('[wp:apply] mode:', mode, 'opts.mode:', opts.mode, 'url:', (opts.url || '').substring(0,60), 'force:', opts.forceRefresh);
+            DBG('[wp:apply] mode:', mode, 'opts.mode:', opts.mode, 'url:', (opts.url || '').substring(0,60), 'force:', opts.forceRefresh);
 
             if (mode === 'gradient') {
-                console.log('[wp:apply] → gradient, clearing desktop bg (was: ' + wp.style.backgroundImage.substring(0, 60) + ')');
+                DBG('[wp:apply] → gradient, clearing desktop bg (was: ' + wp.style.backgroundImage.substring(0, 60) + ')');
                 wp.style.backgroundImage = '';
                 wp.style.backgroundSize = '';
                 wp.style.backgroundPosition = '';
@@ -584,17 +584,17 @@ window.LuCIDesktop = (function() {
             // Helper: apply wallpaper URL. Browser cache serves it instantly on revisit.
             var applyUrl = function(url) {
                 if (!url) return;
-                console.log('[wp:apply] desktop BEFORE:', wp.style.backgroundImage.substring(0, 80));
+                DBG('[wp:apply] desktop BEFORE:', wp.style.backgroundImage.substring(0, 80));
                 wp.style.backgroundImage = 'url("' + url + '")';
                 wp.style.backgroundSize = 'cover';
                 wp.style.backgroundPosition = 'center';
                 void wp.offsetWidth;
-                console.log('[wp:apply] desktop AFTER:', wp.style.backgroundImage.substring(0, 80));
+                DBG('[wp:apply] desktop AFTER:', wp.style.backgroundImage.substring(0, 80));
             };
 
             // If caller provides a URL (e.g. from preview), use it directly — no XHR
             if (opts.url) {
-                console.log('[wp:apply] → direct URL from caller');
+                DBG('[wp:apply] → direct URL from caller');
                 applyUrl(opts.url);
                 if (!c.wallpaper) c.wallpaper = {};
                 c.wallpaper.url = opts.url;
@@ -607,7 +607,7 @@ window.LuCIDesktop = (function() {
             // builtin: pick random from preloaded list (no XHR)
             if (mode === 'builtin' && c.wallpaper && c.wallpaper.builtin && c.wallpaper.builtin.length > 0) {
                 var picked = c.wallpaper.builtin[randomIndex(c.wallpaper.builtin.length)];
-                console.log('[wp:apply] → builtin, picked:', picked.substring(picked.lastIndexOf('/')+1));
+                DBG('[wp:apply] → builtin, picked:', picked.substring(picked.lastIndexOf('/')+1));
                 applyUrl(picked);
                 c.wallpaper.mode = mode;
                 c.wallpaper.url = picked;
@@ -619,15 +619,15 @@ window.LuCIDesktop = (function() {
             // bing / picsum: use server-cached URL if snapshot mode matches current
             var snapshotMode = c.wallpaper && c.wallpaper.mode;
             var urlMismatch = (snapshotMode && snapshotMode !== mode);
-            console.log('[wp:apply] snapshotMode:', snapshotMode, 'urlMismatch:', urlMismatch);
+            DBG('[wp:apply] snapshotMode:', snapshotMode, 'urlMismatch:', urlMismatch);
 
             if (!urlMismatch && c.wallpaper && c.wallpaper.url) {
-                console.log('[wp:apply] → cached URL');
+                DBG('[wp:apply] → cached URL');
                 applyUrl(c.wallpaper.url);
             }
 
             if (c.wallpaper && c.wallpaper.mode !== mode) {
-                console.log('[wp:apply] sync mode:', c.wallpaper.mode, '→', mode);
+                DBG('[wp:apply] sync mode:', c.wallpaper.mode, '→', mode);
                 c.wallpaper.mode = mode;
                 c.wallpaper.url = null;  // clear old mode's URL
                 self.setSectionLocal('wallpaper', c.wallpaper);
@@ -641,7 +641,7 @@ window.LuCIDesktop = (function() {
                 if (opts.forceRefresh && mode === 'picsum' &&
                     (c.theme && c.theme.picsum_auto_refresh) !== '1' &&
                     c.wallpaper && c.wallpaper.url) {
-                    console.log('[wp:apply] skip login refresh: picsum auto refresh disabled');
+                    DBG('[wp:apply] skip login refresh: picsum auto refresh disabled');
                     if (opts.callback) opts.callback();
                     return;
                 }
@@ -674,7 +674,7 @@ window.LuCIDesktop = (function() {
                 xhr.onerror = function() { if (opts.callback) opts.callback(); };
                 xhr.send();
             } else {
-                console.log('[wp:apply] → skip XHR, cached URL OK');
+                DBG('[wp:apply] → skip XHR, cached URL OK');
                 if (opts.callback) opts.callback();
             }
         } catch(e) {}
@@ -800,13 +800,13 @@ window.LuCIDesktop = (function() {
                 var c = self.getConfig();
                 var mode = (c.theme && c.theme.desktop_wallpaper) ||
                            (c.wallpaper && c.wallpaper.mode);
-                console.log('[wp:bg-refresh] mode=' + mode + ' has_url=' + !!(c.wallpaper && c.wallpaper.url) + ' panel_open=' + !!document.getElementById('theme-settings-panel'));
+                DBG('[wp:bg-refresh] mode=' + mode + ' has_url=' + !!(c.wallpaper && c.wallpaper.url) + ' panel_open=' + !!document.getElementById('theme-settings-panel'));
                 if (mode === 'picsum') {
                     if ((c.theme && c.theme.picsum_auto_refresh) !== '1') {
-                        console.log('[wp:bg-refresh] skip: picsum auto refresh disabled'); return;
+                        DBG('[wp:bg-refresh] skip: picsum auto refresh disabled'); return;
                     }
-                } else if (mode !== 'bing') { console.log('[wp:bg-refresh] skip: not bing or picsum'); return; }
-                if (!c.wallpaper || !c.wallpaper.url) { console.log('[wp:bg-refresh] skip: no cached URL'); return; }
+                } else if (mode !== 'bing') { DBG('[wp:bg-refresh] skip: not bing or picsum'); return; }
+                if (!c.wallpaper || !c.wallpaper.url) { DBG('[wp:bg-refresh] skip: no cached URL'); return; }
 
                 var wp = document.getElementById('desktop-wallpaper');
                 var xhr = new XMLHttpRequest();
@@ -822,15 +822,15 @@ window.LuCIDesktop = (function() {
                     } catch(e) { return mode; }
                 };
                 xhr.onload = function() {
-                    if (xhr.status !== 200) { console.log('[wp:bg-refresh] XHR failed: ' + xhr.status); return; }
+                    if (xhr.status !== 200) { DBG('[wp:bg-refresh] XHR failed: ' + xhr.status); return; }
                     var r;
-                    try { r = JSON.parse(xhr.responseText); } catch(e) { console.log('[wp:bg-refresh] JSON parse error'); return; }
+                    try { r = JSON.parse(xhr.responseText); } catch(e) { DBG('[wp:bg-refresh] JSON parse error'); return; }
                     // Only apply if server actually downloaded a new image (not cached)
-                    if (r.cached) { console.log('[wp:bg-refresh] skip: server cache hit, no new download'); return; }
-                    console.log('[wp:bg-refresh] got url=' + (r.url || '').substring(0, 60) + ' current=' + (c.wallpaper.url || '').substring(0, 60));
-                    if (!r.url) { console.log('[wp:bg-refresh] skip: no url'); return; }
+                    if (r.cached) { DBG('[wp:bg-refresh] skip: server cache hit, no new download'); return; }
+                    DBG('[wp:bg-refresh] got url=' + (r.url || '').substring(0, 60) + ' current=' + (c.wallpaper.url || '').substring(0, 60));
+                    if (!r.url) { DBG('[wp:bg-refresh] skip: no url'); return; }
                     if (currentMode() !== mode) {
-                        console.log('[wp:bg-refresh] skip: mode changed to ' + currentMode() + ' during download');
+                        DBG('[wp:bg-refresh] skip: mode changed to ' + currentMode() + ' during download');
                         return;
                     }
 
@@ -838,10 +838,10 @@ window.LuCIDesktop = (function() {
                     var img = new Image();
                     img.onload = function() {
                         if (currentMode() !== mode) {
-                            console.log('[wp:bg-refresh] skip (img): mode changed during download');
+                            DBG('[wp:bg-refresh] skip (img): mode changed during download');
                             return;
                         }
-                        console.log('[wp:bg-refresh] applying new wallpaper');
+                        DBG('[wp:bg-refresh] applying new wallpaper');
                         if (wp) {
                             wp.style.backgroundImage = 'url("' + r.url + '")';
                             wp.style.backgroundSize = 'cover';
@@ -862,7 +862,7 @@ window.LuCIDesktop = (function() {
                                 preview.style.backgroundPosition = 'center';
                             }
                         } else {
-                            console.log('[wp:bg-refresh] panel open on different mode, skipped preview update');
+                            DBG('[wp:bg-refresh] panel open on different mode, skipped preview update');
                         }
                         // Persist silently + confirm desktop file (picsum only)
                         if (c.theme) {
@@ -873,18 +873,18 @@ window.LuCIDesktop = (function() {
                             cx.open('POST', '/cgi-bin/luci/admin/desktop/confirm_wallpaper', true);
                             cx.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
                             cx.onload = function() {
-                                try { var resp = JSON.parse(cx.responseText); console.log('[wp:bg-refresh] confirm: ' + (resp.ok ? 'ok' : 'fail')); } catch(e) {}
+                                try { var resp = JSON.parse(cx.responseText); DBG('[wp:bg-refresh] confirm: ' + (resp.ok ? 'ok' : 'fail')); } catch(e) {}
                             };
-                            cx.onerror = function() { console.log('[wp:bg-refresh] confirm: network error'); };
+                            cx.onerror = function() { DBG('[wp:bg-refresh] confirm: network error'); };
                             cx.send('mode=' + encodeURIComponent(mode));
                         }
                     };
-                    img.onerror = function() { console.log('[wp:bg-refresh] image preload failed, keeping current'); };
+                    img.onerror = function() { DBG('[wp:bg-refresh] image preload failed, keeping current'); };
                     img.src = r.url;
                 };
-                xhr.onerror = function() { console.log('[wp:bg-refresh] XHR network error'); };
+                xhr.onerror = function() { DBG('[wp:bg-refresh] XHR network error'); };
                 xhr.send();
-            } catch(e) { console.log('[wp:bg-refresh] error:', e.message); }
+            } catch(e) { DBG('[wp:bg-refresh] error:', e.message); }
         }, 5000);
     };
 
@@ -910,7 +910,7 @@ window.LuCIDesktop = (function() {
                 _configCache = (c && typeof c === 'object') ? c : {};
             } catch (e) {
                 _configCache = {};
-                console.log('[config] desktop-config parse failed — using {}');
+                DBG('[config] desktop-config parse failed — using {}');
             }
         }
         return _configCache;

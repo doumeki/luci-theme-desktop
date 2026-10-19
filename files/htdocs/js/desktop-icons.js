@@ -257,7 +257,7 @@
         // desktop.icon_layout via the onPositionChange callback.
         _initQuantumDrag: function() {
             var self = this;
-            console.log('[desktop] quantum drag init: mobile=' + LuCIDesktop.isMobile() +
+            DBG('[desktop] quantum drag init: mobile=' + LuCIDesktop.isMobile() +
                 ' engine=' + !!window.LuCIDesktop.QuantumIcons +
                 ' container=' + !!document.getElementById('desktop-icons'));
             // desktop.js registers and inits immediately on load; the engine
@@ -291,7 +291,7 @@
                     }
                 });
             } catch(e) {
-                console.log('[desktop] quantum drag init failed:', e.message);
+                DBG('[desktop] quantum drag init failed:', e.message);
             }
         },
 

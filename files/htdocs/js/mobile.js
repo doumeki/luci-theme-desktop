@@ -217,7 +217,7 @@
 
             // Tap card → restore (if hidden) and switch to that window
             card.addEventListener('click', function(e) {
-                console.log('[switcher] card click, target=' + (e.target.className || e.target.tagName) + ' wid=' + id);
+                DBG('[switcher] card click, target=' + (e.target.className || e.target.tagName) + ' wid=' + id);
                 slog('card click target=' + (e.target.className || e.target.tagName) + ' wid=' + id);
                 if (e.target.classList.contains('switcher-kill')) return;
                 if (w.el && w.el.style.display === 'none') w.el.style.display = '';
@@ -227,10 +227,10 @@
             // ✕ → close window, re-render
             card.querySelector('.switcher-kill').addEventListener('click', function(e) {
                 e.stopPropagation();
-                console.log('[switcher] kill click, wid=' + id);
+                DBG('[switcher] kill click, wid=' + id);
                 slog('kill click wid=' + id);
                 if (window.WM) WM.close(id);
-                console.log('[switcher] after WM.close, windows=' + Object.keys(DESKTOP.windows).length);
+                DBG('[switcher] after WM.close, windows=' + Object.keys(DESKTOP.windows).length);
                 slog('after close windows=' + Object.keys(DESKTOP.windows).length);
                 renderCards();
             });

@@ -499,6 +499,7 @@
     </div>
 
     <!-- JS modules (load order matters) -->
+    <script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/i18n.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/shell.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/wm.js?v={{ theme_ver }}"></script>
@@ -584,6 +585,7 @@
     {% if (css): %}
         <style title="text/css">{{ css }}</style>
     {% endif %}
+    <script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/i18n.js?v={{ theme_ver }}"></script>
     <!-- LuCI JS translation dictionary (window.TR) — stock themes load this
          before cbi.js; without it every client-side L() call falls back to

@@ -15,7 +15,7 @@
   		return [r, g, b].map(x => x.toFixed()).concat(a);
 	};
 	const rgbaColor_primary_light = hexToRgba_primary_light(hexColor_primary_light);
-	console.log(rgbaColor_primary_light);
+	DBG(rgbaColor_primary_light);
 
 /*
  *  Constitute a css color variable named light-subtabs-background
@@ -40,7 +40,7 @@
   		return [r*a, g*a, b*a].map(x => x.toFixed(2));
 	};
 	const rgbColor_primary = hexToRgb_primary(hexColor_primary);
-	//console.log(rgbColor_primary);
+	//DBG(rgbColor_primary);
 
 /*
  *  Constitute overlay color #cccccc, then reduce it to 30% transparency and convert it to RGB value
@@ -54,7 +54,7 @@
   		return [r*a, g*a, b*a].map(x => x.toFixed(2));
 	};
 	const rgbColor_overlay = hexToRgb_overlay(hexColor_overlay);
-	//console.log(rgbColor_overlay);
+	//DBG(rgbColor_overlay);
 
 /*
  *  Overlay the RGB value of two colors
@@ -64,7 +64,7 @@
   		Math.round(Number(rgbColor_primary[1]) + Number(rgbColor_overlay[1])),
   		Math.round(Number(rgbColor_primary[2]) + Number(rgbColor_overlay[2]))
 	];
-	//console.log(New_Color);
+	//DBG(New_Color);
 
 /*
  *  Constitute a css color variable named dark_webkit-any-link

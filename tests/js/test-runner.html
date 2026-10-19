@@ -304,7 +304,9 @@ document.addEventListener('click', function(e) {
 </script>
 
 <!-- i18n first (defines _) — all modules depend on it -->
-<script src="../../files/htdocs/js/i18n.js"></script>
+<script src="../../files/htdocs/js/debug.js"></script>
+    <!-- DBG gate first: runtime console.log is routed through it -->
+    <script src="../../files/htdocs/js/i18n.js"></script>
 <!-- Load shell.js namespace first -->
 <script src="../../files/htdocs/js/shell.js"></script>
 <!-- Load modules (WM will be overridden below for test safety) -->
