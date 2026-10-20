@@ -1,4 +1,24 @@
-/* Desktop Theme Settings Panel */
+/* Desktop Theme Settings Panel
+ *
+ * Module layout (P2 refactor, 0.1.0-256). open() is a thin orchestrator;
+ * each numbered section is a delimited module function:
+ *  1. state        markDirty / markClean / onFieldChange
+ *  2. rendering    renderFields (field html, range/color/checkbox/select)
+ *  3. tab registry TABS + _formTab + registerTab -- uniform contract:
+ *                  { id, label, build(vals, cfg) -> html container }; the
+ *                  bg instance also carries bind(p)/onReset(d)/applyWallpaper()
+ *  4. switching    switchTab
+ *  5. preview ops  _checkSavedState / _previewWallpaper / _ensurePreviewDownload
+ *  6. bg tab       _tabBg: geometry + preview-box html + drag state machine +
+ *                  manage/refresh/save wiring + onReset/applyWallpaper hooks
+ *  7. selectors    _getPreviewUrl / _getWallpaperMode
+ *  8. shell+wiring _panelShell (build + mount, returns {p,cfg,wpEl,bgTab}),
+ *                  _wirePanel (tab switching, inputs, bg bind, five buttons)
+ *  9. pipeline     _doClose/_doApply/_doOk/_doDiag/_doReset (footer buttons)
+ * 10. open()       toggle-close -> dirty reset -> shell -> initial preview ->
+ *                  _checkSavedState -> wire
+ * Shared .ts-tab/.ts-btn chrome lives in shell.css (P2 step 6).
+ */
 (function() {
     'use strict';
 
