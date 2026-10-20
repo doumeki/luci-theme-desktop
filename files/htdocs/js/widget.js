@@ -291,6 +291,7 @@
                     }
                 };
                 tick();   // first data immediately — don't wait one interval
+                // interval-owner: widget-manager (inst._timer; cleared in disable())
                 inst._timer = setInterval(tick, interval);
             }
 

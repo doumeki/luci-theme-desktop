@@ -455,6 +455,47 @@ function widgetStyleContractCheck() {
     console.log('✅ widget inline-style contract: static styles are CSS-driven');
 }
 
+// ===== interval ownership gate (0.1.0-258, plans/04) =====
+// Widget-domain timers must declare an owner: every `setInterval(` or
+// `new Function(` occurrence in widget.js + widgets/*.js needs a
+// `// interval-owner: <unit>` comment within the 4 lines above it, naming
+// who owns the timer and who stops it. The current code does not leak for
+// STRUCTURAL reasons (the shell is a page-lifetime singleton; widget
+// re-render replaces whole nodes) — one refactor to long-lived node reuse
+// would turn that luck into listener snow-avalanches and timer leaks.
+// This gate is a live wire reminder, not a behavior check. The shell-dome
+// timers (shell.js/desktop.js/taskbar.js/cbi-compat.js) are page-lifetime
+// and audited in the plans/04 appendix.
+function intervalOwnerCheck() {
+    const targets = ['files/htdocs/js/widget.js'];
+    const wdir = path.join(THEME_DIR, 'files/htdocs/js/widgets');
+    try {
+        fs.readdirSync(wdir).filter(function(f) { return f.slice(-3) === '.js'; })
+            .forEach(function(f) { targets.push('files/htdocs/js/widgets/' + f); });
+    } catch (e) { /* widgets dir missing - widget.js alone */ }
+    const bad = [];
+    const RX = /setInterval\s*\(|new\s+Function\s*\(/;
+    targets.forEach(function(rel) {
+        const lines = fs.readFileSync(path.join(THEME_DIR, rel), 'utf8').split('\n');
+        lines.forEach(function(line, i) {
+            if (!RX.test(line)) return;
+            let owned = false;
+            for (let j = Math.max(0, i - 4); j < i && !owned; j++)
+                if (/interval-owner\s*:/.test(lines[j])) owned = true;
+            if (!owned) bad.push(rel + ':' + (i + 1) + '  ' + line.trim());
+        });
+    });
+    if (bad.length) {
+        console.log('\u274c interval ownership gate (plans/04):\n  ' + bad.join('\n  ') +
+            '\n  \u2192 within the 4 lines above every setInterval()/new Function(), add:\n' +
+            '        // interval-owner: <unit> (who owns it, who stops it)\n' +
+            '    instance timers must be cleared on disable(); page-lifetime\n' +
+            '    singletons must say so explicitly. Audit table: plans/04 appendix A.');
+        process.exit(1);
+    }
+    console.log('\u2705 interval ownership: every widget-domain timer declares its owner');
+}
+
 // ===== context-submenu hover grace (0.1.0-235) =====
 // The "New -> Link" flyout is separated from its row by a 4px gap. Closing it
 // the instant the pointer leaves the row made it unreachable: the submenu was
@@ -876,7 +917,8 @@ function cleanup() {
 }
 // Static gates are usable on their own (the browser part needs geckodriver):
 //   node -e "require('./tests/run-headless.js').secretScanCheck()"
-module.exports = { secretScanCheck: secretScanCheck, submenuHoverGraceCheck: submenuHoverGraceCheck };
+module.exports = { secretScanCheck: secretScanCheck, submenuHoverGraceCheck: submenuHoverGraceCheck,
+    intervalOwnerCheck: intervalOwnerCheck };
 
 if (require.main === module) (async () => {
     try {
@@ -884,6 +926,7 @@ if (require.main === module) (async () => {
         i18nConsistencyCheck();
         i18nDriftCheck();
         widgetStyleContractCheck();
+        intervalOwnerCheck();
         submenuHoverGraceCheck();
         debugGateOrderCheck();
         testManifestCheck();
