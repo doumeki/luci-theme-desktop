@@ -422,6 +422,396 @@ function i18nDriftCheck() {
     console.log('✅ i18n catalog: pot/po match the dict (no drift)');
 }
 
+// ===== dual-template sync gate (.ut <-> .htm, plans/05) =====
+// header/footer/sysauth exist as ucode (.ut) AND lua (.htm) pairs; both
+// must render equivalent output. A raw diff is noise: code skins differ
+// ({% %}/{{ }} vs <% %>/<%= %>), and the Lua side emits tags from inside
+// code blocks via write(). What is compared is a SEMANTIC anchor multiset
+// extracted per side (and, for assets, per shell/embed bucket):
+//   asset     css/js/img manifests; "?v=" is collapsed into verparam
+//   verparam  presence of the version cache-bust param (bucket scoped)
+//   meta      <meta> tags (name/content normalized)
+//   inject    window.__XXX__ injection names
+//   i18n      template translation keys (_(), translate(), <%:key%>)
+//   id/data   static id= / data-* attribute names
+//   attrtitle static title="..." attribute texts
+//   token     curated code-token presence (write-built tags are invisible
+//             to tag scans; tokens keep the load-bearing plumbing comparable)
+//   pred      outer is_embedded branch predicate (normalized)
+// Tag-level anchors are extracted from a RECONSTRUCTED skeleton in which
+// each code/output block is one placeholder char, so a tag whose
+// attribute embeds an output block (title="{{ _('Home') }}") is still
+// scanned whole; attribute values containing the placeholder count as
+// dynamic and are skipped.
+// The symmetric difference prints with a "ut-only"/"lua-only" label;
+// anything not ratcheted fails the run. Divergences frozen as of the
+// gate introduction live in TPL_SYNC_KNOWN with a reason each - retire
+// them by aligning the pairs, never by deleting the reason.
+
+const TPL_PAIRS = [
+    { name: 'header',
+      ut: 'files/usr/share/ucode/luci/template/themes/desktop/header.ut',
+      lua: 'files/templates/header.htm' },
+    { name: 'footer',
+      ut: 'files/usr/share/ucode/luci/template/themes/desktop/footer.ut',
+      lua: 'files/templates/footer.htm' },
+    { name: 'sysauth',
+      ut: 'files/usr/share/ucode/luci/template/themes/desktop/sysauth.ut',
+      lua: 'files/templates/sysauth.htm' },
+];
+// Lua-side orphans (.htm with no .ut counterpart) - printed, not failed.
+const TPL_ORPHANS = ['files/templates/header_login.htm'];
+// Tokens whose presence must hold on BOTH sides of every pair. Extend the
+// list when you add plumbing that write() emits on the Lua track.
+const TPL_TOKENS = [
+    'desktop-config', 'menu-data', 'theme-list',
+    '__desktop-primary-override', '__desktop-dark-style', '__desktop-dark-data',
+    'render_sibling_tabs', 'String.prototype.format',
+    'wp_local_url', 'builtin_disabled',
+];
+
+// Frozen current-state divergences (ratchet). side='ut'/'lua' marks the
+// side that ALONE has the anchor. Every entry needs a why - it is the
+// tracking plan for the alignment work that retires it.
+const TPL_SYNC_KNOWN = [
+    // header pair: the ucode side cache-busts every css/js with ?v=; the lua
+    // track loads the same assets WITHOUT any version param -> browsers may
+    // keep stale theme assets after an upgrade on the lua devices. Aligning
+    // means threading theme_ver through header.htm (both buckets).
+    { pair: 'header', kind: 'verparam', bucket: 'shell', side: 'ut', how: /^present$/,
+      why: 'ucode shell assets carry ?v=; lua track loads none (stale-cache risk on lua track)' },
+    { pair: 'header', kind: 'verparam', bucket: 'embed', side: 'ut', how: /^present$/,
+      why: 'ucode embed assets carry ?v=; lua track loads none (stale-cache risk on lua track)' },
+    // header pair: ucode loads the LuCI translations dict in both buckets;
+    // lua never does -> client L() falls back to msgids there.
+    { pair: 'header', kind: 'asset', bucket: 'shell', side: 'ut', how: /^resource\/translations$/,
+      why: 'ucode shell loads admin/translations dict; lua shell does not' },
+    { pair: 'header', kind: 'asset', bucket: 'embed', side: 'ut', how: /^resource\/translations$/,
+      why: 'ucode embed loads admin/translations dict; lua embed does not' },
+    // header pair: iframe-bridge.js loads only on the lua embed track; on
+    // ucode embed the inline show-uci-changes handler substitutes. If ucode
+    // embed windows misbehave, this is the first suspect to align.
+    { pair: 'header', kind: 'asset', bucket: 'embed', side: 'lua', how: /^js\/iframe-bridge\.js$/,
+      why: 'lua embed loads iframe-bridge.js; ucode embed runs without it' },
+    // header pair: viewport meta text differs (pinch-zoom attrs ucode-only).
+    { pair: 'header', kind: 'meta', bucket: 'shared', side: 'ut',
+      how: /^name=viewport#content=.*maximum-scale=1\.0, user-scalable=0$/,
+      why: 'ucode viewport adds maximum-scale=1.0, user-scalable=0' },
+    { pair: 'header', kind: 'meta', bucket: 'shared', side: 'lua',
+      how: /^name=viewport#content=width=device-width, initial-scale=1\.0$/,
+      why: 'lua viewport lacks maximum-scale/user-scalable attributes' },
+    // header pair: no-password alert block exists in BOTH ucode branches but
+    // only the lua shell branch; three i18n keys are ucode-embed-only.
+    { pair: 'header', kind: 'i18n', bucket: 'shared', side: 'ut',
+      how: /^(No password set!|There is no password set on this router\.)/,
+      why: 'ucode embed renders the no-password alert; lua embed does not' },
+    // header pair: taskbar button titles - ucode translates them (_()), lua
+    // keeps literal texts (the same texts stay untranslated on zh lua track).
+    { pair: 'header', kind: 'i18n', bucket: 'shared', side: 'ut',
+      how: /^(Home|Recent Apps)$/, why: 'ucode translates btn titles _(); lua keeps literals' },
+    { pair: 'header', kind: 'attrtitle', bucket: 'shared', side: 'lua',
+      how: /^(Start|Home|Recent Apps)$/,
+      why: 'lua keeps literal title texts where ucode uses _()' },
+    // header pair: start-menu carries a data-version marker on ucode only.
+    { pair: 'header', kind: 'data', bucket: 'shared', side: 'ut', how: /^data-version$/,
+      why: 'ucode start-menu has data-version="0.1.0"; lua div lost it' },
+    // header pair: primary-override/dark style tags are real <style> tags on
+    // ucode but write()-built strings on lua - invisible to tag scans, kept
+    // comparable via TPL_TOKENS; the id anchors differ accordingly.
+    { pair: 'header', kind: 'id', bucket: 'shared', side: 'ut',
+      how: /^__(desktop-dark-style|desktop-dark-data|desktop-primary-override)$/,
+      why: 'ucode ships dark/primary overrides as real tags; lua builds them in write()' },
+    // sysauth pair: version param on the ucode stylesheet only.
+    { pair: 'sysauth', kind: 'verparam', bucket: 'shared', side: 'ut', how: /^present$/,
+      why: 'ucode sysauth loads shell.css?v=; lua login page never cache-busts' },
+    // sysauth pair: three mobile metas exist only on the lua side (dropped
+    // at the ucode migration).
+    { pair: 'sysauth', kind: 'meta', bucket: 'shared', side: 'lua',
+      how: /^name=(format-detection|apple-mobile-web-app-capable|mobile-web-app-capable)#/,
+      why: 'lua login head has format-detection/A2HS metas; ucode dropped them' },
+    // sysauth pair: client config JSON carries builtin_disabled only on ucode
+    // (lua login cannot disable builtin wallpapers server-side).
+    { pair: 'sysauth', kind: 'token', bucket: 'shared', side: 'ut', how: /^builtin_disabled$/,
+      why: 'ucode passes builtin_disabled to the client; lua login does not' },
+];
+
+function tplTokenize(src) {
+    const rx = /\{#[\s\S]*?-\#\}|<%[\s\S]*?%>|\{%[\s\S]*?%\}|\{\{[\s\S]*?\}\}/g;
+    const events = [];
+    let last = 0, m;
+    while ((m = rx.exec(src))) {
+        events.push({ type: 'html', text: src.slice(last, m.index), bucket: 'shared' });
+        const t = m[0];
+        let type = 'code';
+        if (t.slice(0, 2) === '{#' || t.slice(0, 3) === '<%#') type = 'comment';
+        else if (t.slice(0, 2) === '{{' || t.slice(0, 3) === '<%=') type = 'output';
+        events.push({ type: type, text: t, bucket: 'shared' });
+        last = m.index + t.length;
+    }
+    events.push({ type: 'html', text: src.slice(last), bucket: 'shared' });
+    return events;
+}
+
+// Template-level branch markers only: the INTERIOR of the block must be
+// exactly the control keyword - anything else (write(), locals, ...) is a
+// plain code block and its interior belongs to the current bucket.
+function tplMarker(inner, dialect) {
+    const s = inner.trim()
+        .replace(/^-\s*/, '').replace(/\s*-\s*$/, '')
+        .replace(/--\s*[\s\S]*$/, '');
+    let m;
+    if (dialect === 'ucode') {
+        if ((m = /^if\s*([\s\S]*?):\s*$/.exec(s))) return { t: 'if', pred: m[1] };
+        if ((m = /^(?:elif|elseif)\s*([\s\S]*?):\s*$/.exec(s))) return { t: 'elseif', pred: m[1] };
+        if (/^else\s*:?\s*$/.test(s)) return { t: 'else' };
+        if (/^endif\s*$/.test(s)) return { t: 'end' };
+    } else {
+        if ((m = /^if\s+(\S[\s\S]*?)\s+then\s*$/.exec(s))) return { t: 'if', pred: m[1] };
+        if ((m = /^elseif\s+(\S[\s\S]*?)\s+then\s*$/.exec(s))) return { t: 'elseif', pred: m[1] };
+        if (/^else\s*$/.test(s)) return { t: 'else' };
+        if (/^end\b[\s\S]*$/.test(s)) return { t: 'end' };
+    }
+    return null;
+}
+
+// "if not is_embedded then" (lua) and "if (!is_embedded):" (ucode) both
+// normalize to "!is_embedded". Plain (non-branch) ifs return null and are
+// tracked as plain frames for nesting balance only.
+function tplNormPred(p) {
+    let s = ' ' + p.replace(/\s+/g, ' ').trim()
+        .replace(/[()]/g, ' ').replace(/\bnot\s+/g, '! ')
+        .replace(/!\s+/g, '!')
+        .replace(/\band\b/g, ' && ')
+        .replace(/\bor\b/g, ' || ') + ' ';
+    if (/is_embedded/.test(s)) {
+        s = s.replace(/![!]+/g, '!');
+        return s.trim();
+    }
+    return null;
+}
+
+function tplScanSide(rel, dialect) {
+    const src = readFile(rel);
+    const events = tplTokenize(src);
+    const stack = [];
+    const recompute = function() {
+        for (let i = stack.length - 1; i >= 0; i--) {
+            if (stack[i].embedFrame) return stack[i].leg;
+        }
+        return 'shared';
+    };
+
+    const set = new Set();
+    const add = function(kind, bucket, val) { set.add(kind + '\u0001' + bucket + '\u0001' + val); };
+
+    let skel = ''; // reconstructed file text; blocks shrink to one placeholder
+
+    function scanInside(text, bucket) {
+        let a, mm;
+        // assets inside code/output blocks (write-built tags, build_url)
+        mm = /(?:js|css)\/[A-Za-z0-9._-]+\.(?:js|css)(\?v=)?/g;
+        while ((a = mm.exec(text))) {
+            let val = a[0].replace(/["']/g, '');
+            if (val.slice(0, 1) === '/') val = val.slice(1);
+            val = val.replace(/\?v=$/, '');
+            add('asset', bucket, val);
+            if (a[1]) add('verparam', bucket, 'present');
+        }
+        mm = /\/(cbi\.js|xhr\.js)(\?v=)?/g;
+        while ((a = mm.exec(text))) {
+            add('asset', bucket, 'resource/' + a[1]);
+            if (a[2]) add('verparam', bucket, 'present');
+        }
+        if (/admin\/translations/.test(text))
+            add('asset', bucket, 'resource/translations');
+        mm = /\/(favicon\.ico|favorit\.png)/g;
+        while ((a = mm.exec(text))) add('asset', bucket, 'img/' + a[1]);
+        // template i18n keys, both dialect skins
+        mm = /\b(?:_|translate)\(\s*(['"])([^'"]+?)\1/g;
+        while ((a = mm.exec(text))) add('i18n', 'shared', a[2]);
+        mm = /<%:([^%>]+?)%>/g;
+        while ((a = mm.exec(text))) add('i18n', 'shared', a[1].trim());
+        // window.__XXX__ injections (uppercase only - style ids are tokens)
+        mm = /__([A-Z][A-Za-z_]+)__/g;
+        while ((a = mm.exec(text))) add('inject', 'shared', a[0]);
+        // curated tokens
+        TPL_TOKENS.forEach(function(tok) { if (text.indexOf(tok) !== -1) add('token', 'shared', tok); });
+    }
+
+    // pass 1 - walk events in order: bucket tracking, block scans, branch
+    // markers; simultaneously rebuild the skeleton (blocks -> placeholder).
+    events.forEach(function(ev) {
+        if (ev.type === 'html') {
+            ev.bucket = recompute();
+            skel += ev.text;
+            scanInside(ev.text, ev.bucket);
+            return;
+        }
+        skel += '\uE000'; // block placeholder keeps whole-tag reconstruction
+        if (ev.type === 'comment') return; // markers hidden in prose stay hidden
+        let inner = ev.text;
+        if (dialect === 'ucode') {
+            inner = inner.replace(/^\{%-?/, '').replace(/-?%\}$/, '')
+                .replace(/^\{\{/, '').replace(/\}\}$/, '');
+        } else {
+            inner = inner.replace(/^<%[-=#]?[-=]*/, '').replace(/[-=]*-?%>$/, '');
+        }
+        ev.bucket = recompute();
+        if (dialect === 'lua') {
+            // lua i18n shorthand <%:key%>: the tokenizer already consumed
+            // the <% %> skin, so the interior starts with ':'.
+            const tc = inner.trim();
+            if (tc.slice(0, 1) === ':' && tc.length > 1)
+                add('i18n', 'shared', tc.slice(1).trim());
+        }
+        scanInside(inner, ev.bucket);
+        if (ev.type !== 'code') return;
+        const mk = tplMarker(inner, dialect);
+        if (mk) {
+            if (mk.t === 'if' || mk.t === 'elseif') {
+                const np = tplNormPred(mk.pred);
+                if (np === null) {
+                    stack.push({ embedFrame: false, leg: null });
+                } else {
+                    stack.push({ embedFrame: true,
+                        leg: (np.indexOf('!is_embedded') !== -1 ? 'shell' : 'embed') });
+                    add('pred', 'shared', np);
+                }
+            } else if (mk.t === 'else') {
+                const frame = stack[stack.length - 1];
+                if (frame && frame.embedFrame) frame.leg = (frame.leg === 'shell') ? 'embed' : 'shell';
+            } else { // end - may close a plain code-level if on empty stack
+                if (stack.length) stack.pop();
+            }
+        } else if (dialect === 'lua') {
+            // lua control flow that OPENS in this block and closes at a later
+            // template-level bare <% end %> (e.g. "<% if x then write('..')
+            // else %>"): pre-push plain balance frames so the stray end pops
+            // them instead of the real is_embedded frames. Comments excluded
+            // so prose cannot fake a push; elseif carries its own then.
+            const dry = inner.replace(/--[^\n]*/g, ' ');
+            const opens = (dry.match(/\bthen\b/g) || []).length
+                - (dry.match(/\belseif\b/g) || []).length
+                + (dry.match(/\bdo\b/g) || []).length
+                + (dry.match(/\bfunction\b/g) || []).length;
+            const closes = (dry.match(/\bend\b/g) || []).length;
+            for (let i = 0; i < Math.max(0, opens - closes); i++)
+                stack.push({ embedFrame: false, leg: null });
+        }
+    });
+    if (stack.length !== 0)
+        throw new Error(rel + ': unbalanced template branch markers (' + stack.length + ' open frames - recheck if/endif pairing)');
+
+    // pass 2 - whole-tag anchors on the reconstructed skeleton. A tag like
+    // <button id="btn-home" title="{{ _('Home') }}" ...> spans a block and
+    // is only complete here; values containing the placeholder are dynamic.
+    let a, mm;
+    mm = /<meta\b([\s\S]*?)(?:\/>|>)/g;
+    while ((a = mm.exec(skel))) {
+        const attrib = a[1];
+        const nm = (/\bname="([^"]*)"/.exec(attrib) || [])[1];
+        const content = (/\bcontent="([^"]*)"/.exec(attrib) || [])[1];
+        const charset = (/\bcharset="([^"]*)"/.exec(attrib) || [])[1];
+        let key;
+        if (charset) key = 'charset=' + charset;
+        else if (nm) key = 'name=' + nm + (content ? '#content=' + content : '');
+        else if (content) key = 'content=' + content;
+        else key = 'bare';
+        add('meta', 'shared', key);
+    }
+    mm = /<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*?)>/g;
+    while ((a = mm.exec(skel))) {
+        const attrs = a[2];
+        const idv = (/\bid="([^"]*)"/.exec(attrs) || [])[1];
+        if (idv && !/\uE000/.test(idv)) add('id', 'shared', idv);
+        const dv = /\b(data-[a-z0-9-]+)=/g;
+        let d;
+        while ((d = dv.exec(attrs))) add('data', 'shared', d[1]);
+        const tv = (/\btitle="([^"]*)"/.exec(attrs) || [])[1];
+        if (tv && !/\uE000/.test(tv) && tv.trim() !== '')
+            add('attrtitle', 'shared', tv.trim());
+    }
+    return set;
+}
+
+function templateSyncCheck() {
+    const all = [];
+    TPL_PAIRS.forEach(function(p) {
+        let ut, lua;
+        try {
+            ut = tplScanSide(p.ut, 'ucode');
+            lua = tplScanSide(p.lua, 'lua');
+        } catch (e) {
+            console.log('\u274c template sync scan failed: ' + e.message);
+            process.exit(1);
+        }
+        all.push({ pair: p.name, ut: ut, lua: lua });
+    });
+
+    // orphan .htm files: no .ut counterpart anywhere
+    TPL_ORPHANS.forEach(function(rel) {
+        const utCounterpart = 'files/usr/share/ucode/luci/template/themes/desktop/' +
+            rel.replace(/^.*\//, '').replace(/\.htm$/, '.ut');
+        let has = false;
+        try { has = !!readFile(utCounterpart); } catch (e) {}
+        if (!has) console.log('\u26a0 template orphan: ' + rel + ' has no .ut counterpart (register the pair in TPL_PAIRS, or drop a note here if it stays single-runtime)');
+    });
+
+    const items = [];
+    all.forEach(function(p) {
+        const keys = [];
+        p.ut.forEach(function(k) { keys.push(k); });
+        p.lua.forEach(function(k) { if (!p.ut.has(k)) keys.push(k); });
+        keys.forEach(function(k) {
+            const inUt = p.ut.has(k);
+            const inLua = p.lua.has(k);
+            if (inUt === inLua) return;
+            const parts = k.split('\u0001');
+            items.push({ pair: p.pair, side: inUt ? 'ut' : 'lua',
+                kind: parts[0], bucket: parts[1], val: parts.slice(2).join('\u0001') });
+        });
+    });
+
+    const items2 = items.map(function(it) {
+        it.ratcheted = TPL_SYNC_KNOWN.some(function(kn) {
+            if (kn.pair !== it.pair || kn.side !== it.side || kn.kind !== it.kind) return false;
+            if (kn.bucket !== undefined && kn.bucket !== it.bucket) return false;
+            return kn.how.test(it.val);
+        });
+        return it;
+    });
+    items.length = 0;
+    items2.forEach(function(x) { items.push(x); });
+
+    const extra = items2.filter(function(it) { return !it.ratcheted; });
+    const ratch = items2.filter(function(it) { return it.ratcheted; });
+
+    if (process.env.TPL_DEBUG === '1') {
+        ratch.forEach(function(it) {
+            console.log('  ratchet  [pair ' + it.pair + '] ' + it.side + '-only ' +
+                it.kind + (it.bucket !== 'shared' ? '/' + it.bucket : '') + ' -> ' + it.val);
+        });
+        all.forEach(function(p) {
+            console.log('  anchors  [pair ' + p.pair + '] ut=' + p.ut.size + ' lua=' + p.lua.size);
+        });
+    }
+
+    if (extra.length) {
+        console.log('\u274c template sync (.ut <-> .htm) failed: ' + extra.length +
+            ' anchor divergence(s) NOT covered by TPL_SYNC_KNOWN:\n');
+        extra.forEach(function(it) {
+            console.log('  pair "' + it.pair + '"  ' + it.side + '-only  ' + it.kind +
+                (it.bucket !== 'shared' ? '/' + it.bucket : '') + '  ' + it.val);
+        });
+        console.log('\n  \u2192 a template pair drifted: keep both runtime templates semantically in sync\n' +
+            '    (edit the .ut AND the .htm; the lua side may emit tags from code via write()).\n' +
+            '    If this is a deliberately frozen divergence (like the existing ones),\n' +
+            '    add an entry to TPL_SYNC_KNOWN (tests/run-headless.js) WITH a reason.');
+        process.exit(1);
+    }
+    console.log('\u2705 template sync: ' + all.length + ' pairs anchored (' +
+        ratch.length + ' known divergences ratcheted, see TPL_SYNC_KNOWN)');
+}
 // ===== widget inline-style contract (0.1.0-230) =====
 // Widget render must be idempotent: static presentation lives in widget.css
 // (`.widget-sticky-note …`), only DYNAMIC values may touch inline styles (or
@@ -918,7 +1308,8 @@ function cleanup() {
 // Static gates are usable on their own (the browser part needs geckodriver):
 //   node -e "require('./tests/run-headless.js').secretScanCheck()"
 module.exports = { secretScanCheck: secretScanCheck, submenuHoverGraceCheck: submenuHoverGraceCheck,
-    intervalOwnerCheck: intervalOwnerCheck };
+    intervalOwnerCheck: intervalOwnerCheck,
+    templateSyncCheck: templateSyncCheck };
 
 if (require.main === module) (async () => {
     try {
@@ -927,6 +1318,7 @@ if (require.main === module) (async () => {
         i18nDriftCheck();
         widgetStyleContractCheck();
         intervalOwnerCheck();
+        templateSyncCheck();
         submenuHoverGraceCheck();
         debugGateOrderCheck();
         testManifestCheck();
