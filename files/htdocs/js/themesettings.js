@@ -605,6 +605,245 @@
         };
     }
 
+    // ===== Wallpaper decision helpers (DOM + preview global only) =====
+        // Helper: current wallpaper mode from select + preview URL
+    function _getPreviewUrl() {
+        return window.__wp_preview_url || '';
+    }
+    function _getWallpaperMode() {
+        var sel = document.getElementById('ts-desktop_wallpaper');
+        return sel ? sel.value : '';
+    }
+
+    // ===== Panel shell: DOM build + mount =====
+    function _panelShell() {
+        var cfg = C.readFromConfig();
+        DBG('[panel] open: wallpaper=' + cfg.desktop_wallpaper +
+                    ' taskbar_color=' + cfg.taskbar_color +
+                    ' wp_url=' + ((cfg.wallpaper && cfg.wallpaper.url) || '(none)'));
+        var vals = C.mergeDefaults(cfg);
+
+        // Preview does not touch desktop; no snapshot needed.
+        // _applyWallpaper is called directly on Apply/OK to sync desktop.
+        var wpEl = document.getElementById('desktop-wallpaper');
+
+        // Build tab bar
+        var tabBarHtml = '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;">';
+        TABS.forEach(function(tab, i) {
+            tabBarHtml += '<button class="ts-tab" data-tab="' + tab.id + '" style="' +
+                'padding:4px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;' +
+                'color:' + (i === 0 ? 'var(--theme-panel-tab-active-fg)' : 'var(--theme-panel-tab-inactive-fg)') + ';' +
+                (i === 0 ? 'background:var(--theme-panel-tab-active-bg);' : 'background:transparent;') +
+                '">' + tab.label + '</button>';
+        });
+        tabBarHtml += '</div>';
+
+        var bgTab = _tabBg({ vals: vals, cfg: cfg });
+
+        // Build tab bodies (all pre-rendered, shown/hidden by switchTab)
+        var bodiesHtml = '';
+        TABS.forEach(function(tab, i) {
+            var display = i === 0 ? '' : 'display:none;';
+            var extra = (tab.id === 'bg') ? bgTab.html : '';
+            bodiesHtml += '<div class="ts-tab-body" data-tab="' + tab.id + '" style="' + display + '">' +
+                renderFields(tab.fields, vals) + extra + '</div>';
+        });
+
+        var html = '<div class="widget-settings-header" style="background:var(--theme-panel-bg);color:var(--theme-panel-fg);"><h3 style="margin:0;font-size:14px;">' + _('Theme Settings') + '</h3><button id="ts-close" style="color:var(--theme-panel-muted);background:none;border:none;font-size:14px;cursor:pointer;">&#x2715;</button></div>';
+        html += '<div class="widget-settings-body" style="padding:12px;min-height:220px;color:var(--theme-panel-fg);background:var(--theme-panel-bg);">';
+        html += tabBarHtml;
+        html += bodiesHtml;
+        html += '<div style="display:flex;gap:8px;margin-top:10px;">' +
+            '<button id="ts-apply" style="padding:6px 14px;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('Apply') + '</button>' +
+            '<button id="ts-ok" style="padding:6px 14px;background:#2dce89;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('OK') + '</button>' +
+            '<button id="ts-reset" style="padding:6px 14px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">' + _('Defaults') + '</button>' +
+            '<button id="ts-diagnostics" style="padding:6px 14px;margin-left:auto;color:var(--theme-panel-muted);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;">' + _('Diagnostics') + '</button>' +
+            '</div></div>';
+
+        var p = document.createElement('div');
+        p.id = 'theme-settings-panel';
+        p.className = 'widget-settings';
+        p.innerHTML = html;
+        p.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        document.body.appendChild(p);
+
+        PanelHelper.makeMovable(p);
+        PanelHelper.makeResizable(p);
+        PanelHelper.fadeIn(p);
+
+        return { p: p, cfg: cfg, wpEl: wpEl, bgTab: bgTab };
+    }
+
+    // ===== Post-mount wiring: tabs, inputs, buttons -> pipeline =====
+    function _wirePanel(p, bgTab, wpEl) {
+        // Tab switching
+        p.querySelectorAll('.ts-tab').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                switchTab(p, btn.getAttribute('data-tab'));
+            });
+        });
+
+        // Wire inputs
+        p.querySelectorAll('input[type=color], input[type=range]').forEach(function(el) {
+            el.addEventListener('input', function() { onFieldChange(el); });
+        });
+        p.querySelectorAll('input[type=checkbox]').forEach(function(el) {
+            el.addEventListener('change', function() { onFieldChange(el); });
+        });
+        // Picsum auto-refresh checkbox: sync hidden input value
+        var paCb = document.getElementById('ts-picsum-auto-cb');
+        if (paCb) {
+            paCb.addEventListener('change', function() {
+                var hidden = document.getElementById('ts-picsum_auto_refresh');
+                if (hidden) hidden.value = paCb.checked ? '1' : '0';
+                onFieldChange(hidden);
+            });
+        }
+        // Initial picsum auto-refresh checkbox visibility
+        var wpSel = document.getElementById('ts-desktop_wallpaper');
+        var paDiv = document.querySelector('.ts-picsum-auto');
+        if (wpSel && paDiv) paDiv.style.display = (wpSel.value === 'picsum') ? '' : 'none';
+        p.querySelectorAll('select').forEach(function(el) {
+            el.addEventListener('change', function() {
+                onFieldChange(el);
+                var mode = el.value;
+                var wrapper = el.parentNode;
+                if (wrapper) {
+                    var btn = wrapper.querySelector('.ts-wp-manage');
+                    if (btn) btn.style.display = (mode === 'builtin') ? '' : 'none';
+                    var refreshBtn = wrapper.querySelector('.ts-wp-refresh');
+                    if (refreshBtn) refreshBtn.style.display = (mode === 'picsum' || mode === 'bing') ? '' : 'none';
+                }
+                // Toggle picsum auto-refresh checkbox
+                var paDiv = document.querySelector('.ts-picsum-auto');
+                if (paDiv) paDiv.style.display = (mode === 'picsum') ? '' : 'none';
+                // Toggle preview Save button
+                var saveBtn = document.getElementById('wp-save-btn');
+                if (saveBtn) {
+                    saveBtn.style.display = (mode === 'bing' || mode === 'picsum') ? '' : 'none';
+                    if (mode === 'bing' || mode === 'picsum') _checkSavedState();
+                }
+                // Preview only — desktop unchanged until Apply
+                _previewWallpaper(mode);
+                // First-time switch to bing/picsum: download a preview
+                // in the background (only if no cached preview exists)
+                _ensurePreviewDownload(mode);
+            });
+        });
+        bgTab.bind(p);
+
+        // Buttons
+        p.querySelector('#ts-close').addEventListener('click', function() { _doClose(p, wpEl); });
+        p.querySelector('#ts-apply').addEventListener('click', function() { _doApply(p, bgTab); });
+        p.querySelector('#ts-ok').addEventListener('click', function() { _doOk(p, bgTab); });
+        // Diagnostics: fetch the bug-report payload and copy to clipboard
+        p.querySelector('#ts-diagnostics').addEventListener('click', function() { _doDiag(p, this); });
+        p.querySelector('#ts-reset').addEventListener('click', function() { _doReset(p, bgTab); });
+    }
+
+    // ===== Panel-level pipeline (the five footer buttons) =====
+    function _doClose(p, wpEl) {
+        var cfg = C.readFromConfig();
+        var r = document.documentElement.style;
+        DBG('[close] BEFORE revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                    ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
+                    ' wallpaper=' + cfg.desktop_wallpaper +
+                    ' builtin_ct=' + (cfg.builtin && cfg.builtin.length));
+        C.applyCss(cfg);
+        var oldWp = wpEl ? wpEl.style.backgroundImage : '';
+        DBG('[close] AFTER revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                    ' wp_bg=' + oldWp.substring(0, 60));
+        p.remove();    }
+    function _doApply(p, bgTab) {
+        var r = document.documentElement.style;
+        DBG('[apply] BEFORE: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                    ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim());
+        var v = C.readFromDOM();
+        C.saveToConfig(v);
+        C.applyCss(v);
+        var m = _getWallpaperMode();
+        var u = _getPreviewUrl();
+        if (m === 'builtin' && u.indexOf('/background/') === -1) u = '';
+        DBG('[apply] AFTER: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                    ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
+                    ' select_mode=' + m + ' preview_url=' + u);
+        bgTab.applyWallpaper(m, u, markClean, 'apply');    }
+    function _doOk(p, bgTab) {
+        if (dirty) {
+            var v = C.readFromDOM();
+            C.saveToConfig(v);
+            C.applyCss(v);
+        }
+        var m = _getWallpaperMode();
+        var u = _getPreviewUrl();
+        if (m === 'builtin' && u.indexOf('/background/') === -1) u = '';
+        var r = document.documentElement.style;
+        DBG('[ok] --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
+                    ' select_mode=' + m + ' preview_url=' + u);
+        bgTab.applyWallpaper(m, u, function() { p.remove(); }, 'ok');    }
+    function _doDiag(p, btn) {
+        btn.disabled = true;
+        var done = function(text) {
+            btn.disabled = false;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', { msg: _('Diagnostics copied'), type: 'info', duration: 3000 });
+                }, function() { fallbackCopy(text); });
+            } else {
+                fallbackCopy(text);
+            }
+        };
+        var fallbackCopy = function(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            ta.remove();
+            if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', { msg: _('Diagnostics copied'), type: 'info', duration: 3000 });
+        };
+        fetch('/cgi-bin/luci/admin/desktop/diagnostics')
+            .then(function(r) { return r.text(); })
+            .then(done)
+            .catch(function() {
+                btn.disabled = false;
+                if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', { msg: _('Network error, check connection'), type: 'error', duration: 4000 });
+            });    }
+    function _doReset(p, bgTab) {
+        var d = C.getDefaults();
+        DBG('[reset] applying defaults: taskbar_color=' + d.taskbar_color);
+        C.writeToDOM(d);
+        C.applyCss(d);
+        // Broadcast to iframes (same path as Apply)
+        if (window.IframeBridge && IframeBridge.broadcastTheme) {
+            IframeBridge.broadcastTheme(d);
+        }
+        markDirty();
+        // Reset preview state (bg tab hook)
+        bgTab.onReset(d);
+        // Sync wallpaper preview + button visibility with the reset
+        // select values (change events don't fire on writeToDOM):
+        // defaults are gradient, so the preview must snap back to
+        // the gradient view and refresh/manage/save buttons hide.
+        var dMode = d.desktop_wallpaper || 'gradient';
+        _previewWallpaper(dMode);
+        p.querySelectorAll('.ts-wp-manage').forEach(function(btn) {
+            var w = btn.parentNode;
+            var sel = w ? w.querySelector('select') : null;
+            if (sel) btn.style.display = (sel.value === 'builtin') ? '' : 'none';
+        });
+        p.querySelectorAll('.ts-wp-refresh').forEach(function(btn) {
+            var w = btn.parentNode;
+            var sel = w ? w.querySelector('select') : null;
+            if (sel) btn.style.display = (sel.value === 'picsum' || sel.value === 'bing') ? '' : 'none';
+        });
+        var paDiv = document.querySelector('.ts-picsum-auto');
+        if (paDiv) paDiv.style.display = (dMode === 'picsum') ? '' : 'none';
+        var saveBtn = document.getElementById('wp-save-btn');
+        if (saveBtn) saveBtn.style.display = (dMode === 'bing' || dMode === 'picsum') ? '' : 'none';
+        if (dMode === 'bing' || dMode === 'picsum') _checkSavedState();    }
+
     // ===== Open =====
     window.ThemeSettings = {
         open: function() {
@@ -612,59 +851,9 @@
             if (p) { p.remove(); return; }
 
             dirty = false;
-            var cfg = C.readFromConfig();
-            DBG('[panel] open: wallpaper=' + cfg.desktop_wallpaper +
-                        ' taskbar_color=' + cfg.taskbar_color +
-                        ' wp_url=' + ((cfg.wallpaper && cfg.wallpaper.url) || '(none)'));
-            var vals = C.mergeDefaults(cfg);
 
-            // Preview does not touch desktop; no snapshot needed.
-            // _applyWallpaper is called directly on Apply/OK to sync desktop.
-            var wpEl = document.getElementById('desktop-wallpaper');
-
-            // Build tab bar
-            var tabBarHtml = '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;">';
-            TABS.forEach(function(tab, i) {
-                tabBarHtml += '<button class="ts-tab" data-tab="' + tab.id + '" style="' +
-                    'padding:4px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;' +
-                    'color:' + (i === 0 ? 'var(--theme-panel-tab-active-fg)' : 'var(--theme-panel-tab-inactive-fg)') + ';' +
-                    (i === 0 ? 'background:var(--theme-panel-tab-active-bg);' : 'background:transparent;') +
-                    '">' + tab.label + '</button>';
-            });
-            tabBarHtml += '</div>';
-
-            var bgTab = _tabBg({ vals: vals, cfg: cfg });
-
-            // Build tab bodies (all pre-rendered, shown/hidden by switchTab)
-            var bodiesHtml = '';
-            TABS.forEach(function(tab, i) {
-                var display = i === 0 ? '' : 'display:none;';
-                var extra = (tab.id === 'bg') ? bgTab.html : '';
-                bodiesHtml += '<div class="ts-tab-body" data-tab="' + tab.id + '" style="' + display + '">' +
-                    renderFields(tab.fields, vals) + extra + '</div>';
-            });
-
-            var html = '<div class="widget-settings-header" style="background:var(--theme-panel-bg);color:var(--theme-panel-fg);"><h3 style="margin:0;font-size:14px;">' + _('Theme Settings') + '</h3><button id="ts-close" style="color:var(--theme-panel-muted);background:none;border:none;font-size:14px;cursor:pointer;">&#x2715;</button></div>';
-            html += '<div class="widget-settings-body" style="padding:12px;min-height:220px;color:var(--theme-panel-fg);background:var(--theme-panel-bg);">';
-            html += tabBarHtml;
-            html += bodiesHtml;
-            html += '<div style="display:flex;gap:8px;margin-top:10px;">' +
-                '<button id="ts-apply" style="padding:6px 14px;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('Apply') + '</button>' +
-                '<button id="ts-ok" style="padding:6px 14px;background:#2dce89;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('OK') + '</button>' +
-                '<button id="ts-reset" style="padding:6px 14px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">' + _('Defaults') + '</button>' +
-                '<button id="ts-diagnostics" style="padding:6px 14px;margin-left:auto;color:var(--theme-panel-muted);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;">' + _('Diagnostics') + '</button>' +
-                '</div></div>';
-
-            p = document.createElement('div');
-            p.id = 'theme-settings-panel';
-            p.className = 'widget-settings';
-            p.innerHTML = html;
-            p.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-            document.body.appendChild(p);
-
-            PanelHelper.makeMovable(p);
-            PanelHelper.makeResizable(p);
-            PanelHelper.fadeIn(p);
+            var sh = _panelShell();
+            var cfg = sh.cfg, wpEl = sh.wpEl, bgTab = sh.bgTab;
 
             // Initial wallpaper preview based on current mode
             var initialMode = cfg.desktop_wallpaper || 'gradient';
@@ -675,181 +864,8 @@
 
             _checkSavedState();
 
-            // Tab switching
-            p.querySelectorAll('.ts-tab').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    switchTab(p, btn.getAttribute('data-tab'));
-                });
-            });
+            _wirePanel(sh.p, bgTab, wpEl);
 
-            // Wire inputs
-            p.querySelectorAll('input[type=color], input[type=range]').forEach(function(el) {
-                el.addEventListener('input', function() { onFieldChange(el); });
-            });
-            p.querySelectorAll('input[type=checkbox]').forEach(function(el) {
-                el.addEventListener('change', function() { onFieldChange(el); });
-            });
-            // Picsum auto-refresh checkbox: sync hidden input value
-            var paCb = document.getElementById('ts-picsum-auto-cb');
-            if (paCb) {
-                paCb.addEventListener('change', function() {
-                    var hidden = document.getElementById('ts-picsum_auto_refresh');
-                    if (hidden) hidden.value = paCb.checked ? '1' : '0';
-                    onFieldChange(hidden);
-                });
-            }
-            // Initial picsum auto-refresh checkbox visibility
-            var wpSel = document.getElementById('ts-desktop_wallpaper');
-            var paDiv = document.querySelector('.ts-picsum-auto');
-            if (wpSel && paDiv) paDiv.style.display = (wpSel.value === 'picsum') ? '' : 'none';
-            p.querySelectorAll('select').forEach(function(el) {
-                el.addEventListener('change', function() {
-                    onFieldChange(el);
-                    var mode = el.value;
-                    var wrapper = el.parentNode;
-                    if (wrapper) {
-                        var btn = wrapper.querySelector('.ts-wp-manage');
-                        if (btn) btn.style.display = (mode === 'builtin') ? '' : 'none';
-                        var refreshBtn = wrapper.querySelector('.ts-wp-refresh');
-                        if (refreshBtn) refreshBtn.style.display = (mode === 'picsum' || mode === 'bing') ? '' : 'none';
-                    }
-                    // Toggle picsum auto-refresh checkbox
-                    var paDiv = document.querySelector('.ts-picsum-auto');
-                    if (paDiv) paDiv.style.display = (mode === 'picsum') ? '' : 'none';
-                    // Toggle preview Save button
-                    var saveBtn = document.getElementById('wp-save-btn');
-                    if (saveBtn) {
-                        saveBtn.style.display = (mode === 'bing' || mode === 'picsum') ? '' : 'none';
-                        if (mode === 'bing' || mode === 'picsum') _checkSavedState();
-                    }
-                    // Preview only — desktop unchanged until Apply
-                    _previewWallpaper(mode);
-                    // First-time switch to bing/picsum: download a preview
-                    // in the background (only if no cached preview exists)
-                    _ensurePreviewDownload(mode);
-                });
-            });
-            bgTab.bind(p);
-
-            // Buttons
-            p.querySelector('#ts-close').addEventListener('click', function() {
-                var cfg = C.readFromConfig();
-                var r = document.documentElement.style;
-                DBG('[close] BEFORE revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
-                            ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
-                            ' wallpaper=' + cfg.desktop_wallpaper +
-                            ' builtin_ct=' + (cfg.builtin && cfg.builtin.length));
-                C.applyCss(cfg);
-                var oldWp = wpEl ? wpEl.style.backgroundImage : '';
-                DBG('[close] AFTER revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
-                            ' wp_bg=' + oldWp.substring(0, 60));
-                p.remove();
-            });
-            // Helper: current wallpaper mode from select + preview URL
-            function _getPreviewUrl() {
-                return window.__wp_preview_url || '';
-            }
-            function _getWallpaperMode() {
-                var sel = document.getElementById('ts-desktop_wallpaper');
-                return sel ? sel.value : '';
-            }
-
-            p.querySelector('#ts-apply').addEventListener('click', function() {
-                var r = document.documentElement.style;
-                DBG('[apply] BEFORE: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
-                            ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim());
-                var v = C.readFromDOM();
-                C.saveToConfig(v);
-                C.applyCss(v);
-                var m = _getWallpaperMode();
-                var u = _getPreviewUrl();
-                if (m === 'builtin' && u.indexOf('/background/') === -1) u = '';
-                DBG('[apply] AFTER: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
-                            ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
-                            ' select_mode=' + m + ' preview_url=' + u);
-                bgTab.applyWallpaper(m, u, markClean, 'apply');
-            });
-            p.querySelector('#ts-ok').addEventListener('click', function() {
-                if (dirty) {
-                    var v = C.readFromDOM();
-                    C.saveToConfig(v);
-                    C.applyCss(v);
-                }
-                var m = _getWallpaperMode();
-                var u = _getPreviewUrl();
-                if (m === 'builtin' && u.indexOf('/background/') === -1) u = '';
-                var r = document.documentElement.style;
-                DBG('[ok] --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
-                            ' select_mode=' + m + ' preview_url=' + u);
-                bgTab.applyWallpaper(m, u, function() { p.remove(); }, 'ok');
-            });
-            // Diagnostics: fetch the bug-report payload and copy to clipboard
-            p.querySelector('#ts-diagnostics').addEventListener('click', function() {
-                var btn = this;
-                btn.disabled = true;
-                var done = function(text) {
-                    btn.disabled = false;
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(text).then(function() {
-                            if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', { msg: _('Diagnostics copied'), type: 'info', duration: 3000 });
-                        }, function() { fallbackCopy(text); });
-                    } else {
-                        fallbackCopy(text);
-                    }
-                };
-                var fallbackCopy = function(text) {
-                    var ta = document.createElement('textarea');
-                    ta.value = text;
-                    ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    try { document.execCommand('copy'); } catch (e) {}
-                    ta.remove();
-                    if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', { msg: _('Diagnostics copied'), type: 'info', duration: 3000 });
-                };
-                fetch('/cgi-bin/luci/admin/desktop/diagnostics')
-                    .then(function(r) { return r.text(); })
-                    .then(done)
-                    .catch(function() {
-                        btn.disabled = false;
-                        if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', { msg: _('Network error, check connection'), type: 'error', duration: 4000 });
-                    });
-            });
-
-            p.querySelector('#ts-reset').addEventListener('click', function() {
-                var d = C.getDefaults();
-                DBG('[reset] applying defaults: taskbar_color=' + d.taskbar_color);
-                C.writeToDOM(d);
-                C.applyCss(d);
-                // Broadcast to iframes (same path as Apply)
-                if (window.IframeBridge && IframeBridge.broadcastTheme) {
-                    IframeBridge.broadcastTheme(d);
-                }
-                markDirty();
-                // Reset preview state (bg tab hook)
-                bgTab.onReset(d);
-                // Sync wallpaper preview + button visibility with the reset
-                // select values (change events don't fire on writeToDOM):
-                // defaults are gradient, so the preview must snap back to
-                // the gradient view and refresh/manage/save buttons hide.
-                var dMode = d.desktop_wallpaper || 'gradient';
-                _previewWallpaper(dMode);
-                p.querySelectorAll('.ts-wp-manage').forEach(function(btn) {
-                    var w = btn.parentNode;
-                    var sel = w ? w.querySelector('select') : null;
-                    if (sel) btn.style.display = (sel.value === 'builtin') ? '' : 'none';
-                });
-                p.querySelectorAll('.ts-wp-refresh').forEach(function(btn) {
-                    var w = btn.parentNode;
-                    var sel = w ? w.querySelector('select') : null;
-                    if (sel) btn.style.display = (sel.value === 'picsum' || sel.value === 'bing') ? '' : 'none';
-                });
-                var paDiv = document.querySelector('.ts-picsum-auto');
-                if (paDiv) paDiv.style.display = (dMode === 'picsum') ? '' : 'none';
-                var saveBtn = document.getElementById('wp-save-btn');
-                if (saveBtn) saveBtn.style.display = (dMode === 'bing' || dMode === 'picsum') ? '' : 'none';
-                if (dMode === 'bing' || dMode === 'picsum') _checkSavedState();
-            });
         }
     };
 })();
