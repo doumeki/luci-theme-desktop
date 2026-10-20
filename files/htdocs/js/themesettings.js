@@ -650,7 +650,6 @@
         var tabBarHtml = '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;">';
         TABS.forEach(function(tab, i) {
             tabBarHtml += '<button class="ts-tab" data-tab="' + tab.id + '" style="' +
-                'padding:4px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;' +
                 'color:' + (i === 0 ? 'var(--theme-panel-tab-active-fg)' : 'var(--theme-panel-tab-inactive-fg)') + ';' +
                 (i === 0 ? 'background:var(--theme-panel-tab-active-bg);' : 'background:transparent;') +
                 '">' + tab.label + '</button>';
@@ -673,10 +672,10 @@
         html += tabBarHtml;
         html += bodiesHtml;
         html += '<div style="display:flex;gap:8px;margin-top:10px;">' +
-            '<button id="ts-apply" style="padding:6px 14px;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('Apply') + '</button>' +
-            '<button id="ts-ok" style="padding:6px 14px;background:#2dce89;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('OK') + '</button>' +
-            '<button id="ts-reset" style="padding:6px 14px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">' + _('Defaults') + '</button>' +
-            '<button id="ts-diagnostics" style="padding:6px 14px;margin-left:auto;color:var(--theme-panel-muted);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;">' + _('Diagnostics') + '</button>' +
+            '<button id="ts-apply" class="ts-btn" style="color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);font-weight:600;">' + _('Apply') + '</button>' +
+            '<button id="ts-ok" class="ts-btn" style="background:#2dce89;color:#fff;border:none;font-weight:600;">' + _('OK') + '</button>' +
+            '<button id="ts-reset" class="ts-btn" style="background:#e74c3c;color:#fff;border:none;">' + _('Defaults') + '</button>' +
+            '<button id="ts-diagnostics" class="ts-btn" style="margin-left:auto;color:var(--theme-panel-muted);border:1px solid var(--theme-panel-border);">' + _('Diagnostics') + '</button>' +
             '</div></div>';
 
         var p = document.createElement('div');

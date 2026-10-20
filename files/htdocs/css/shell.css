@@ -684,3 +684,20 @@ html, body {
 
 /* ===== Theme settings panel: light mode adapts via --theme-panel-* vars ===== */
 
+
+/* ===== Theme settings panel shared primitives (moved from themesettings.js inline styles,
+   P2 step 6): tab button chrome + footer button chrome. Unique per-button colors/borders
+   stay inline in the JS markup. Compound selectors guard against widget.css drift. ===== */
+.widget-settings .ts-tab {
+    padding: 4px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+.widget-settings .ts-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
