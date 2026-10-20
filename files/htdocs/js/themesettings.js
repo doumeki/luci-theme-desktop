@@ -279,177 +279,67 @@
         };
     }
 
-    // ===== Open =====
-    window.ThemeSettings = {
-        open: function() {
-            var p = document.getElementById('theme-settings-panel');
-            if (p) { p.remove(); return; }
+    function _tabBg(ctx) {
+        var vals = ctx.vals;
+        var cfg = ctx.cfg;
 
-            dirty = false;
-            var cfg = C.readFromConfig();
-            DBG('[panel] open: wallpaper=' + cfg.desktop_wallpaper +
-                        ' taskbar_color=' + cfg.taskbar_color +
-                        ' wp_url=' + ((cfg.wallpaper && cfg.wallpaper.url) || '(none)'));
-            var vals = C.mergeDefaults(cfg);
+        // Interactive background preview — all params set by dragging
+        var gx = parseInt(vals.bg_glow_x || '30', 10);
+        var gy = parseInt(vals.bg_glow_y || '20', 10);
+        var gs = parseInt(vals.bg_spread || '60', 10);
+        var ga = parseInt(vals.bg_angle || '135', 10);
+        var gc1 = vals.desktop_color1 || '#0d1117';
+        var gc2 = vals.desktop_color2 || '#1a3a5c';
+        var pw = 280;
+        var ratio = window.innerWidth / Math.max(1, window.innerHeight);
+        var ph = Math.round(Math.min(220, Math.max(120, pw / ratio)));
+        var dotSz = Math.round(gs * 1.2 + 20); // glow dot diameter
+        // Handle dot: pixel offset from glow center (polar coords)
+        var hDist = Math.round(gs * 0.6 + 8);
+        var hRad = ga * Math.PI / 180;
+        var hDx = Math.round(Math.cos(hRad) * hDist);
+        var hDy = Math.round(-Math.sin(hRad) * hDist);
+        // Handle position: % ref + px offset via transform
+        var hTransform = 'translate(calc(' + hDx + 'px - 50%), calc(' + hDy + 'px - 50%))';
+        var isRemoteWp = cfg.desktop_wallpaper !== 'gradient';
+        var remoteClass = isRemoteWp ? ' wp-remote' : '';
+        var bgPreviewHtml =
+            '<div id="bg-preview-box" class="' + remoteClass + '" style="position:relative;width:' + pw + 'px;height:' + ph + 'px;margin:10px auto;' +
+            'border-radius:8px;overflow:hidden;background:' + gc1 + ';' +
+            'border:1px solid rgba(255,255,255,0.1);">' +
+            '<div id="wp-preview-img" style="position:absolute;inset:0;z-index:0;' + (isRemoteWp ? '' : 'display:none;') +
+            'background-size:cover;background-position:center;"></div>' +
+            '<div id="bg-glow-dot" style="position:absolute;left:' + gx + '%;top:' + gy + '%;' +
+            'width:' + dotSz + 'px;height:' + dotSz + 'px;border-radius:50%;' +
+            'background:radial-gradient(circle,' + gc2 + ' 0%,transparent 70%);' +
+            'transform:translate(-50%,-50%);cursor:grab;z-index:1;' +
+            'box-shadow:0 0 8px ' + gc2 + '33;"></div>' +
+            '<div id="bg-handle-dot" style="position:absolute;left:' + gx + '%;top:' + gy + '%;' +
+            'width:16px;height:16px;border-radius:50%;' +
+            'background:' + gc2 + ';border:2px solid #fff;' +
+            'transform:' + hTransform + ';cursor:grab;z-index:5;' +
+            'box-shadow:0 0 6px rgba(0,0,0,0.6);"></div>' +
+            // Hidden inputs so readFromDOM / saveToConfig pick up bg params
+            '<input type="hidden" id="ts-bg_glow_x" value="' + gx + '">' +
+            '<input type="hidden" id="ts-bg_glow_y" value="' + gy + '">' +
+            '<input type="hidden" id="ts-bg_spread" value="' + gs + '">' +
+            '<input type="hidden" id="ts-bg_angle" value="' + ga + '">' +
+            // Save to Built-in button (top-right of preview, only bing/picsum)
+            '<button id="wp-save-btn" title="' + _('Save to Built-in') + '" ' +
+            'style="position:absolute;top:4px;right:4px;z-index:10;font-size:10px;padding:2px 8px;' +
+            'background:rgba(45,206,137,0.85);color:#fff;border:none;border-radius:3px;cursor:pointer;' +
+            'display:' + (cfg.desktop_wallpaper === 'bing' || cfg.desktop_wallpaper === 'picsum' ? '' : 'none') + ';">' +
+            _('Save') + '</button>' +
+            '</div>';
 
-            // Preview does not touch desktop; no snapshot needed.
-            // _applyWallpaper is called directly on Apply/OK to sync desktop.
-            var wpEl = document.getElementById('desktop-wallpaper');
+        // Bg interactive preview: drag glow-dot (position) or handle-dot (spread+angle)
+        // bgState/applyBgState/redrawPreview hoisted to the tab closure (was open()
+        // closure hoists) so onReset can reach them with the same semantics.
+        var bgState = { x: gx, y: gy, spread: gs, angle: ga, c1: gc1, c2: gc2 };
+        var redrawPreview;
+        var applyBgState;
 
-            // Build tab bar
-            var tabBarHtml = '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;">';
-            TABS.forEach(function(tab, i) {
-                tabBarHtml += '<button class="ts-tab" data-tab="' + tab.id + '" style="' +
-                    'padding:4px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;' +
-                    'color:' + (i === 0 ? 'var(--theme-panel-tab-active-fg)' : 'var(--theme-panel-tab-inactive-fg)') + ';' +
-                    (i === 0 ? 'background:var(--theme-panel-tab-active-bg);' : 'background:transparent;') +
-                    '">' + tab.label + '</button>';
-            });
-            tabBarHtml += '</div>';
-
-            // Interactive background preview — all params set by dragging
-            var gx = parseInt(vals.bg_glow_x || '30', 10);
-            var gy = parseInt(vals.bg_glow_y || '20', 10);
-            var gs = parseInt(vals.bg_spread || '60', 10);
-            var ga = parseInt(vals.bg_angle || '135', 10);
-            var gc1 = vals.desktop_color1 || '#0d1117';
-            var gc2 = vals.desktop_color2 || '#1a3a5c';
-            var pw = 280;
-            var ratio = window.innerWidth / Math.max(1, window.innerHeight);
-            var ph = Math.round(Math.min(220, Math.max(120, pw / ratio)));
-            var dotSz = Math.round(gs * 1.2 + 20); // glow dot diameter
-            // Handle dot: pixel offset from glow center (polar coords)
-            var hDist = Math.round(gs * 0.6 + 8);
-            var hRad = ga * Math.PI / 180;
-            var hDx = Math.round(Math.cos(hRad) * hDist);
-            var hDy = Math.round(-Math.sin(hRad) * hDist);
-            // Handle position: % ref + px offset via transform
-            var hTransform = 'translate(calc(' + hDx + 'px - 50%), calc(' + hDy + 'px - 50%))';
-            var isRemoteWp = cfg.desktop_wallpaper !== 'gradient';
-            var remoteClass = isRemoteWp ? ' wp-remote' : '';
-            var bgPreviewHtml =
-                '<div id="bg-preview-box" class="' + remoteClass + '" style="position:relative;width:' + pw + 'px;height:' + ph + 'px;margin:10px auto;' +
-                'border-radius:8px;overflow:hidden;background:' + gc1 + ';' +
-                'border:1px solid rgba(255,255,255,0.1);">' +
-                '<div id="wp-preview-img" style="position:absolute;inset:0;z-index:0;' + (isRemoteWp ? '' : 'display:none;') +
-                'background-size:cover;background-position:center;"></div>' +
-                '<div id="bg-glow-dot" style="position:absolute;left:' + gx + '%;top:' + gy + '%;' +
-                'width:' + dotSz + 'px;height:' + dotSz + 'px;border-radius:50%;' +
-                'background:radial-gradient(circle,' + gc2 + ' 0%,transparent 70%);' +
-                'transform:translate(-50%,-50%);cursor:grab;z-index:1;' +
-                'box-shadow:0 0 8px ' + gc2 + '33;"></div>' +
-                '<div id="bg-handle-dot" style="position:absolute;left:' + gx + '%;top:' + gy + '%;' +
-                'width:16px;height:16px;border-radius:50%;' +
-                'background:' + gc2 + ';border:2px solid #fff;' +
-                'transform:' + hTransform + ';cursor:grab;z-index:5;' +
-                'box-shadow:0 0 6px rgba(0,0,0,0.6);"></div>' +
-                // Hidden inputs so readFromDOM / saveToConfig pick up bg params
-                '<input type="hidden" id="ts-bg_glow_x" value="' + gx + '">' +
-                '<input type="hidden" id="ts-bg_glow_y" value="' + gy + '">' +
-                '<input type="hidden" id="ts-bg_spread" value="' + gs + '">' +
-                '<input type="hidden" id="ts-bg_angle" value="' + ga + '">' +
-                // Save to Built-in button (top-right of preview, only bing/picsum)
-                '<button id="wp-save-btn" title="' + _('Save to Built-in') + '" ' +
-                'style="position:absolute;top:4px;right:4px;z-index:10;font-size:10px;padding:2px 8px;' +
-                'background:rgba(45,206,137,0.85);color:#fff;border:none;border-radius:3px;cursor:pointer;' +
-                'display:' + (cfg.desktop_wallpaper === 'bing' || cfg.desktop_wallpaper === 'picsum' ? '' : 'none') + ';">' +
-                _('Save') + '</button>' +
-                '</div>';
-
-            // Build tab bodies (all pre-rendered, shown/hidden by switchTab)
-            var bodiesHtml = '';
-            TABS.forEach(function(tab, i) {
-                var display = i === 0 ? '' : 'display:none;';
-                var extra = (tab.id === 'bg') ? bgPreviewHtml : '';
-                bodiesHtml += '<div class="ts-tab-body" data-tab="' + tab.id + '" style="' + display + '">' +
-                    renderFields(tab.fields, vals) + extra + '</div>';
-            });
-
-            var html = '<div class="widget-settings-header" style="background:var(--theme-panel-bg);color:var(--theme-panel-fg);"><h3 style="margin:0;font-size:14px;">' + _('Theme Settings') + '</h3><button id="ts-close" style="color:var(--theme-panel-muted);background:none;border:none;font-size:14px;cursor:pointer;">&#x2715;</button></div>';
-            html += '<div class="widget-settings-body" style="padding:12px;min-height:220px;color:var(--theme-panel-fg);background:var(--theme-panel-bg);">';
-            html += tabBarHtml;
-            html += bodiesHtml;
-            html += '<div style="display:flex;gap:8px;margin-top:10px;">' +
-                '<button id="ts-apply" style="padding:6px 14px;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('Apply') + '</button>' +
-                '<button id="ts-ok" style="padding:6px 14px;background:#2dce89;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('OK') + '</button>' +
-                '<button id="ts-reset" style="padding:6px 14px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">' + _('Defaults') + '</button>' +
-                '<button id="ts-diagnostics" style="padding:6px 14px;margin-left:auto;color:var(--theme-panel-muted);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;">' + _('Diagnostics') + '</button>' +
-                '</div></div>';
-
-            p = document.createElement('div');
-            p.id = 'theme-settings-panel';
-            p.className = 'widget-settings';
-            p.innerHTML = html;
-            p.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-            document.body.appendChild(p);
-
-            PanelHelper.makeMovable(p);
-            PanelHelper.makeResizable(p);
-            PanelHelper.fadeIn(p);
-
-            // Initial wallpaper preview based on current mode
-            var initialMode = cfg.desktop_wallpaper || 'gradient';
-            _previewWallpaper(initialMode);
-            // Panel opened with bing/picsum already selected: ensure a
-            // first-time preview download happens if nothing is cached
-            if (initialMode === 'bing' || initialMode === 'picsum') _ensurePreviewDownload(initialMode);
-
-            _checkSavedState();
-
-            // Tab switching
-            p.querySelectorAll('.ts-tab').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    switchTab(p, btn.getAttribute('data-tab'));
-                });
-            });
-
-            // Wire inputs
-            p.querySelectorAll('input[type=color], input[type=range]').forEach(function(el) {
-                el.addEventListener('input', function() { onFieldChange(el); });
-            });
-            p.querySelectorAll('input[type=checkbox]').forEach(function(el) {
-                el.addEventListener('change', function() { onFieldChange(el); });
-            });
-            // Picsum auto-refresh checkbox: sync hidden input value
-            var paCb = document.getElementById('ts-picsum-auto-cb');
-            if (paCb) {
-                paCb.addEventListener('change', function() {
-                    var hidden = document.getElementById('ts-picsum_auto_refresh');
-                    if (hidden) hidden.value = paCb.checked ? '1' : '0';
-                    onFieldChange(hidden);
-                });
-            }
-            // Initial picsum auto-refresh checkbox visibility
-            var wpSel = document.getElementById('ts-desktop_wallpaper');
-            var paDiv = document.querySelector('.ts-picsum-auto');
-            if (wpSel && paDiv) paDiv.style.display = (wpSel.value === 'picsum') ? '' : 'none';
-            p.querySelectorAll('select').forEach(function(el) {
-                el.addEventListener('change', function() {
-                    onFieldChange(el);
-                    var mode = el.value;
-                    var wrapper = el.parentNode;
-                    if (wrapper) {
-                        var btn = wrapper.querySelector('.ts-wp-manage');
-                        if (btn) btn.style.display = (mode === 'builtin') ? '' : 'none';
-                        var refreshBtn = wrapper.querySelector('.ts-wp-refresh');
-                        if (refreshBtn) refreshBtn.style.display = (mode === 'picsum' || mode === 'bing') ? '' : 'none';
-                    }
-                    // Toggle picsum auto-refresh checkbox
-                    var paDiv = document.querySelector('.ts-picsum-auto');
-                    if (paDiv) paDiv.style.display = (mode === 'picsum') ? '' : 'none';
-                    // Toggle preview Save button
-                    var saveBtn = document.getElementById('wp-save-btn');
-                    if (saveBtn) {
-                        saveBtn.style.display = (mode === 'bing' || mode === 'picsum') ? '' : 'none';
-                        if (mode === 'bing' || mode === 'picsum') _checkSavedState();
-                    }
-                    // Preview only — desktop unchanged until Apply
-                    _previewWallpaper(mode);
-                    // First-time switch to bing/picsum: download a preview
-                    // in the background (only if no cached preview exists)
-                    _ensurePreviewDownload(mode);
-                });
-            });
+        function bind(p) {
             p.querySelectorAll('.ts-wp-manage').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     if (window.WallpaperManager) WallpaperManager.open();
@@ -568,11 +458,6 @@
                 });
             }
 
-            // Bg interactive preview: drag glow-dot (position) or handle-dot (spread+angle)
-            // State + redraw hoisted so reset handler can access them
-            var bgState = { x: gx, y: gy, spread: gs, angle: ga, c1: gc1, c2: gc2 };
-            var redrawPreview;
-            var applyBgState;
 
             var previewBox = document.getElementById('bg-preview-box');
             if (previewBox) {
@@ -670,6 +555,181 @@
                     });
                 });
             }
+        }
+
+        function onReset(d) {
+            bgState.x = parseInt(d.bg_glow_x, 10);
+            bgState.y = parseInt(d.bg_glow_y, 10);
+            bgState.spread = parseInt(d.bg_spread, 10);
+            bgState.angle = parseInt(d.bg_angle, 10);
+            bgState.c1 = d.desktop_color1;
+            bgState.c2 = d.desktop_color2;
+            redrawPreview();
+        }
+
+        function applyWallpaper(m, u, after, key) {
+
+            // bing/picsum: only confirm (cache→_desktop) when the preview
+            // is NOT the confirmed desktop image (i.e. the user hit
+            // Refresh and is choosing a new one). If the preview snapped
+            // back to the desktop image, applying must leave the desktop
+            // untouched — changing other params (fonts etc.) must never
+            // swap the wallpaper behind the user's back.
+            if (m === 'bing' || m === 'picsum') {
+                if (u.indexOf('_desktop.jpg') !== -1) {
+                    // Preview = confirmed desktop → nothing to confirm
+                    DBG('[' + key + '] preview is desktop image, desktop unchanged');
+                    LuCIDesktop._applyWallpaper({mode: m, url: u});
+                    after();
+                } else {
+                    var cx = new XMLHttpRequest();
+                    cx.open('POST', '/cgi-bin/luci/admin/desktop/confirm_wallpaper', true);
+                    cx.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    cx.onload = function() {
+                        var desktopUrl = '/luci-static/desktop/cache/wallpaper_' + m + '_desktop.jpg?v=' + Date.now();
+                        LuCIDesktop._applyWallpaper({mode: m, url: desktopUrl});
+                        after();
+                    };
+                    cx.send('mode=' + m);
+                }
+            } else {
+                LuCIDesktop._applyWallpaper({mode: m, url: u});
+                after();
+            }        }
+
+        return {
+            html: bgPreviewHtml,
+            bind: bind,
+            onReset: onReset,
+            applyWallpaper: applyWallpaper
+        };
+    }
+
+    // ===== Open =====
+    window.ThemeSettings = {
+        open: function() {
+            var p = document.getElementById('theme-settings-panel');
+            if (p) { p.remove(); return; }
+
+            dirty = false;
+            var cfg = C.readFromConfig();
+            DBG('[panel] open: wallpaper=' + cfg.desktop_wallpaper +
+                        ' taskbar_color=' + cfg.taskbar_color +
+                        ' wp_url=' + ((cfg.wallpaper && cfg.wallpaper.url) || '(none)'));
+            var vals = C.mergeDefaults(cfg);
+
+            // Preview does not touch desktop; no snapshot needed.
+            // _applyWallpaper is called directly on Apply/OK to sync desktop.
+            var wpEl = document.getElementById('desktop-wallpaper');
+
+            // Build tab bar
+            var tabBarHtml = '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;">';
+            TABS.forEach(function(tab, i) {
+                tabBarHtml += '<button class="ts-tab" data-tab="' + tab.id + '" style="' +
+                    'padding:4px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;' +
+                    'color:' + (i === 0 ? 'var(--theme-panel-tab-active-fg)' : 'var(--theme-panel-tab-inactive-fg)') + ';' +
+                    (i === 0 ? 'background:var(--theme-panel-tab-active-bg);' : 'background:transparent;') +
+                    '">' + tab.label + '</button>';
+            });
+            tabBarHtml += '</div>';
+
+            var bgTab = _tabBg({ vals: vals, cfg: cfg });
+
+            // Build tab bodies (all pre-rendered, shown/hidden by switchTab)
+            var bodiesHtml = '';
+            TABS.forEach(function(tab, i) {
+                var display = i === 0 ? '' : 'display:none;';
+                var extra = (tab.id === 'bg') ? bgTab.html : '';
+                bodiesHtml += '<div class="ts-tab-body" data-tab="' + tab.id + '" style="' + display + '">' +
+                    renderFields(tab.fields, vals) + extra + '</div>';
+            });
+
+            var html = '<div class="widget-settings-header" style="background:var(--theme-panel-bg);color:var(--theme-panel-fg);"><h3 style="margin:0;font-size:14px;">' + _('Theme Settings') + '</h3><button id="ts-close" style="color:var(--theme-panel-muted);background:none;border:none;font-size:14px;cursor:pointer;">&#x2715;</button></div>';
+            html += '<div class="widget-settings-body" style="padding:12px;min-height:220px;color:var(--theme-panel-fg);background:var(--theme-panel-bg);">';
+            html += tabBarHtml;
+            html += bodiesHtml;
+            html += '<div style="display:flex;gap:8px;margin-top:10px;">' +
+                '<button id="ts-apply" style="padding:6px 14px;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('Apply') + '</button>' +
+                '<button id="ts-ok" style="padding:6px 14px;background:#2dce89;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">' + _('OK') + '</button>' +
+                '<button id="ts-reset" style="padding:6px 14px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">' + _('Defaults') + '</button>' +
+                '<button id="ts-diagnostics" style="padding:6px 14px;margin-left:auto;color:var(--theme-panel-muted);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:12px;">' + _('Diagnostics') + '</button>' +
+                '</div></div>';
+
+            p = document.createElement('div');
+            p.id = 'theme-settings-panel';
+            p.className = 'widget-settings';
+            p.innerHTML = html;
+            p.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+            document.body.appendChild(p);
+
+            PanelHelper.makeMovable(p);
+            PanelHelper.makeResizable(p);
+            PanelHelper.fadeIn(p);
+
+            // Initial wallpaper preview based on current mode
+            var initialMode = cfg.desktop_wallpaper || 'gradient';
+            _previewWallpaper(initialMode);
+            // Panel opened with bing/picsum already selected: ensure a
+            // first-time preview download happens if nothing is cached
+            if (initialMode === 'bing' || initialMode === 'picsum') _ensurePreviewDownload(initialMode);
+
+            _checkSavedState();
+
+            // Tab switching
+            p.querySelectorAll('.ts-tab').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    switchTab(p, btn.getAttribute('data-tab'));
+                });
+            });
+
+            // Wire inputs
+            p.querySelectorAll('input[type=color], input[type=range]').forEach(function(el) {
+                el.addEventListener('input', function() { onFieldChange(el); });
+            });
+            p.querySelectorAll('input[type=checkbox]').forEach(function(el) {
+                el.addEventListener('change', function() { onFieldChange(el); });
+            });
+            // Picsum auto-refresh checkbox: sync hidden input value
+            var paCb = document.getElementById('ts-picsum-auto-cb');
+            if (paCb) {
+                paCb.addEventListener('change', function() {
+                    var hidden = document.getElementById('ts-picsum_auto_refresh');
+                    if (hidden) hidden.value = paCb.checked ? '1' : '0';
+                    onFieldChange(hidden);
+                });
+            }
+            // Initial picsum auto-refresh checkbox visibility
+            var wpSel = document.getElementById('ts-desktop_wallpaper');
+            var paDiv = document.querySelector('.ts-picsum-auto');
+            if (wpSel && paDiv) paDiv.style.display = (wpSel.value === 'picsum') ? '' : 'none';
+            p.querySelectorAll('select').forEach(function(el) {
+                el.addEventListener('change', function() {
+                    onFieldChange(el);
+                    var mode = el.value;
+                    var wrapper = el.parentNode;
+                    if (wrapper) {
+                        var btn = wrapper.querySelector('.ts-wp-manage');
+                        if (btn) btn.style.display = (mode === 'builtin') ? '' : 'none';
+                        var refreshBtn = wrapper.querySelector('.ts-wp-refresh');
+                        if (refreshBtn) refreshBtn.style.display = (mode === 'picsum' || mode === 'bing') ? '' : 'none';
+                    }
+                    // Toggle picsum auto-refresh checkbox
+                    var paDiv = document.querySelector('.ts-picsum-auto');
+                    if (paDiv) paDiv.style.display = (mode === 'picsum') ? '' : 'none';
+                    // Toggle preview Save button
+                    var saveBtn = document.getElementById('wp-save-btn');
+                    if (saveBtn) {
+                        saveBtn.style.display = (mode === 'bing' || mode === 'picsum') ? '' : 'none';
+                        if (mode === 'bing' || mode === 'picsum') _checkSavedState();
+                    }
+                    // Preview only — desktop unchanged until Apply
+                    _previewWallpaper(mode);
+                    // First-time switch to bing/picsum: download a preview
+                    // in the background (only if no cached preview exists)
+                    _ensurePreviewDownload(mode);
+                });
+            });
+            bgTab.bind(p);
 
             // Buttons
             p.querySelector('#ts-close').addEventListener('click', function() {
@@ -707,33 +767,7 @@
                 DBG('[apply] AFTER: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
                             ' select_mode=' + m + ' preview_url=' + u);
-                // bing/picsum: only confirm (cache→_desktop) when the preview
-                // is NOT the confirmed desktop image (i.e. the user hit
-                // Refresh and is choosing a new one). If the preview snapped
-                // back to the desktop image, applying must leave the desktop
-                // untouched — changing other params (fonts etc.) must never
-                // swap the wallpaper behind the user's back.
-                if (m === 'bing' || m === 'picsum') {
-                    if (u.indexOf('_desktop.jpg') !== -1) {
-                        // Preview = confirmed desktop → nothing to confirm
-                        DBG('[apply] preview is desktop image, desktop unchanged');
-                        LuCIDesktop._applyWallpaper({mode: m, url: u});
-                        markClean();
-                    } else {
-                        var cx = new XMLHttpRequest();
-                        cx.open('POST', '/cgi-bin/luci/admin/desktop/confirm_wallpaper', true);
-                        cx.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                        cx.onload = function() {
-                            var desktopUrl = '/luci-static/desktop/cache/wallpaper_' + m + '_desktop.jpg?v=' + Date.now();
-                            LuCIDesktop._applyWallpaper({mode: m, url: desktopUrl});
-                            markClean();
-                        };
-                        cx.send('mode=' + m);
-                    }
-                } else {
-                    LuCIDesktop._applyWallpaper({mode: m, url: u});
-                    markClean();
-                }
+                bgTab.applyWallpaper(m, u, markClean, 'apply');
             });
             p.querySelector('#ts-ok').addEventListener('click', function() {
                 if (dirty) {
@@ -747,27 +781,7 @@
                 var r = document.documentElement.style;
                 DBG('[ok] --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                             ' select_mode=' + m + ' preview_url=' + u);
-                if (m === 'bing' || m === 'picsum') {
-                    if (u.indexOf('_desktop.jpg') !== -1) {
-                        // Preview = confirmed desktop → desktop unchanged
-                        DBG('[ok] preview is desktop image, desktop unchanged');
-                        LuCIDesktop._applyWallpaper({mode: m, url: u});
-                        p.remove();
-                    } else {
-                        var cx2 = new XMLHttpRequest();
-                        cx2.open('POST', '/cgi-bin/luci/admin/desktop/confirm_wallpaper', true);
-                        cx2.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                        cx2.onload = function() {
-                            var desktopUrl = '/luci-static/desktop/cache/wallpaper_' + m + '_desktop.jpg?v=' + Date.now();
-                            LuCIDesktop._applyWallpaper({mode: m, url: desktopUrl});
-                            p.remove();
-                        };
-                        cx2.send('mode=' + m);
-                    }
-                } else {
-                    LuCIDesktop._applyWallpaper({mode: m, url: u});
-                    p.remove();
-                }
+                bgTab.applyWallpaper(m, u, function() { p.remove(); }, 'ok');
             });
             // Diagnostics: fetch the bug-report payload and copy to clipboard
             p.querySelector('#ts-diagnostics').addEventListener('click', function() {
@@ -812,14 +826,8 @@
                     IframeBridge.broadcastTheme(d);
                 }
                 markDirty();
-                // Reset preview state
-                bgState.x = parseInt(d.bg_glow_x, 10);
-                bgState.y = parseInt(d.bg_glow_y, 10);
-                bgState.spread = parseInt(d.bg_spread, 10);
-                bgState.angle = parseInt(d.bg_angle, 10);
-                bgState.c1 = d.desktop_color1;
-                bgState.c2 = d.desktop_color2;
-                redrawPreview();
+                // Reset preview state (bg tab hook)
+                bgTab.onReset(d);
                 // Sync wallpaper preview + button visibility with the reset
                 // select values (change events don't fire on writeToDOM):
                 // defaults are gradient, so the preview must snap back to
