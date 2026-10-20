@@ -15,12 +15,47 @@
  *     stores without re-rendering
  *   - api: { instanceId, typeId, data, rerender(), saveConfig(), disable() }
  *   - update may return a Promise (async); ticks don't overlap
+ *//*
+ * == Region map (navigation TOC — comment only, zero behavior) ==
+ * [01] Color derivation       deriveWidgetColors(): bg → fg/border/shadow
+ * [02] Manager state          registry / instances / _preservedConfigs / _timer
+ * [03] Registration           register(def): registry entry shape
+ * [04] Instance ID helpers    _nextInstanceId / _instancesOf / _totalCount
+ * [05] Lifecycle              enable / disable / disableAll (timer+DOM+config)
+ * [06] Render entry           _render: the ONLY render door (option styles +
+ *                             resize-handle re-attach after innerHTML rebuild)
+ * [07] Option styles          _applyOptionStyles: bg/accent/fg → CSS variables
+ * [08] Instance API           _makeApi: {rerender, saveConfig, disable}
+ * [09] Config capture         _buildConfig (active + preserved copies)
+ * [10] Preserved clear        clearPreserved: the only hard-delete path
+ * [11] Per-instance controls  setOpacity / setClickThrough / setMode /
+ *                             setScale / setPosition
+ * [12] Config persistence     loadConfig / _saveToUCI / _sendSave (POST
+ *                             serialized via _saveBusy)
+ * [13] Settings panel         openSettings / _buildSettingsHTML /
+ *                             _bindSettingsEvents / _buildOptionsHTML
+ * [14] Touch drag             _makeDraggable: mobile long-press drag
+ * [15] Resize                 _makeResizable: opt-in bottom-right handle
+ * [16] Boot & clamping        _getLayer / init / _clampOne / _clampOnResize
+ * [17] Mouse drag wiring      document-level dragState (desktop drag)
+ * [18] Exports                DESKTOP hookup + window.WidgetManager
+ *
+ * Render/teardown contract (enforced by review, static checks in
+ * tests/run-headless.js): widget body containers must be WHOLLY
+ * replaceable (innerHTML='' then mount — never patch long-lived nodes
+ * in place). Any "persistent node + repeated bind" pattern must go
+ * through a central _bind dedup or a whole-container swap. Timers live
+ * only inside the instance lifetime and must be cleared on
+ * disable() (see [05]); intervals carry a `// interval-owner:` comment
+ * checked by the run-headless intervalOwnerCheck gate.
  */
+
 (function() {
     'use strict';
 
     var DESKTOP = window.LuCIDesktop;
 
+    // ===== [01] Color derivation =====
     // Derive readable widget foreground colors from the card background
     // (WCAG relative luminance). Light bg → dark text; dark bg → light
     // text. Also returns the border tint and the text-shadow color
@@ -45,6 +80,7 @@
             shadow: dark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.45)'
         };
     }
+    // ===== [02] Manager state =====
     var WidgetManager = {
         registry: {},         // typeId → {id, name, defaults, render, update, destroy}
         instances: {},        // instanceId → {id, typeId, el, x, y, opacity, clickThrough, data}
@@ -52,7 +88,7 @@
         _nextNum: {},         // typeId → next instance number
         _dragging: null,
 
-        // ===== Registration =====
+        // ===== [03] Registration =====
         register: function(def) {
             if (!def.id) throw new Error('Widget requires an id');
             if (!def.render) throw new Error('Widget requires a render function');
@@ -92,7 +128,7 @@
             };
         },
 
-        // ===== Instance ID helpers =====
+        // ===== [04] Instance ID helpers =====
         // Generate next instance ID. Prefers reusing a preserved (closed) slot
         // so re-enabling fills the gap instead of creating a new number.
         _nextInstanceId: function(typeId) {
@@ -143,7 +179,7 @@
             return active + preserved;
         },
 
-        // ===== Lifecycle =====
+        // ===== [05] Lifecycle =====
         enable: function(typeId, overrides, _skipSave) {
             var def = this.registry[typeId];
             if (!def) throw new Error('Widget "' + typeId + '" not registered');
@@ -296,6 +332,7 @@
             this._instancesOf(typeId).forEach(function(iid) { self.disable(iid); });
         },
 
+        // ===== [06] Render entry =====
         // Per-instance API context passed as 3rd arg to render/update/destroy.
         // One object per instance, created at enable time (inst._api).
         // Uniform render entry: def.render + post-render hooks shared by
@@ -314,6 +351,7 @@
             }
         },
 
+        // ===== [07] Option styles =====
         // Options with a `style` mapping are applied to the widget element
         // after every render (and cleared when the option is unset).
         // Currently:
@@ -418,6 +456,7 @@
             }
         },
 
+        // ===== [08] Instance API =====
         _makeApi: function(inst) {
             var self = this;
             var def = this.registry[inst.typeId];
@@ -433,6 +472,7 @@
             };
         },
 
+        // ===== [09] Config capture =====
         _buildConfig: function(inst, active) {
             var def = this.registry[inst.typeId];
             var extra = {};
@@ -461,6 +501,7 @@
             return cfg;
         },
 
+        // ===== [10] Preserved clear =====
         clearPreserved: function(instanceId) {
             var cfg = this._preservedConfigs[instanceId];
             if (cfg) {
@@ -475,7 +516,7 @@
             DBG('[widget] clearPreserved ' + instanceId);
         },
 
-        // ===== Per-instance controls =====
+        // ===== [11] Per-instance controls =====
         setOpacity: function(instanceId, value) {
             var inst = this.instances[instanceId];
             if (!inst) return;
@@ -538,7 +579,7 @@
             this.saveConfig();
         },
 
-        // ===== Config persistence =====
+        // ===== [12] Config persistence =====
         saveConfig: function() { this._saveToUCI(); },
 
         loadConfig: function() {
@@ -658,7 +699,7 @@
             } catch(e) { done(); }
         },
 
-        // ===== Settings panel =====
+        // ===== [13] Settings panel =====
         openSettings: function() {
             var existing = document.getElementById('widget-settings');
             if (existing) existing.remove();
@@ -1114,7 +1155,7 @@
             self._applyActiveSettingsTab(panel);
         },
 
-        // ===== Dragging =====
+        // ===== [14] Touch drag (mobile long-press) =====
         _makeDraggable: function(el, id) {
             el.style.cursor = 'grab';
             if (!DESKTOP || !DESKTOP.isMobile()) return;
@@ -1153,6 +1194,7 @@
         },
 
         // ===== Resizing =====
+        // ===== [15] Resize =====
         // Opt-in per widget (def.resizable): bottom-right handle that
         // drags the instance's px width/height. Desktop: mousedown chain
         // on document (like the drag); mobile: direct touch — the handle's
@@ -1243,6 +1285,7 @@
             handle.addEventListener('touchcancel', end);
         },
 
+        // ===== [16] Boot & clamping =====
         _getLayer: function() {
             var layer = document.getElementById('widget-layer');
             if (!layer) {
@@ -1278,6 +1321,7 @@
         _loadAll: function() { this.loadConfig(); }
     };
 
+    // ===== [17] Mouse drag wiring (document level) =====
     var dragState = null;
     document.addEventListener('mousedown', function(e) {
         // A widget can fence off a sub-area that owns the mouse gesture
@@ -1305,6 +1349,7 @@
         WidgetManager.saveConfig();
     });
 
+    // ===== [18] Exports =====
     DESKTOP.register('widget', WidgetManager);
     window.WidgetManager = WidgetManager;
 })();
