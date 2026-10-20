@@ -239,5 +239,49 @@ describe('Wallpaper preview auto-download', function() {
         assert.contains(last.url, 'force=1', 'refresh forces download');
         assert.contains(last.url, 'preview=1', 'refresh uses preview=1 (desktop untouched until Apply)');
     });
+
+    // ===== 0.1.0-259: save lock during wallpaper downloads =====
+    it('Save stays disabled while refresh download is in flight', function() {
+        switchMode('bing');
+        lastImage.onload(); // confirmed desktop exists -> no auto download
+        var refreshBtn = document.querySelector('.ts-wp-refresh');
+        assert.ok(refreshBtn, 'refresh button visible for bing');
+        refreshBtn.click();
+        var dl = findXHR('force=1')[0];
+        assert.ok(dl, 'refresh download started');
+        var saveBtn = document.getElementById('wp-save-btn');
+        assert.ok(saveBtn && saveBtn.style.display !== 'none', 'save button visible');
+        assert.ok(saveBtn.disabled, 'save locked while download in flight');
+        dl.status = 200;
+        dl.responseText = '{"url":"/luci-static/desktop/cache/wallpaper_bing.jpg?v=2","debug":"download=ok"}';
+        dl.onload();
+        // Unlock re-evaluates via check_saved: server says not saved yet
+        var checks = findXHR('check_saved');
+        var lastCheck = checks[checks.length - 1];
+        lastCheck.status = 200;
+        lastCheck.responseText = '{"saved":false}';
+        lastCheck.onload();
+        assert.ok(!saveBtn.disabled, 'save clickable after download settles');
+    });
+
+    // ===== 0.1.0-259: gradient-only color pickers =====
+    it('Bg color pickers lock unless gradient mode', function() {
+        var c1 = document.getElementById('ts-desktop_color1');
+        var c2 = document.getElementById('ts-desktop_color2');
+        assert.ok(c1 && c2, 'color pickers rendered');
+        assert.ok(!c1.disabled && !c2.disabled, 'enabled in gradient mode');
+
+        switchMode('picsum');
+        assert.ok(c1.disabled && c2.disabled, 'locked for picsum');
+        c1.value = '#123456'; // programmatic value survives the lock
+        switchMode('gradient');
+        assert.ok(!c1.disabled && !c2.disabled, 'unlocked back in gradient');
+        assert.equal(c1.value, '#123456', 'switching modes keeps the saved color');
+
+        // Defaults reset lands on gradient -> pickers unlocked
+        switchMode('picsum');
+        document.getElementById('ts-reset').click();
+        assert.ok(!c1.disabled && !c2.disabled, 'reset returns to gradient and unlocks');
+    });
 });
 })();

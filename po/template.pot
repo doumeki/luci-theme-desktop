@@ -102,6 +102,9 @@ msgstr ""
 msgid "Glow Y"
 msgstr ""
 
+msgid "Gradient only"
+msgstr ""
+
 msgid "Go to password configuration..."
 msgstr ""
 

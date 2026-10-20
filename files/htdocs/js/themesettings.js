@@ -18,6 +18,57 @@
         if (btn) { btn.style.background = ''; btn.style.color = 'var(--theme-panel-fg)'; btn.style.border = '1px solid var(--theme-panel-border)'; btn.style.opacity = ''; btn.textContent = _('Apply'); }
     }
 
+    // ===== Wallpaper save lock (0.1.0-259) =====
+    // Any in-flight wallpaper download (Refresh XHR, first-candidate
+    // fetch) keeps Save-to-Builtin disabled: Save snapshots the preview
+    // file, and that file is being rewritten server-side mid-download.
+    // The lock clears when the download settles; switching the mode away
+    // hides Save, and switching back re-evaluates via _checkSavedState.
+    var wpGen = 0;
+    var wpDownloads = []; // generation tokens of in-flight downloads
+    function saveBtnLocked() { return wpDownloads.length > 0; }
+    function saveLockStart() {
+        var token = wpGen;
+        wpDownloads.push(token);
+        saveLockApply();
+        return token;
+    }
+    function saveLockEnd(token) {
+        var i = wpDownloads.indexOf(token === undefined ? wpGen : token);
+        if (i !== -1) wpDownloads.splice(i, 1);
+        saveLockApply(true);
+    }
+    // Panel reopen starts a fresh lock session; ends queued from a
+    // previous session's never-settled XHRs become no-ops (stubbed XHRs
+    // in tests and abandoned downloads alike).
+    function wpLockNewSession() { wpGen++; wpDownloads.length = 0; }
+    function saveLockApply(settled) {
+        var btn = document.getElementById('wp-save-btn');
+        if (!btn) return;
+        if (saveBtnLocked()) {
+            btn.disabled = true;
+            btn.title = _('Downloading preview…');
+        } else if (settled) {
+            btn.title = _('Save to Built-in');
+            _checkSavedState();
+        }
+    }
+
+    // ===== Gradient-only color pickers (0.1.0-259) =====
+    // Bg Base / Bg Glow drive the gradient wallpaper. With a remote
+    // provider selected they are locked; values stay in the DOM so
+    // switching back to gradient restores the previous colors.
+    function _setGradientColorsEnabled(enabled) {
+        ['ts-desktop_color1', 'ts-desktop_color2'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = !enabled;
+            el.style.opacity = enabled ? '' : '0.45';
+            el.style.cursor = enabled ? '' : 'not-allowed';
+            el.title = enabled ? '' : _('Gradient only');
+        });
+    }
+
     // ===== Unified field change handler =====
     function onFieldChange(el) {
         var id = el.id.replace('ts-','');
@@ -55,9 +106,17 @@
                     ' <span style="font-size:11px;color:var(--theme-panel-muted);min-width:36px;" id="tsv-' + f.id + '">' + C.formatValue(f, v) + '</span></div>';
             } else if (f.type === 'color') {
                 var hexVal = v || '#444';
+                // 0.1.0-259: Bg Base/Bg Glow are gradient-only knobs --
+                // locked (value kept, restored on switch back) while a
+                // remote wallpaper is selected. Mode changes re-sync via
+                // _setGradientColorsEnabled.
+                var gradientLocked = (f.id === 'desktop_color1' || f.id === 'desktop_color2') &&
+                    (vals.desktop_wallpaper || 'gradient') !== 'gradient';
                 html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;color:var(--theme-panel-fg);">' +
                     '<span style="width:120px;">' + f.label + '</span>' +
-                    '<input type="color" id="ts-' + f.id + '" value="' + hexVal + '" title="' + hexVal + '" style="width:32px;height:24px;border:none;cursor:pointer;">';
+                    '<input type="color" id="ts-' + f.id + '" value="' + hexVal + '" title="' + hexVal + '"' +
+                    (gradientLocked ? ' disabled style="width:32px;height:24px;border:none;cursor:not-allowed;opacity:0.45;"' :
+                        ' style="width:32px;height:24px;border:none;cursor:pointer;"') + '>';
                 html += '</div>';
             } else if (f.type === 'checkbox') {
                 html += '<div style="margin-bottom:8px;"><label style="font-size:13px;color:var(--theme-panel-fg);cursor:pointer;">' +
@@ -154,11 +213,12 @@
                     saveBtn.disabled = true;
                     saveBtn.title = _('Already in Built-in: ') + r.name;
                 } else {
+                    var locked = saveBtnLocked();
                     saveBtn.textContent = _('Save');
                     saveBtn.style.background = 'rgba(45,206,137,0.85)';
                     saveBtn.style.color = '#fff';
-                    saveBtn.disabled = false;
-                    saveBtn.title = _('Save to Built-in');
+                    saveBtn.disabled = locked;
+                    saveBtn.title = locked ? _('Downloading preview…') : _('Save to Built-in');
                 }
             } catch(e) {}
         };
@@ -270,9 +330,11 @@
             if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Downloading preview…'), type: 'info', duration: 4000});
             var preview = document.getElementById('wp-preview-img');
             if (preview) preview.classList.add('wp-loading');
+            var lock = saveLockStart();
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/cgi-bin/luci/admin/desktop/random_wallpaper?mode=' + encodeURIComponent(mode) + '&preview=1', true);
             xhr.onload = function() {
+                saveLockEnd(lock);
                 if (preview) preview.classList.remove('wp-loading');
                 try {
                     if (xhr.status !== 200) {
@@ -288,6 +350,7 @@
                 } catch(e) { DBG('[preview] download error:', e.message); }
             };
             xhr.onerror = function() {
+                saveLockEnd(lock);
                 if (preview) preview.classList.remove('wp-loading');
                 if (LuCIDesktop && LuCIDesktop.emit) LuCIDesktop.emit('toast', {msg: _('Network error, check connection'), type: 'error', duration: 4000});
             };
@@ -376,6 +439,7 @@
                     btn.textContent = _('...');
                     btn.disabled = true;
                     btn.style.opacity = '0.5';
+                    var lock = saveLockStart();
                     // Fake download progress shimmer
                     var preview = document.getElementById('wp-preview-img');
                     if (preview) preview.classList.add('wp-loading');
@@ -384,6 +448,7 @@
                     // touch the confirmed desktop baseline until Apply/OK
                     xhr.open('GET', '/cgi-bin/luci/admin/desktop/random_wallpaper?mode=' + encodeURIComponent(mode) + '&force=1&preview=1', true);
                     xhr.onload = function() {
+                        saveLockEnd(lock);
                         btn.textContent = _('Refresh');
                         btn.disabled = false;
                         btn.style.opacity = '';
@@ -409,6 +474,7 @@
                         } catch(e) { DBG('[refresh] error:', e.message); }
                     };
                     xhr.onerror = function() {
+                        saveLockEnd(lock);
                         btn.textContent = _('Refresh');
                         btn.disabled = false;
                         btn.style.opacity = '';
@@ -741,6 +807,10 @@
                     saveBtn.style.display = (mode === 'bing' || mode === 'picsum') ? '' : 'none';
                     if (mode === 'bing' || mode === 'picsum') _checkSavedState();
                 }
+                // Gradient-only pickers sync on desktop mode change (0.1.0-259)
+                if (el.id === 'ts-desktop_wallpaper') _setGradientColorsEnabled(mode === 'gradient');
+                // A still-in-flight wallpaper download keeps Save locked
+                saveLockApply();
                 // Preview only — desktop unchanged until Apply
                 _previewWallpaper(mode);
                 // First-time switch to bing/picsum: download a preview
@@ -860,7 +930,9 @@
         if (paDiv) paDiv.style.display = (dMode === 'picsum') ? '' : 'none';
         var saveBtn = document.getElementById('wp-save-btn');
         if (saveBtn) saveBtn.style.display = (dMode === 'bing' || dMode === 'picsum') ? '' : 'none';
-        if (dMode === 'bing' || dMode === 'picsum') _checkSavedState();    }
+        if (dMode === 'bing' || dMode === 'picsum') _checkSavedState();
+        // Reset lands on gradient defaults: unlock the pickers (0.1.0-259)
+        _setGradientColorsEnabled(dMode === 'gradient');    }
 
     // ===== Open =====
     window.ThemeSettings = {
@@ -869,12 +941,15 @@
             if (p) { p.remove(); return; }
 
             dirty = false;
+            wpLockNewSession();
 
             var sh = _panelShell();
             var cfg = sh.cfg, wpEl = sh.wpEl, bgTab = sh.bgTab;
 
             // Initial wallpaper preview based on current mode
             var initialMode = cfg.desktop_wallpaper || 'gradient';
+            // Gradient-only pickers follow the initial mode (0.1.0-259)
+            _setGradientColorsEnabled(initialMode === 'gradient');
             _previewWallpaper(initialMode);
             // Panel opened with bing/picsum already selected: ensure a
             // first-time preview download happens if nothing is cached

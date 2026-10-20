@@ -102,6 +102,9 @@ msgstr "光晕 X"
 msgid "Glow Y"
 msgstr "光晕 Y"
 
+msgid "Gradient only"
+msgstr "仅渐变模式可调"
+
 msgid "Go to password configuration..."
 msgstr "前往密码配置..."
 

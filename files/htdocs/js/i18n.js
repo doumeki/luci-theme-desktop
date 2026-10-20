@@ -53,6 +53,7 @@
             'Bg Glow': '背景光晕',
             'Glow X': '光晕 X',
             'Glow Y': '光晕 Y',
+            'Gradient only': '仅渐变模式可调',
             'Go to password configuration...': '前往密码配置...',
             'Do not show again': '不再提醒',
             'Max instances warning': '实例数量上限提示',
