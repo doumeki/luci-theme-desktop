@@ -97,12 +97,28 @@
     }
 
     // ===== Tab definitions =====
-    var TABS = [
-        { id: 'theme',  label: _('Theme'),  fields: C.layout.theme },
-        { id: 'colors', label: _('Colors'), fields: C.layout.main },
-        { id: 'fonts',  label: _('Fonts'),  fields: C.layout.fonts },
-        { id: 'bg',     label: _('Bg'),     fields: C.layout.bg }
-    ];
+    var TABS = [];
+
+    // Uniform tab contract: id, label, build(vals, cfg) -> html container.
+    // Field-collection tabs get wrapped by _formTab; full tabs (bg) provide
+    // their own build/hook methods. bg needs cfg (wallpaper mode) alongside vals.
+    function _formTab(def) {
+        return {
+            id: def.id,
+            label: def.label,
+            build: function(vals, cfg) {
+                return { html: renderFields(def.fields, vals) };
+            }
+        };
+    }
+    function registerTab(def) {
+        if (def.fields && !def.build) { TABS.push(_formTab(def)); return; }
+        TABS.push(def);
+    }
+    registerTab({ id: 'theme',  label: _('Theme'),  fields: C.layout.theme });
+    registerTab({ id: 'colors', label: _('Colors'), fields: C.layout.main });
+    registerTab({ id: 'fonts',  label: _('Fonts'),  fields: C.layout.fonts });
+    registerTab({ id: 'bg',     label: _('Bg'),     build: function(vals, cfg) { return _tabBg({ vals: vals, cfg: cfg }); } });
 
     function switchTab(panel, tabId) {
         panel.querySelectorAll('.ts-tab').forEach(function(btn) {
@@ -597,8 +613,11 @@
                 after();
             }        }
 
+        // Uniform tab body: bg form fields (wp select, glow params, colors) +
+        // the interactive preview box, in the original concat order.
+        var bgBodyHtml = renderFields(C.layout.bg, vals) + bgPreviewHtml;
         return {
-            html: bgPreviewHtml,
+            html: bgBodyHtml,
             bind: bind,
             onReset: onReset,
             applyWallpaper: applyWallpaper
@@ -638,15 +657,15 @@
         });
         tabBarHtml += '</div>';
 
-        var bgTab = _tabBg({ vals: vals, cfg: cfg });
-
-        // Build tab bodies (all pre-rendered, shown/hidden by switchTab)
+        // Build tab bodies (all pre-rendered, shown/hidden by switchTab);
+        // every TABS entry is a uniform instance: build(vals, cfg) -> { html }
         var bodiesHtml = '';
+        var bgTab = null;
         TABS.forEach(function(tab, i) {
             var display = i === 0 ? '' : 'display:none;';
-            var extra = (tab.id === 'bg') ? bgTab.html : '';
-            bodiesHtml += '<div class="ts-tab-body" data-tab="' + tab.id + '" style="' + display + '">' +
-                renderFields(tab.fields, vals) + extra + '</div>';
+            var inst = tab.build(vals, cfg);
+            if (tab.id === 'bg') bgTab = inst;
+            bodiesHtml += '<div class="ts-tab-body" data-tab="' + tab.id + '" style="' + display + '">' + inst.html + '</div>';
         });
 
         var html = '<div class="widget-settings-header" style="background:var(--theme-panel-bg);color:var(--theme-panel-fg);"><h3 style="margin:0;font-size:14px;">' + _('Theme Settings') + '</h3><button id="ts-close" style="color:var(--theme-panel-muted);background:none;border:none;font-size:14px;cursor:pointer;">&#x2715;</button></div>';
