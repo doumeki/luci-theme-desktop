@@ -871,8 +871,18 @@ end
 
 function action_save_to_builtin()
     local mode = luci.http.formvalue("mode") or ""
-    local cache_file = "/www/luci-static/desktop/cache/wallpaper_" .. mode .. ".jpg"
+    -- 0.1.0-261: the client passes the basename of the image it previews
+    -- (check_saved already works the same way). Restrict to whitelisted
+    -- cache names so the source can never leave the cache dir; anything
+    -- else falls back to the mode's raw cache file (previous behavior).
+    local file = luci.http.formvalue("file") or ""
+    local src = "wallpaper_" .. mode .. ".jpg"
+    if file ~= "" and file:match("^wallpaper_(bing|picsum)(_desktop)?%.jpg$") then
+        src = file
+    end
+    local cache_file = "/www/luci-static/desktop/cache/" .. src
     local bg_dir = "/www/luci-static/desktop/background/"
+    server_log("save_to_builtin mode=" .. mode .. " src=" .. src)
 
     os.execute("mkdir -p " .. bg_dir .. " 2>/dev/null")
 

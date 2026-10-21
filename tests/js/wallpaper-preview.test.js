@@ -30,7 +30,7 @@ function installStubs() {
         var x = this;
         x.open = function(method, url) { x.method = method; x.url = url; };
         x.setRequestHeader = function() {};
-        x.send = function() { lastXHRs.push(x); };
+        x.send = function(data) { x.body = data; lastXHRs.push(x); };
     };
 }
 
@@ -299,6 +299,40 @@ describe('Wallpaper preview auto-download', function() {
         lastCheck2.responseText = '{"saved":false}';
         lastCheck2.onload();
         assert.equal(saveBtn.textContent, 'Save', 'still Save (new image not saved)');
+    });
+
+    // ===== 0.1.0-261: Save must post the previewed image =====
+    it('Save posts the desktop baseline file while preview shows it', function() {
+        switchMode('bing');
+        lastImage.onload(); // preview = confirmed desktop baseline
+        var saveBtn = document.getElementById('wp-save-btn');
+        saveBtn.click();
+        var sv = findXHR('save_to_builtin')[0];
+        assert.ok(sv, 'save XHR fired');
+        assert.contains(String(sv.body), 'mode=bing', 'mode posted');
+        assert.contains(String(sv.body), 'file=wallpaper_bing_desktop.jpg',
+            'desktop baseline file requested, not the raw cache');
+    });
+
+    it('Save posts the cache file once preview shows the new download', function() {
+        switchMode('bing');
+        lastImage.onload();
+        // precise button: the bg tab row (theme tab has a Login row too)
+        var refreshBtn = document.querySelector('.ts-wp-refresh[data-id="desktop_wallpaper"]');
+        refreshBtn.click();
+        var dl = findXHR('force=1')[0];
+        dl.status = 200;
+        dl.responseText = '{"url":"/luci-static/desktop/cache/wallpaper_bing.jpg?v=9","debug":"download=ok"}';
+        dl.onload();
+        var saveBtn = document.getElementById('wp-save-btn');
+        assert.contains(String(window.__wp_preview_url), 'wallpaper_bing.jpg',
+            'preview switched to the refreshed cache');
+        assert.ok(!saveBtn.disabled, 'save clickable after refresh');
+        saveBtn.click();
+        var sv = findXHR('save_to_builtin')[0];
+        assert.ok(sv, 'save XHR fired');
+        assert.contains(String(sv.body), 'file=wallpaper_bing.jpg',
+            'raw cache file requested after refresh');
     });
 
     // ===== 0.1.0-259: gradient-only color pickers =====

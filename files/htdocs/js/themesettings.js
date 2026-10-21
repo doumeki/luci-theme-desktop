@@ -559,7 +559,13 @@
                         } catch(e) { wpSaveBtn.textContent = _('Error'); wpSaveBtn.style.background = 'rgba(200,40,40,0.3)'; wpSaveBtn.style.color = '#e74c3c'; }
                     };
                     xhr.onerror = function() { wpSaveBtn.textContent = _('Error'); wpSaveBtn.style.background = 'rgba(200,40,40,0.3)'; wpSaveBtn.style.color = '#e74c3c'; };
-                    xhr.send('mode=' + encodeURIComponent(mode));
+                    // 0.1.0-261: save EXACTLY the image the preview shows
+                    // -- the raw cache file may be a revoked/first-candidate
+                    // while preview shows the confirmed desktop image.
+                    var pf = (window.__wp_preview_url || '').split('/').pop().split('?')[0] || '';
+                    DBG('[save-to-builtin] file=' + pf);
+                    xhr.send('mode=' + encodeURIComponent(mode) +
+                        (pf ? '&file=' + encodeURIComponent(pf) : ''));
                 });
             }
 
