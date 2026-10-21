@@ -42,14 +42,34 @@
     // previous session's never-settled XHRs become no-ops (stubbed XHRs
     // in tests and abandoned downloads alike).
     function wpLockNewSession() { wpGen++; wpDownloads.length = 0; }
+    function _paintSaveLocked(btn) {
+        // 0.1.0-260: the lock must be VISIBLE, not just functional --
+        // gray the button and read Save (the old 'Saved' still shows
+        // while a new image is being fetched).
+        btn.textContent = _('Save');
+        btn.style.background = 'rgba(45,206,137,0.85)';
+        btn.style.color = '#fff';
+        btn.disabled = true;
+        btn.style.opacity = '0.45';
+        btn.style.cursor = 'not-allowed';
+        btn.title = _('Downloading preview…');
+    }
+
     function saveLockApply(settled) {
         var btn = document.getElementById('wp-save-btn');
         if (!btn) return;
         if (saveBtnLocked()) {
-            btn.disabled = true;
-            btn.title = _('Downloading preview…');
+            _paintSaveLocked(btn);
         } else if (settled) {
+            // Locked & released at once (button exists even when locked)
+            btn.textContent = _('Save');
+            btn.style.background = 'rgba(45,206,137,0.85)';
+            btn.style.color = '#fff';
+            btn.disabled = false;
+            btn.style.opacity = '';
+            btn.style.cursor = 'pointer';
             btn.title = _('Save to Built-in');
+            // Re-evaluate saved-state asynchronously (may flip to Saved)
             _checkSavedState();
         }
     }
@@ -206,6 +226,10 @@
         xhr.onload = function() {
             try {
                 var r = JSON.parse(xhr.responseText);
+                // Download still in flight: paint the lock no matter what
+                // the (possibly stale) result says — that file is being
+                // rewritten server-side right now.
+                if (saveBtnLocked()) { _paintSaveLocked(saveBtn); return; }
                 if (r.saved) {
                     saveBtn.textContent = _('Saved');
                     saveBtn.style.background = 'rgba(255,255,255,0.08)';
@@ -213,12 +237,11 @@
                     saveBtn.disabled = true;
                     saveBtn.title = _('Already in Built-in: ') + r.name;
                 } else {
-                    var locked = saveBtnLocked();
                     saveBtn.textContent = _('Save');
                     saveBtn.style.background = 'rgba(45,206,137,0.85)';
                     saveBtn.style.color = '#fff';
-                    saveBtn.disabled = locked;
-                    saveBtn.title = locked ? _('Downloading preview…') : _('Save to Built-in');
+                    saveBtn.disabled = false;
+                    saveBtn.title = _('Save to Built-in');
                 }
             } catch(e) {}
         };

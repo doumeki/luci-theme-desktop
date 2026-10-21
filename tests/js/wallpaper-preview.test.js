@@ -252,6 +252,7 @@ describe('Wallpaper preview auto-download', function() {
         var saveBtn = document.getElementById('wp-save-btn');
         assert.ok(saveBtn && saveBtn.style.display !== 'none', 'save button visible');
         assert.ok(saveBtn.disabled, 'save locked while download in flight');
+        assert.contains(String(saveBtn.style.opacity), '0.45', 'save grays out visually');
         dl.status = 200;
         dl.responseText = '{"url":"/luci-static/desktop/cache/wallpaper_bing.jpg?v=2","debug":"download=ok"}';
         dl.onload();
@@ -262,6 +263,42 @@ describe('Wallpaper preview auto-download', function() {
         lastCheck.responseText = '{"saved":false}';
         lastCheck.onload();
         assert.ok(!saveBtn.disabled, 'save clickable after download settles');
+        assert.equal(saveBtn.style.opacity, '', 'visual gray cleared once download settles');
+    });
+
+    // ===== 0.1.0-260: Saved state must NOT ride through a later refresh =====
+    it('Saved state resets to grayed Save while a new image downloads', function() {
+        switchMode('bing');
+        lastImage.onload(); // snap back to confirmed desktop -> check fires
+        var saveBtn = document.getElementById('wp-save-btn');
+        var checks = findXHR('check_saved');
+        var lastCheck = checks[checks.length - 1];
+        lastCheck.status = 200;
+        lastCheck.responseText = '{"saved":true,"name":"bing_1.jpg"}';
+        lastCheck.onload();
+        assert.equal(saveBtn.textContent, 'Saved', 'saved state shown');
+        assert.ok(saveBtn.disabled, 'save disabled once server confirms');
+
+        var refreshBtn = document.querySelector('.ts-wp-refresh');
+        refreshBtn.click(); // new image incoming; stale Saved is wrong now
+        assert.equal(saveBtn.textContent, 'Save', 'stale Saved drops while downloading');
+        assert.ok(saveBtn.disabled, 'save locked while downloading');
+        assert.contains(String(saveBtn.style.opacity), '0.45', 'grayed while downloading');
+
+        var dl = findXHR('force=1')[0];
+        dl.status = 200;
+        dl.responseText = '{"url":"/luci-static/desktop/cache/wallpaper_bing.jpg?v=3","debug":"download=ok"}';
+        dl.onload();
+        assert.equal(saveBtn.textContent, 'Save', 'save re-armed at once after download');
+        assert.ok(!saveBtn.disabled, 'save enabled right after download');
+        assert.equal(saveBtn.style.opacity, '', 'gray cleared right after download');
+
+        var checks2 = findXHR('check_saved');
+        var lastCheck2 = checks2[checks2.length - 1];
+        lastCheck2.status = 200;
+        lastCheck2.responseText = '{"saved":false}';
+        lastCheck2.onload();
+        assert.equal(saveBtn.textContent, 'Save', 'still Save (new image not saved)');
     });
 
     // ===== 0.1.0-259: gradient-only color pickers =====
