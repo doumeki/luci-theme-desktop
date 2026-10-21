@@ -112,7 +112,16 @@
     <meta name="format-detection" content="telephone=no, email=no"/>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <link rel="stylesheet" href="<%=media%>/css/shell.css">
+    <%
+        local tf = io.open('/www/luci-static/desktop/version.txt')
+        local theme_ver = '0'
+        if tf then
+            local v1 = (tf:read('*l') or '0'):gsub('%s+', '')
+            theme_ver = v1
+            tf:close()
+        end
+    %>
+    <link rel="stylesheet" href="<%=media%>/css/shell.css?v=<%=theme_ver%>">
     <style>
         html, body {
             display: flex; align-items: center; justify-content: center;

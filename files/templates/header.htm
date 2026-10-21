@@ -149,13 +149,22 @@
             location.hash);
     })();
     </script>
-    <link rel="stylesheet" href="<%=media%>/css/shell.css">
-    <link rel="stylesheet" href="<%=media%>/css/window.css">
-    <link rel="stylesheet" href="<%=media%>/css/taskbar.css">
-    <link rel="stylesheet" href="<%=media%>/css/startmenu.css">
-    <link rel="stylesheet" href="<%=media%>/css/icon-picker.css">
-    <link rel="stylesheet" href="<%=media%>/css/widget.css">
-    <link rel="stylesheet" href="<%=media%>/css/mobile.css">
+    <%
+        local tf = io.open('/www/luci-static/desktop/version.txt')
+        local theme_ver = '0'
+        if tf then
+            local v1 = (tf:read('*l') or '0'):gsub('%s+', '')
+            theme_ver = v1
+            tf:close()
+        end
+    %>
+    <link rel="stylesheet" href="<%=media%>/css/shell.css?v=<%=theme_ver%>">
+    <link rel="stylesheet" href="<%=media%>/css/window.css?v=<%=theme_ver%>">
+    <link rel="stylesheet" href="<%=media%>/css/taskbar.css?v=<%=theme_ver%>">
+    <link rel="stylesheet" href="<%=media%>/css/startmenu.css?v=<%=theme_ver%>">
+    <link rel="stylesheet" href="<%=media%>/css/icon-picker.css?v=<%=theme_ver%>">
+    <link rel="stylesheet" href="<%=media%>/css/widget.css?v=<%=theme_ver%>">
+    <link rel="stylesheet" href="<%=media%>/css/mobile.css?v=<%=theme_ver%>">
     <link rel="icon" type="image/png" href="<%=media%>/favorit.png">
     <link rel="shortcut icon" href="<%=media%>/favicon.ico">
 
@@ -462,44 +471,44 @@
     </div>
 
     <!-- JS modules (load order matters) -->
-    <script src="<%=media%>/js/debug.js"></script>
-    <script src="<%=media%>/js/i18n.js"></script>
-    <script src="<%=media%>/js/shell.js"></script>
-    <script src="<%=media%>/js/wm.js"></script>
-    <script src="<%=media%>/js/iframe-bridge.js"></script>
-    <script src="<%=media%>/js/taskbar.js"></script>
-    <script src="<%=media%>/js/startmenu.js"></script>
+    <script src="<%=media%>/js/debug.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/i18n.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/shell.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/wm.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/iframe-bridge.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/taskbar.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/startmenu.js?v=<%=theme_ver%>"></script>
     <!-- icon-url-map + icon-config + quantum-icons BEFORE desktop.js:
          desktop.js registers and runs Desktop.init() immediately, and
          _initQuantumDrag / renderShortcuts need the engine + catalog
          present. icon-config parses the url->icon table from
          icon-url-map.js, so the map loads first. -->
-    <script src="<%=media%>/js/icon-url-map.js"></script>
-    <script src="<%=media%>/js/icon-config.js"></script>
-    <script src="<%=media%>/js/quantum-icons.js"></script>
-    <script src="<%=media%>/js/icon-picker.js"></script>
+    <script src="<%=media%>/js/icon-url-map.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/icon-config.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/quantum-icons.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/icon-picker.js?v=<%=theme_ver%>"></script>
     <!-- desktop functionality split into modules that attach to
          LuCIDesktop.desktop*; desktop.js is a thin facade forwarding the
          window.Desktop API and composing init(). All four load BEFORE
          desktop.js, which registers/inits immediately. Order:
          state (shared stores) → icons (render/drag) → links (custom URL)
          → menus (context menus/dialog) → desktop (facade). -->
-    <script src="<%=media%>/js/desktop-state.js"></script>
-    <script src="<%=media%>/js/desktop-icons.js"></script>
-    <script src="<%=media%>/js/desktop-links.js"></script>
-    <script src="<%=media%>/js/desktop-menus.js"></script>
-    <script src="<%=media%>/js/desktop.js"></script>
-    <script src="<%=media%>/js/widget.js"></script>
-    <script src="<%=media%>/js/widgets/clock.js"></script>
-    <script src="<%=media%>/js/widgets/stickynote.js"></script>
-    <script src="<%=media%>/js/widgets/system-info.js"></script>
-    <script src="<%=media%>/js/widgets/net-traffic.js"></script>
-    <script src="<%=media%>/js/tray.js"></script>
-    <script src="<%=media%>/js/mobile.js"></script>
-    <script src="<%=media%>/js/theme-config.js"></script>
-    <script src="<%=media%>/js/panel-helper.js"></script>
-    <script src="<%=media%>/js/themesettings.js"></script>
-    <script src="<%=media%>/js/wallpaper-settings.js"></script>
+    <script src="<%=media%>/js/desktop-state.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/desktop-icons.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/desktop-links.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/desktop-menus.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/desktop.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/widget.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/widgets/clock.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/widgets/stickynote.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/widgets/system-info.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/widgets/net-traffic.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/tray.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/mobile.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/theme-config.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/panel-helper.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/themesettings.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/wallpaper-settings.js?v=<%=theme_ver%>"></script>
 
     <!-- Hide controller output (overview page content etc.) behind desktop -->
     <div style="display:none;" id="luci-content-wrapper">
@@ -541,9 +550,9 @@
             write('<script type="text/plain" id="__desktop-dark-data">' .. embed_dark_css .. '</script>')
         end
     %>
-    <link rel="stylesheet" href="<%=media%>/css/embedded.css">
-    <script src="<%=media%>/js/debug.js"></script>
-    <script src="<%=media%>/js/color_calc-argon.js"></script>
+    <link rel="stylesheet" href="<%=media%>/css/embedded.css?v=<%=theme_ver%>">
+    <script src="<%=media%>/js/debug.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/color_calc-argon.js?v=<%=theme_ver%>"></script>
     <link rel="icon" type="image/png" href="<%=media%>/favorit.png">
     <link rel="shortcut icon" href="<%=media%>/favicon.ico">
     <% if node and node.css then %>
@@ -552,8 +561,8 @@
     <% if css then %>
         <style title="text/css"><%= css %></style>
     <% end -%>
-    <script src="<%=media%>/js/i18n.js"></script>
-    <script src="<%=media%>/js/iframe-bridge.js"></script>
+    <script src="<%=media%>/js/i18n.js?v=<%=theme_ver%>"></script>
+    <script src="<%=media%>/js/iframe-bridge.js?v=<%=theme_ver%>"></script>
     <!-- LuCI ucode compat: globals normally defined by cbi.js -->
     <script>
     if(!String.prototype.format)String.prototype.format=function(){var a=[].slice.call(arguments);return this.replace(/%[sd%]/g,function(m){if(m==='%%')return'%';return a.length?a.shift():m;});};
@@ -572,7 +581,7 @@
         if(e.reason&&e.reason.message&&/404|Resource not found/.test(e.reason.message)){e.preventDefault();}
     });
     </script>
-    <script src="<%=media%>/js/cbi-compat.js"></script>
+    <script src="<%=media%>/js/cbi-compat.js?v=<%=theme_ver%>"></script>
 
     <script src="<%=resource%>/xhr.js"></script>
     <script>

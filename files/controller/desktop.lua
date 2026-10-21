@@ -882,7 +882,7 @@ function action_save_to_builtin()
     end
     local cache_file = "/www/luci-static/desktop/cache/" .. src
     local bg_dir = "/www/luci-static/desktop/background/"
-    server_log("save_to_builtin mode=" .. mode .. " src=" .. src)
+    server_log("save_to_builtin mode=" .. mode .. " file=[" .. file .. "] src=" .. src)
 
     os.execute("mkdir -p " .. bg_dir .. " 2>/dev/null")
 
@@ -948,7 +948,7 @@ function action_check_saved()
 
     luci.http.prepare_content("application/json")
     luci.http.write('{"saved":' .. (saved and 'true' or 'false') .. ',"name":"' .. name .. '"}')
-    server_log("check_saved mode=" .. mode .. " saved=" .. tostring(saved) .. " name=" .. name)
+    server_log("check_saved mode=" .. mode .. " file=[" .. file .. "] saved=" .. tostring(saved) .. " name=" .. name)
 end
 
 -- Confirm desktop wallpaper: copy cache to a separate desktop file

@@ -474,14 +474,6 @@ const TPL_TOKENS = [
 // side that ALONE has the anchor. Every entry needs a why - it is the
 // tracking plan for the alignment work that retires it.
 const TPL_SYNC_KNOWN = [
-    // header pair: the ucode side cache-busts every css/js with ?v=; the lua
-    // track loads the same assets WITHOUT any version param -> browsers may
-    // keep stale theme assets after an upgrade on the lua devices. Aligning
-    // means threading theme_ver through header.htm (both buckets).
-    { pair: 'header', kind: 'verparam', bucket: 'shell', side: 'ut', how: /^present$/,
-      why: 'ucode shell assets carry ?v=; lua track loads none (stale-cache risk on lua track)' },
-    { pair: 'header', kind: 'verparam', bucket: 'embed', side: 'ut', how: /^present$/,
-      why: 'ucode embed assets carry ?v=; lua track loads none (stale-cache risk on lua track)' },
     // header pair: ucode loads the LuCI translations dict in both buckets;
     // lua never does -> client L() falls back to msgids there.
     { pair: 'header', kind: 'asset', bucket: 'shell', side: 'ut', how: /^resource\/translations$/,
@@ -521,9 +513,6 @@ const TPL_SYNC_KNOWN = [
     { pair: 'header', kind: 'id', bucket: 'shared', side: 'ut',
       how: /^__(desktop-dark-style|desktop-dark-data|desktop-primary-override)$/,
       why: 'ucode ships dark/primary overrides as real tags; lua builds them in write()' },
-    // sysauth pair: version param on the ucode stylesheet only.
-    { pair: 'sysauth', kind: 'verparam', bucket: 'shared', side: 'ut', how: /^present$/,
-      why: 'ucode sysauth loads shell.css?v=; lua login page never cache-busts' },
     // sysauth pair: three mobile metas exist only on the lua side (dropped
     // at the ucode migration).
     { pair: 'sysauth', kind: 'meta', bucket: 'shared', side: 'lua',
@@ -952,7 +941,7 @@ function debugGateOrderCheck() {
     try {
         const specs = [
             { f: 'files/templates/header.htm',
-              dbg: '<script src="<%=media%>/js/debug.js"></script>' },
+              dbg: '<script src="<%=media%>/js/debug.js?v=<%=theme_ver%>"></script>' },
             { f: 'files/usr/share/ucode/luci/template/themes/desktop/header.ut',
               dbg: '<script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>' },
         ];
