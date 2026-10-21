@@ -301,6 +301,22 @@ describe('Wallpaper preview auto-download', function() {
         assert.equal(saveBtn.textContent, 'Save', 'still Save (new image not saved)');
     });
 
+    // ===== 0.1.0-263: check_saved never interviews a foreign mode's file =====
+    it('check_saved skips the transient cross-file pair right after a mode switch', function() {
+        switchMode('picsum'); // change handler runs while the preview URL still says bing
+        var cross = findXHR('check_saved').filter(function(x) {
+            return x.url.indexOf('mode=picsum') !== -1 &&
+                   x.url.indexOf('file=wallpaper_bing') !== -1;
+        });
+        assert.ok(cross.length === 0, 'no check_saved mixes mode=picsum with the bing file');
+        lastImage.onload(); // settle the picsum desktop probe -> snap-back check is a matched pair
+        var matched = findXHR('check_saved').filter(function(x) {
+            return x.url.indexOf('mode=picsum') !== -1 &&
+                   x.url.indexOf('file=wallpaper_picsum_desktop.jpg') !== -1;
+        });
+        assert.ok(matched.length >= 1, 'the settled picsum check still fires (matched pair)');
+    });
+
     // ===== 0.1.0-261: Save must post the previewed image =====
     it('Save posts the desktop baseline file while preview shows it', function() {
         switchMode('bing');

@@ -220,6 +220,10 @@
         // Strip any ?v= cache-buster — the check endpoint takes a filename.
         var previewFile = (window.__wp_preview_url || '').split('/').pop().split('?')[0];
         if (!previewFile) return;
+        // Mode and file must belong together: right after a mode switch the
+        // preview URL still holds the OLD mode's file for one frame, and
+        // checking that mismatched pair is meaningless. Skip it.
+        if (previewFile.indexOf('wallpaper_' + mode) !== 0) return;
         var xhr = new XMLHttpRequest();
         xhr.open('GET', '/cgi-bin/luci/admin/desktop/check_saved?mode=' + encodeURIComponent(mode) +
                  '&file=' + encodeURIComponent(previewFile), true);

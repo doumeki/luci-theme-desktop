@@ -877,7 +877,12 @@ function action_save_to_builtin()
     -- else falls back to the mode's raw cache file (previous behavior).
     local file = luci.http.formvalue("file") or ""
     local src = "wallpaper_" .. mode .. ".jpg"
-    if file ~= "" and file:match("^wallpaper_(bing|picsum)(_desktop)?%.jpg$") then
+    -- Lua patterns have NO alternation (|): the previous regex-shaped match
+    -- could never fire, so src always fell back to the mode's raw cache and
+    -- the saved image differed from the one the preview showed. Enumerate
+    -- the legal cache names explicitly instead.
+    if file == "wallpaper_bing.jpg" or file == "wallpaper_bing_desktop.jpg" or
+       file == "wallpaper_picsum.jpg" or file == "wallpaper_picsum_desktop.jpg" then
         src = file
     end
     local cache_file = "/www/luci-static/desktop/cache/" .. src
