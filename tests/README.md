@@ -21,6 +21,29 @@ i18n consistency (dict/pot/po alignment). It exits non-zero on failure —
 this is what GitHub Actions runs on every push/PR (see
 `.github/workflows/tests.yml`).
 
+### Static gates (no router, no browser)
+
+Before the Firefox pass the runner also runs static consistency gates; each
+prints its own verdict line and exits non-zero on failure:
+
+- `widgetStyleContractCheck` — widget render idempotency: static
+  presentation must be CSS-driven, only dynamic values may touch inline
+  styles (`cssText +=` accumulation is banned).
+- `intervalOwnerCheck` — every `setInterval`/`new Function` in a widget
+  source must carry an `// interval-owner:` note naming its owner.
+- `submenuHoverGraceCheck` — submenu visibility grace: the delayed-hide
+  trick (`.context-submenu` stays `display:block` + `visibility:hidden`)
+  must not be regressed to a plain `display:none` hide.
+- `templateSyncCheck` — dual-template semantic sync: the ucode (`.ut`) and
+  Lua (`.htm`) sides of header/footer/sysauth must expose the same anchors
+  (asset manifests, meta tags, i18n keys, ids, curated code tokens). A
+  single side only anchor fails with a human-readable diff; known
+  divergences are ratcheted in `TPL_SYNC_KNOWN` with a reason each.
+  `TPL_DEBUG=1` prints every ratcheted row and per-pair anchor counts.
+
+Each gate is a normal function and can run standalone:
+`node -e "require('./tests/run-headless.js').templateSyncCheck()"`.
+
 Optional: with a local OpenWrt build tree, the Lua runtime tests run too:
 
 ```sh
