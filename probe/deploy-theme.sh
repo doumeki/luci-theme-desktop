@@ -52,7 +52,7 @@ OPT=(-o ConnectTimeout=10)
 echo "== 部署到 $HOST =="
 
 # scp 到固定文件名（避免远端残留旧版本文件，安装时路径统一）
-scp "${OPT[@]}" -q "$IPK" "root@$HOST:/tmp/luci-theme-desktop.ipk" || {
+scp -O "${OPT[@]}" -q "$IPK" "root@$HOST:/tmp/luci-theme-desktop.ipk" || {
     echo "!! $HOST scp 失败"; exit 1; }
 
 # md5 对比：scp 中断会留下旧文件且 opkg 照装（旧坑）
@@ -103,7 +103,7 @@ case "$PM" in
         APK="$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1)"
         [ -z "$APK" ] && { echo "!! 转换无输出 apk"; exit 1; }
         echo "== 转换: $(basename "$IPK") → $(basename "$APK")"
-        scp "${OPT[@]}" -q "$APK" "root@$HOST:/tmp/luci-theme-desktop.apk" || {
+        scp -O "${OPT[@]}" -q "$APK" "root@$HOST:/tmp/luci-theme-desktop.apk" || {
             echo "!! $HOST scp apk 失败"; exit 1; }
         rm -rf "$APK_DIR"
         ssh "${OPT[@]}" "root@$HOST" \
