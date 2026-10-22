@@ -12,9 +12,14 @@ THEME_TITLE:=Desktop
 PKG_NAME:=luci-theme-$(THEME_NAME)
 PKG_VERSION:=0.1.0
 # 125 = merged branch (Lua track + ucode track unified, 2026-08-15)
-PKG_RELEASE:=264
+PKG_RELEASE:=265
 
 include $(INCLUDE_DIR)/package.mk
+
+# Server-side translation tooling: po2lmo is built by the luci-base host
+# toolchain. It may live in the host staging dir (installed there) or in
+# the hostpkg build dir (built in place); resolve it, or degrade silently.
+PO2LMO_BIN := $(firstword $(wildcard $(STAGING_DIR_HOST)/bin/po2lmo $(TOPDIR)/build_dir/hostpkg/*/po2lmo))
 
 define Package/luci-theme-$(THEME_NAME)
   SECTION:=luci
@@ -42,6 +47,14 @@ define Build/Configure
 endef
 
 define Build/Compile
+	# Compile the zh po into an .lmo so t() in controller-rendered pages
+	# (changes viewer / standalone pages) translates for sessions whose
+	# language resolves to zh-cn. English simply falls back to the msgid.
+	# Skipped (untranslated msgids) if po2lmo is somehow unavailable.
+	if [ -x "$(PO2LMO_BIN)" ]; then \
+		$(PO2LMO_BIN) ./po/zh_Hans/$(PKG_NAME).po \
+			$(PKG_BUILD_DIR)/$(PKG_NAME).zh-cn.lmo >/dev/null 2>&1; \
+	fi
 endef
 
 define Package/luci-theme-$(THEME_NAME)/install
@@ -65,6 +78,10 @@ define Package/luci-theme-$(THEME_NAME)/install
 	$(CP) -a ./files/controller/* $(1)/usr/lib/lua/luci/controller/ 2>/dev/null || true
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/desktop
 	$(CP) -a ./files/root/usr/lib/lua/luci/desktop/* $(1)/usr/lib/lua/luci/desktop/ 2>/dev/null || true
+	# Server-side translations (zh-cn; other languages fall back to the
+	# English msgids). Same canonical dir the other luci packages use.
+	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/$(PKG_NAME).zh-cn.lmo $(1)/usr/lib/lua/luci/i18n/$(PKG_NAME).zh-cn.lmo
 	$(INSTALL_DIR) $(1)/usr/libexec/desktop
 	$(INSTALL_BIN) ./files/libexec/online_wallpaper $(1)/usr/libexec/desktop/online_wallpaper
 	# Shared sticky-note store: a plain JSON file (NOT UCI). Sticky notes
