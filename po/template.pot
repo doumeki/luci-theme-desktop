@@ -254,6 +254,24 @@ msgstr ""
 msgid "Saved"
 msgstr ""
 
+msgid "Save & Apply"
+msgstr ""
+
+msgid "Revert"
+msgstr ""
+
+msgid "Applying"
+msgstr ""
+
+msgid "Reverting"
+msgstr ""
+
+msgid "Network error"
+msgstr ""
+
+msgid "There are no pending changes."
+msgstr ""
+
 msgid "Refresh failed (server error)"
 msgstr ""
 

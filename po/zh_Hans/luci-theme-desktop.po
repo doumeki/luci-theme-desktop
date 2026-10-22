@@ -254,6 +254,24 @@ msgstr "诊断信息已复制"
 msgid "Saved"
 msgstr "已保存"
 
+msgid "Save & Apply"
+msgstr "保存并应用"
+
+msgid "Revert"
+msgstr "还原"
+
+msgid "Applying"
+msgstr "应用中"
+
+msgid "Reverting"
+msgstr "还原中"
+
+msgid "Network error"
+msgstr "网络错误"
+
+msgid "There are no pending changes."
+msgstr "没有待提交的更改。"
+
 msgid "Refresh failed (server error)"
 msgstr "刷新失败（服务器错误）"
 
