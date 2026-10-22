@@ -254,6 +254,18 @@ msgstr ""
 msgid "Saved"
 msgstr ""
 
+msgid "Path"
+msgstr ""
+
+msgid "Columns"
+msgstr ""
+
+msgid "Refresh interval"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
 msgid "Filter"
 msgstr ""
 

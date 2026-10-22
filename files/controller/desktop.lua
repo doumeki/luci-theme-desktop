@@ -1320,7 +1320,14 @@ local function taskmgr_collect()
                 if cm then
                     local c = cm:read("*a") or ""
                     cm:close()
-                    -- join args (NUL-separated); kernel threads have none
+                    -- executable path = argv[0] (bytes up to the first
+                    -- NUL; what follows — NULs joined with spaces — is the
+                    -- arg tail in cmd). Kernel threads have no cmdline.
+                    local path = c:match("^([^%z]+)")
+                    if path then
+                        path = path:gsub("^%s+", ""):gsub("%s+$", "")
+                        if path ~= "" then p.path = path end
+                    end
                     c = c:gsub("%z+", " "):gsub("^%s+", ""):gsub("%s+$", "")
                     if c ~= "" then p.cmd = c end
                 end
@@ -1417,12 +1424,24 @@ function action_taskmgr()
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI",system-ui,sans-serif;background:#f4f5f7;color:#333;padding:16px;min-height:100vh;font-size:13px}
+body{position:relative}
 .tm-header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 .count{background:#1565c0;color:#fff;border-radius:9px;font-size:11px;padding:1px 8px;font-weight:600;white-space:nowrap}
 .err{color:#c62828;font-size:11px;white-space:nowrap}
 #filter{border:1px solid #d3d7db;border-radius:4px;padding:4px 8px;font-size:12px;width:140px;background:#fff;color:#333}
 #filter:focus{border-color:#4a90d9;outline:none}
+#gear{border:none;background:transparent;font-size:15px;line-height:1;color:#666;cursor:pointer;padding:2px 5px;border-radius:4px}
+#gear:hover{background:#e8eaed;color:#333}
+#panel{position:absolute;right:16px;top:50px;background:#fff;border:1px solid #e0e4e8;border-radius:8px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.14);z-index:10;min-width:230px}
+.set-h{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.4px;margin:2px 0 6px}
+.set-row{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12px}
+.set-row span{flex:1}
+.set-row select{border:1px solid #d3d7db;border-radius:4px;padding:3px 6px;font-size:12px;background:#fff;color:#333}
+#set-cols label{display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer}
+#set-cols input[type=checkbox]{accent-color:#4a90d9}
+td.c-path{max-width:200px;overflow:hidden;text-overflow:ellipsis;color:#666}
+.col-off{display:none}
 .mon-row{display:flex;gap:10px;margin-bottom:12px}
 .mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
 .mon-label{font-size:11px;font-weight:600;color:#777;text-transform:uppercase;letter-spacing:.4px}
@@ -1444,7 +1463,12 @@ tr.zombie{background:#fff3e0}
 </style>
 </head>
 <body>
-<div class="tm-header"><h1>]] .. changes_escape(t("Task Manager")) .. [[</h1><input id="filter" type="search" placeholder="]] .. changes_escape(t("Filter")) .. [["><span class="err" id="err"></span><span class="count" id="count">–</span></div>
+<div class="tm-header"><h1>]] .. changes_escape(t("Task Manager")) .. [[</h1><input id="filter" type="search" placeholder="]] .. changes_escape(t("Filter")) .. [["><span class="err" id="err"></span><span class="count" id="count">–</span><button id="gear" title="]] .. changes_escape(t("Settings")) .. [[">⚙</button></div>
+<div id="panel" hidden>
+<div class="set-row"><span>]] .. changes_escape(t("Refresh interval")) .. [[</span><select id="set-interval"><option value="2000">2 s</option><option value="4000">4 s</option><option value="8000">8 s</option><option value="15000">15 s</option><option value="30000">30 s</option></select></div>
+<div class="set-h">]] .. changes_escape(t("Columns")) .. [[</div>
+<div id="set-cols"></div>
+</div>
 <div class="mon-row">
 <div class="mon">
 <div class="mon-label">]] .. changes_escape(t("CPU")) .. [[</div>
@@ -1456,8 +1480,8 @@ tr.zombie{background:#fff3e0}
 </div>
 </div>
 <div class="table-wrap"><table>
-<thead><tr><th data-key="pid">]] .. changes_escape(t("PID")) .. [[</th><th data-key="process">]] .. changes_escape(t("Process")) .. [[</th><th data-key="user">]] .. changes_escape(t("User")) .. [[</th><th data-key="state">]] .. changes_escape(t("Status")) .. [[</th><th class="num" data-key="cpu">]] .. changes_escape(t("CPU")) .. [[</th><th class="num" data-key="memory">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
-<tbody id="tbody"><tr><td colspan="6">–</td></tr></tbody>
+<thead><tr><th data-key="pid">]] .. changes_escape(t("PID")) .. [[</th><th data-key="process">]] .. changes_escape(t("Process")) .. [[</th><th data-key="path">]] .. changes_escape(t("Path")) .. [[</th><th data-key="user">]] .. changes_escape(t("User")) .. [[</th><th data-key="state">]] .. changes_escape(t("Status")) .. [[</th><th class="num" data-key="cpu">]] .. changes_escape(t("CPU")) .. [[</th><th class="num" data-key="memory">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
+<tbody id="tbody"><tr><td colspan="7">–</td></tr></tbody>
 </table></div>
 <script>
 (function() {
@@ -1476,6 +1500,26 @@ tr.zombie{background:#fff3e0}
     var MAX = 60;
     var sort = { key: 'cpu', dir: -1 };   // default: CPU% descending (Windows style)
     var filter = '';
+    // user preferences, persisted in the iframe's localStorage — the
+    // server keeps no state for this page.
+    var INTERVALS = [2000, 4000, 8000, 15000, 30000];
+    var cfg = { interval: 4000, cols: { pid: 1, process: 1, user: 1, state: 1, path: 1, cpu: 1, memory: 1 } };
+    (function() {
+        var o = null;
+        try { o = JSON.parse(localStorage.getItem('desktop.taskmgr') || 'null'); } catch (e) { o = null; }
+        if (!o || typeof o !== 'object') return;
+        if (o.interval && INTERVALS.indexOf(+o.interval) !== -1) cfg.interval = +o.interval;
+        if (o.cols && typeof o.cols === 'object') {
+            for (var k in cfg.cols) {
+                if (o.cols[k] !== undefined) cfg.cols[k] = o.cols[k] ? 1 : 0;
+            }
+        }
+        // the name column is the identity of a row: always on
+        cfg.cols.process = 1;
+    })();
+    function saveCfg() {
+        try { localStorage.setItem('desktop.taskmgr', JSON.stringify(cfg)); } catch (e) {}
+    }
 
     function cmpStr(a, b) {
         var x = String(a == null ? '' : a).toLowerCase();
@@ -1486,6 +1530,7 @@ tr.zombie{background:#fff3e0}
     var cmp = {
         pid:     function(a, b) { return a.pid - b.pid; },
         process: function(a, b) { return cmpStr(a.comm, b.comm); },
+        path:    function(a, b) { return cmpStr(a.path, b.path); },
         user:    function(a, b) { return cmpStr(a.user, b.user); },
         state:   function(a, b) { return cmpStr(a.state, b.state); },
         cpu:     function(a, b) { return (a._pct || 0) - (b._pct || 0); },
@@ -1517,8 +1562,8 @@ tr.zombie{background:#fff3e0}
     }
 
     // diff vs the previous poll, paint the monitors, remember the snapshot.
-    // 4s cadence, page-owned: stops when the window is closed (iframe gone)
-    // or hidden/minimized (document.hidden), never occupies a shell timer.
+    // self-owned cadence: stops when the window is closed (iframe gone) or
+    // hidden/minimized (document.hidden), never occupies a shell timer.
     function compute(j) {
         var dT = (prev && j.ticks_total > prev.ticks) ? (j.ticks_total - prev.ticks) : 0;
         var busy = null;
@@ -1558,7 +1603,7 @@ tr.zombie{background:#fff3e0}
     }
 
     // filter -> sort -> paint (re-run on every poll, and on live
-    // filter input / header clicks without refetching)
+    // filter input / header clicks / column toggles without refetching)
     function render() {
         if (!last) return;
         var v = last.list;
@@ -1567,10 +1612,12 @@ tr.zombie{background:#fff3e0}
                 var nm = String(p.comm || '').toLowerCase();
                 var cmd = String(p.cmd || '').toLowerCase();
                 var usr = String(p.user || '').toLowerCase();
+                var pth = String(p.path || '').toLowerCase();
                 return String(p.pid).indexOf(filter) !== -1
                     || nm.indexOf(filter) !== -1
                     || usr.indexOf(filter) !== -1
-                    || cmd.indexOf(filter) !== -1;
+                    || cmd.indexOf(filter) !== -1
+                    || pth.indexOf(filter) !== -1;
             });
         }
         var c = cmp[sort.key];
@@ -1580,19 +1627,25 @@ tr.zombie{background:#fff3e0}
             var q = v[k];
             var cell = q._pct === undefined ? '–' : q._pct.toFixed(1) + '%';
             out += '<tr' + (q.state === 'Z' ? ' class="zombie"' : '') + '>'
-                + '<td>' + String(q.pid) + '</td>'
-                + '<td class="name" title="' + esc(q.cmd || q.comm || '') + '">' + esc(q.comm || q.cmd || '?') + '</td>'
-                + '<td>' + esc(q.user || '?') + '</td>'
-                + '<td class="' + (q.state === 'Z' ? 'state-z' : '') + '">' + esc(q.state || '?') + '</td>'
-                + '<td class="num">' + cell + '</td>'
-                + '<td class="num">' + fmtMb(q.rss_kb) + '</td>'
+                + '<td class="c-pid">' + String(q.pid) + '</td>'
+                + '<td class="c-process name" title="' + esc(q.cmd || q.comm || '') + '">' + esc(q.comm || q.cmd || '?') + '</td>'
+                + '<td class="c-path" title="' + esc(q.path || '') + '">' + esc(q.path || '–') + '</td>'
+                + '<td class="c-user">' + esc(q.user || '?') + '</td>'
+                + '<td class="c-state' + (q.state === 'Z' ? ' state-z' : '') + '">' + esc(q.state || '?') + '</td>'
+                + '<td class="c-cpu num">' + cell + '</td>'
+                + '<td class="c-memory num">' + fmtMb(q.rss_kb) + '</td>'
                 + '</tr>';
         }
-        if (!v.length) out = '<tr><td colspan="6">–</td></tr>';
+        if (!v.length) {
+            var ncols = 0;
+            for (var m in cfg.cols) if (cfg.cols[m]) ncols++;
+            out = '<tr><td colspan="' + ncols + '">–</td></tr>';
+        }
         document.getElementById('tbody').innerHTML = out;
         document.getElementById('count').textContent =
             txt.tasks.replace('%d', v.length);
         paintHdr();
+        paintCols();
     }
 
     // clickable column headers (arrow appended to the server-baked label)
@@ -1608,7 +1661,7 @@ tr.zombie{background:#fff3e0}
                         sort.dir = -sort.dir;
                     } else {
                         sort.key = key;
-                        sort.dir = (key === 'cpu' || key === 'memory') ? -1 : 1;
+                        sort.dir = (key === 'cpu' || key === 'memory' || key === 'pid') ? -1 : 1;
                     }
                     render();
                 });
@@ -1623,12 +1676,85 @@ tr.zombie{background:#fff3e0}
             ths[i].textContent = hdr[key] + arrow;
         }
     }
+    // column visibility: idempotent class toggling on th + td
+    function paintCols() {
+        var ths = document.querySelectorAll('thead th[data-key]');
+        for (var i = 0; i < ths.length; i++) {
+            var key = ths[i].getAttribute('data-key');
+            ths[i].classList.toggle('col-off', !cfg.cols[key]);
+        }
+        var tbody = document.getElementById('tbody');
+        for (var ck in cfg.cols) {
+            var tds = tbody.querySelectorAll('td.c-' + ck);
+            for (var j = 0; j < tds.length; j++) {
+                tds[j].classList.toggle('col-off', !cfg.cols[ck]);
+            }
+        }
+    }
 
     var fEl = document.getElementById('filter');
     if (fEl) fEl.addEventListener('input', function() {
         filter = String(fEl.value || '').trim().toLowerCase();
         render();
     });
+
+    var gear = document.getElementById('gear');
+    var panel = document.getElementById('panel');
+    if (gear && panel) {
+        gear.addEventListener('click', function() {
+            panel.hidden = !panel.hidden;
+        });
+        document.addEventListener('mousedown', function(e) {
+            if (panel.hidden) return;
+            if (e.target === gear || panel.contains(e.target)) return;
+            panel.hidden = true;
+        });
+    }
+
+    var sel = document.getElementById('set-interval');
+    if (sel) {
+        sel.value = String(cfg.interval);
+        sel.addEventListener('change', function() {
+            var v = parseInt(sel.value, 10);
+            if (INTERVALS.indexOf(v) === -1) v = 4000;
+            cfg.interval = v;
+            saveCfg();
+            armPoll();
+            poll();
+        });
+    }
+    (function() {
+        var box = document.getElementById('set-cols');
+        if (!box) return;
+        var ths = document.querySelectorAll('thead th[data-key]');
+        for (var i = 0; i < ths.length; i++) {
+            var key = ths[i].getAttribute('data-key');
+            var lab = document.createElement('label');
+            var chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.checked = !!cfg.cols[key];
+            // the name column is forced on — a table without rows' identity
+            // reads as an empty page
+            chk.disabled = (key === 'process');
+            lab.appendChild(chk);
+            lab.appendChild(document.createTextNode(
+                String(hdr[key] || key).replace(/ [↑↓]$/, '')));
+            box.appendChild(lab);
+            (function(chk2, key2) {
+                chk2.addEventListener('change', function() {
+                    cfg.cols[key2] = chk2.checked ? 1 : 0;
+                    saveCfg();
+                    render();
+                });
+            })(chk, key);
+        }
+    })();
+
+    var tpid = null;
+    function armPoll() {
+        if (tpid) clearInterval(tpid);
+        tpid = setInterval(poll, cfg.interval);
+    }
 
     function poll() {
         if (document.hidden) return;
@@ -1650,7 +1776,7 @@ tr.zombie{background:#fff3e0}
         };
         x.send();
     }
-    setInterval(poll, 4000);
+    armPoll();
     poll();
 })();
 </script>

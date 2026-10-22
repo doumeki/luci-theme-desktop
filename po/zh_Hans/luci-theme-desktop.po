@@ -254,6 +254,18 @@ msgstr "诊断信息已复制"
 msgid "Saved"
 msgstr "已保存"
 
+msgid "Path"
+msgstr "路径"
+
+msgid "Columns"
+msgstr "列"
+
+msgid "Refresh interval"
+msgstr "刷新间隔"
+
+msgid "Settings"
+msgstr "设置"
+
 msgid "Filter"
 msgstr "筛选"
 
