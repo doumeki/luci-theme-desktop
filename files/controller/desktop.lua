@@ -114,6 +114,17 @@ function index()
     sys_status.leaf = true
     sys_status.sysauth = false
 
+    -- Task manager (v1: read-only process list; "end task" is out of scope).
+    -- Same reachability contract as system_status: unauthenticated render;
+    -- the page's own XHRs run with the real session cookie.
+    local tasklist_api = entry({"admin", "desktop", "tasklist"}, call("action_tasklist"))
+    tasklist_api.leaf = true
+    tasklist_api.sysauth = false
+
+    local taskmgr_page = entry({"admin", "desktop", "taskmgr"}, call("action_taskmgr"))
+    taskmgr_page.leaf = true
+    taskmgr_page.sysauth = false
+
     local ifaces_api = entry({"admin", "desktop", "interfaces"}, call("action_interfaces"))
     ifaces_api.leaf = true
     ifaces_api.sysauth = false
@@ -1241,6 +1252,325 @@ button:disabled{opacity:.5;cursor:default}
         x.onerror = function() { st.textContent = txt.network; unlock(); };
         x.send();
     };
+})();
+</script>
+</body>
+</html>]])
+end
+
+-- ===========================================================================
+-- Task manager (v1, read-only — "end task" is deliberately out of scope).
+-- GET /admin/desktop/taskmgr — standalone HTML page, opened from the
+-- taskbar's right-click menu; modeled on action_changes (no LuCI framework,
+-- style+script inlined, data fetched by its own XHR).
+-- GET /admin/desktop/tasklist — its data feed. /proc parsing only (io.*):
+-- no LuCI API surface involved, so it behaves identically on the Lua and
+-- ucode tracks (same rationale as server_log's io.open usage). CPU% is NOT
+-- computed here: the page diffs per-process jiffies and the /proc/stat
+-- corpus total between two polls — these are cumulative values (like the
+-- bandwidth endpoint reports), not deltas.
+-- ===========================================================================
+
+local function taskmgr_collect()
+    local procs = {}
+
+    -- uid -> name, read once per request
+    local passwd = {}
+    local pw = io.open("/etc/passwd")
+    if pw then
+        for line in pw:lines() do
+            local user, uid = line:match("^([^:]+):[^:]*:(%d+):")
+            if user then passwd[tonumber(uid)] = user end
+        end
+        pw:close()
+    end
+
+    local ls = io.popen("ls /proc")
+    if ls then
+        for name in ls:lines() do
+            local pid = tonumber(name)
+            if pid then
+                local p = { pid = pid, jf = 0, vsz_kb = 0, rss_kb = 0,
+                            state = "?", comm = tostring(pid), user = "?" }
+
+                local st = io.open("/proc/" .. pid .. "/stat")
+                if st then
+                    local stat_s = st:read("*a") or ""
+                    st:close()
+                    -- comm may itself contain parens/spaces: the greedy
+                    -- capture runs up to the LAST ")" (space + state field
+                    -- always follows it, per proc(5)).
+                    local comm, rest = stat_s:match("^%d+%s+%((.*)%) (.*)$")
+                    if comm then
+                        p.comm = comm
+                        local n, tok = 0, {}
+                        for tk in rest:gmatch("%S+") do
+                            n = n + 1
+                            tok[n] = tk
+                        end
+                        -- tok[i] is /proc stat field i+2:
+                        p.state = tok[1] or "?"                          --  3: state
+                        p.jf = (tonumber(tok[12]) or 0) + (tonumber(tok[13]) or 0)  -- 14/15: utime+stime
+                        p.vsz_kb = math.floor((tonumber(tok[21]) or 0) / 1024)      -- 23: vsize
+                        p.rss_kb = math.floor((tonumber(tok[22]) or 0) * 4)         -- 24: rss pages (4096-byte pages on every OpenWrt target)
+                    end
+                end
+
+                local cm = io.open("/proc/" .. pid .. "/cmdline")
+                if cm then
+                    local c = cm:read("*a") or ""
+                    cm:close()
+                    -- join args (NUL-separated); kernel threads have none
+                    c = c:gsub("%z+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+                    if c ~= "" then p.cmd = c end
+                end
+                if not p.cmd then p.cmd = "[" .. p.comm .. "]" end
+
+                local sz = io.open("/proc/" .. pid .. "/status")
+                if sz then
+                    for line in sz:lines() do
+                        local euid = line:match("^Uid:%s+%d+%s+(%d+)")
+                        if euid then
+                            p.user = passwd[tonumber(euid)] or ("uid " .. euid)
+                            break
+                        end
+                    end
+                    sz:close()
+                end
+
+                procs[#procs + 1] = p
+            end
+        end
+        ls:close()
+    end
+
+    -- cumulative-since-boot sort: historically CPU-hungry first, until the
+    -- page has its own diff data and re-sorts by CPU%
+    table.sort(procs, function(a, b) return a.jf > b.jf end)
+
+    -- first /proc/stat line: cumulative ticks across ALL cores — the
+    -- denominator the page diffs per-process jiffies against
+    local ticks = 0
+    local ps = io.open("/proc/stat")
+    if ps then
+        local cpu = ps:read("*l") or ""
+        ps:close()
+        if cpu:sub(1, 4) == "cpu " then
+            for v in cpu:gmatch("%d+") do ticks = ticks + (tonumber(v) or 0) end
+        end
+    end
+
+    local mem_total, mem_avail = 0, 0
+    local mi = io.open("/proc/meminfo")
+    if mi then
+        local free, buff, cache
+        for line in mi:lines() do
+            if mem_total == 0 and line:match("^MemTotal:") then
+                mem_total = tonumber(line:match("MemTotal:%s+(%d+)")) or 0
+            elseif line:match("^MemAvailable:") then
+                mem_avail = tonumber(line:match("MemAvailable:%s+(%d+)")) or 0
+                break
+            elseif line:match("^MemFree:") then
+                free = tonumber(line:match("MemFree:%s+(%d+)")) or 0
+            elseif line:match("^Buffers:") then
+                buff = tonumber(line:match("Buffers:%s+(%d+)")) or 0
+            elseif line:match("^Cached:") then
+                cache = tonumber(line:match("Cached:%s+(%d+)")) or 0
+            end
+        end
+        -- pre-3.14 kernels lack MemAvailable
+        if mem_avail == 0 then mem_avail = (free or 0) + (buff or 0) + (cache or 0) end
+        mi:close()
+    end
+
+    return procs, ticks, mem_total, mem_avail
+end
+
+-- GET /admin/desktop/tasklist — snapshot feed for the taskmgr page
+function action_tasklist()
+    local procs, ticks, mem_total, mem_avail = taskmgr_collect()
+    luci.http.prepare_content("application/json")
+    luci.http.write_json({
+        ok = true,
+        list = procs,
+        ticks_total = ticks,
+        mem_total_kb = mem_total,
+        mem_avail_kb = mem_avail
+    })
+end
+
+-- GET /admin/desktop/taskmgr — standalone task manager page
+function action_taskmgr()
+    local i18n = require("luci.i18n")
+    local t = function(k) return i18n.translate(k) end
+
+    local uci = require("luci.desktop.runtime").newCursor()
+    local page_lang = uci:get("luci", "main", "lang") or "en"
+
+    luci.http.prepare_content("text/html; charset=UTF-8")
+    luci.http.write([[<!DOCTYPE html>
+<html lang="]] .. (page_lang or "en") .. [[">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>]] .. changes_escape(t("Task Manager")) .. [[</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:#f4f5f7;color:#333;padding:16px;min-height:100vh;font-size:13px}
+.tm-header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
+.count{background:#1565c0;color:#fff;border-radius:9px;font-size:11px;padding:1px 8px;font-weight:600;white-space:nowrap}
+.err{color:#c62828;font-size:11px;white-space:nowrap}
+.mon-row{display:flex;gap:10px;margin-bottom:12px}
+.mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
+.mon-label{font-size:11px;font-weight:600;color:#777;text-transform:uppercase;letter-spacing:.4px}
+.mon-foot{display:flex;align-items:flex-end;gap:8px;margin-top:4px}
+.mon-val{font-size:20px;font-weight:600;line-height:1.2}
+canvas{margin-left:auto;flex:none}
+.table-wrap{border:1px solid #e0e4e8;border-radius:6px;overflow:hidden;background:#fff}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:#f8f9fa;font-size:11px;color:#666;text-align:left;padding:6px 10px;border-bottom:1px solid #e0e4e8;font-weight:600;z-index:1}
+tbody td{padding:4px 10px;border-bottom:1px solid #f0f2f4;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#eef3fa}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.name{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+td.state-z{color:#c62828;font-weight:600}
+tr.zombie{background:#fff3e0}
+</style>
+</head>
+<body>
+<div class="tm-header"><h1>]] .. changes_escape(t("Task Manager")) .. [[</h1><span class="err" id="err"></span><span class="count" id="count">–</span></div>
+<div class="mon-row">
+<div class="mon">
+<div class="mon-label">]] .. changes_escape(t("CPU")) .. [[</div>
+<div class="mon-foot"><div class="mon-val" id="cpu-val">–</div><canvas id="cpu-graph" width="150" height="38"></canvas></div>
+</div>
+<div class="mon">
+<div class="mon-label">]] .. changes_escape(t("Memory")) .. [[</div>
+<div class="mon-foot"><div class="mon-val" id="mem-val">–</div><canvas id="mem-graph" width="150" height="38"></canvas></div>
+</div>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>]] .. changes_escape(t("PID")) .. [[</th><th>]] .. changes_escape(t("Process")) .. [[</th><th>]] .. changes_escape(t("User")) .. [[</th><th>]] .. changes_escape(t("Status")) .. [[</th><th class="num">]] .. changes_escape(t("CPU")) .. [[</th><th class="num">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
+<tbody id="tbody"><tr><td colspan="6">–</td></tr></tbody>
+</table></div>
+<script>
+(function() {
+    var txt = {
+        tasks: ']] .. changes_escape(t("%d processes")) .. [[',
+        failed: ']] .. changes_escape(t("Load failed")) .. [['
+    };
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+    var prev = null;            // {ticks: N, jf: {pid: jiffies}}
+    var cpuArr = [], memArr = [];
+    var MAX = 60;
+
+    function draw(id, arr, color) {
+        var cv = document.getElementById(id);
+        if (!cv || !cv.getContext) return;
+        var ctx = cv.getContext('2d');
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        if (arr.length < 2) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        var steps = Math.max(arr.length, MAX) - 1;
+        for (var i = 0; i < arr.length; i++) {
+            var x = cv.width - 1 - (arr.length - 1 - i) * (cv.width - 2) / steps;
+            var v = Math.max(0, Math.min(100, arr[i]));
+            var y = cv.height - 1.5 - (v / 100) * (cv.height - 3);
+            if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    function fmtMb(kb) {
+        var mb = (kb || 0) / 1024;
+        return (mb < 100 ? mb.toFixed(1) : String(Math.round(mb))) + ' MB';
+    }
+
+    // 4s cadence, page-owned: stops when the window is closed (iframe gone)
+    // or hidden/minimized (document.hidden), never occupies a shell timer.
+    function poll() {
+        if (document.hidden) return;
+        var x = new XMLHttpRequest();
+        x.open('GET', '/cgi-bin/luci/admin/desktop/tasklist', true);
+        x.onload = function() {
+            var j = null;
+            try { j = JSON.parse(x.responseText); } catch (e) {}
+            if (!j || !j.list) {
+                document.getElementById('err').textContent = txt.failed;
+                return;
+            }
+            document.getElementById('err').textContent = '';
+            var list = j.list.slice(0);
+            var dT = (prev && j.ticks_total > prev.ticks) ? (j.ticks_total - prev.ticks) : 0;
+            var busy = null;
+            var jfMap = {};
+            for (var i = 0; i < list.length; i++) {
+                var p = list[i];
+                if (dT > 0) {
+                    var pct = Math.max(0, p.jf - (prev.jf[p.pid] || 0)) * 100 / dT;
+                    p._pct = pct;
+                    busy = (busy || 0) + pct;
+                }
+                jfMap[p.pid] = p.jf;
+            }
+            if (dT > 0) list.sort(function(a, b) { return (b._pct || 0) - (a._pct || 0); });
+
+            var memTotal = j.mem_total_kb || 0, memAvail = j.mem_avail_kb || 0;
+            var memPct = memTotal > 0 ? (memTotal - memAvail) * 100 / memTotal : null;
+
+            if (busy !== null) {
+                cpuArr.push(busy);
+                if (cpuArr.length > MAX) cpuArr.shift();
+            }
+            if (memPct !== null) {
+                memArr.push(memPct);
+                if (memArr.length > MAX) memArr.shift();
+            }
+
+            document.getElementById('cpu-val').textContent =
+                busy === null ? '–' : busy.toFixed(0) + '%';
+            document.getElementById('mem-val').textContent =
+                memPct === null ? '–' : memPct.toFixed(0) + '%';
+            if (memTotal > 0) {
+                document.getElementById('mem-val').title =
+                    fmtMb(memTotal - memAvail) + ' / ' + fmtMb(memTotal);
+            }
+            draw('cpu-graph', cpuArr, '#4a90d9');
+            draw('mem-graph', memArr, '#2e7d32');
+
+            var out = '';
+            for (var k = 0; k < list.length; k++) {
+                var q = list[k];
+                var cell = q._pct === undefined ? '–' : q._pct.toFixed(1) + '%';
+                out += '<tr' + (q.state === 'Z' ? ' class="zombie"' : '') + '>'
+                    + '<td>' + String(q.pid) + '</td>'
+                    + '<td class="name" title="' + esc(q.cmd || q.comm || '') + '">' + esc(q.comm || q.cmd || '?') + '</td>'
+                    + '<td>' + esc(q.user || '?') + '</td>'
+                    + '<td class="' + (q.state === 'Z' ? 'state-z' : '') + '">' + esc(q.state || '?') + '</td>'
+                    + '<td class="num">' + cell + '</td>'
+                    + '<td class="num">' + fmtMb(q.rss_kb) + '</td>'
+                    + '</tr>';
+            }
+            document.getElementById('tbody').innerHTML = out;
+            document.getElementById('count').textContent =
+                txt.tasks.replace('%d', String(list.length));
+            prev = { ticks: j.ticks_total || 0, jf: jfMap };
+        };
+        x.onerror = function() {
+            document.getElementById('err').textContent = txt.failed;
+        };
+        x.send();
+    }
+    setInterval(poll, 4000);
+    poll();
 })();
 </script>
 </body>

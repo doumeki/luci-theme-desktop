@@ -150,7 +150,7 @@
                 }
             });
 
-            // Right-click context menu on window buttons
+            // Right-click on a window button: close that window
             list.addEventListener('contextmenu', function(e) {
                 var btn = e.target.closest('.taskbar-window-btn');
                 if (!btn) return;
@@ -160,6 +160,17 @@
                     // Simple: right-click closes
                     WM.close(winId);
                 }
+            });
+
+            // Right-click on the empty taskbar surface: Windows-style
+            // taskbar menu (Task Manager entry — see desktop-menus.js).
+            // Window buttons keep their own close-on-right-click above.
+            var bar = document.getElementById('taskbar');
+            if (bar) bar.addEventListener('contextmenu', function(e) {
+                if (e.target.closest('.taskbar-window-btn')) return;
+                if (!DESKTOP.desktopMenus || !DESKTOP.desktopMenus.showTaskbarMenu) return;
+                e.preventDefault();
+                DESKTOP.desktopMenus.showTaskbarMenu(e.clientX, e.clientY);
             });
         },
 

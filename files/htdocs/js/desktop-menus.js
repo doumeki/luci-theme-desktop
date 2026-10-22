@@ -63,7 +63,7 @@
     // caller's HTML, append, then clamp. Callers that inject content after
     // this returns reintroduce the off-screen bug.
     function _makeMenu(x, y, html) {
-        document.querySelectorAll('#desktop-context-menu, #icon-context-menu, #pin-menu')
+        document.querySelectorAll('#desktop-context-menu, #icon-context-menu, #pin-menu, #taskbar-context-menu')
             .forEach(function(m) { m.remove(); });
         var menu = document.createElement('div');
         menu.className = 'context-menu';
@@ -116,6 +116,24 @@
                         State.hidden().push(url);
                         State.saveHidden();
                     }
+                }
+                m.remove();
+            });
+        },
+
+        // Windows-style taskbar context menu: right-click on the empty
+        // taskbar surface (taskbar.js routes window-button right clicks to
+        // their own close behavior). v1 is read-only; kill-task stays out
+        // of scope on purpose.
+        showTaskbarMenu: function(x, y) {
+            var m = _makeMenu(x, y,
+                '<div class="context-item" data-act="taskmgr">' + _('Task Manager') + '</div>');
+            m.id = 'taskbar-context-menu';
+            m.addEventListener('click', function(e) {
+                var act = e.target.closest('.context-item');
+                if (!act) return;
+                if (act.getAttribute('data-act') === 'taskmgr' && window.WM) {
+                    window.WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
                 }
                 m.remove();
             });

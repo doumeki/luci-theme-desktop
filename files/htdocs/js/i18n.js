@@ -21,6 +21,12 @@
 
     window.__I18N = {
         'zh_cn': {
+            'Task Manager': '任务管理器',
+            '%d processes': '%d 个进程',
+            'Process': '进程',
+            'User': '用户',
+            'Memory': '内存',
+            'Load failed': '加载失败',
             // ===== theme-config.js =====
             'Titlebar (active)': '标题栏（活动）',
             'Titlebar (inactive)': '标题栏（非活动）',

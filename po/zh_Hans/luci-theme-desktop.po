@@ -8,6 +8,24 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Task Manager"
+msgstr "任务管理器"
+
+msgid "%d processes"
+msgstr "%d 个进程"
+
+msgid "Process"
+msgstr "进程"
+
+msgid "User"
+msgstr "用户"
+
+msgid "Memory"
+msgstr "内存"
+
+msgid "Load failed"
+msgstr "加载失败"
+
 # theme-config.js
 msgid "Titlebar (active)"
 msgstr "标题栏（活动）"

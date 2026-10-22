@@ -8,6 +8,24 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Task Manager"
+msgstr ""
+
+msgid "%d processes"
+msgstr ""
+
+msgid "Process"
+msgstr ""
+
+msgid "User"
+msgstr ""
+
+msgid "Memory"
+msgstr ""
+
+msgid "Load failed"
+msgstr ""
+
 # theme-config.js
 msgid "Titlebar (active)"
 msgstr ""
