@@ -254,6 +254,9 @@ msgstr ""
 msgid "Saved"
 msgstr ""
 
+msgid "Filter"
+msgstr ""
+
 msgid "Save & Apply"
 msgstr ""
 

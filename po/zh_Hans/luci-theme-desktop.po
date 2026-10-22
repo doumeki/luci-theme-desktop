@@ -254,6 +254,9 @@ msgstr "诊断信息已复制"
 msgid "Saved"
 msgstr "已保存"
 
+msgid "Filter"
+msgstr "筛选"
+
 msgid "Save & Apply"
 msgstr "保存并应用"
 

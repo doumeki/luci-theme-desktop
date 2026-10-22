@@ -1421,6 +1421,8 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:#f4f5f7;color:#333;p
 h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 .count{background:#1565c0;color:#fff;border-radius:9px;font-size:11px;padding:1px 8px;font-weight:600;white-space:nowrap}
 .err{color:#c62828;font-size:11px;white-space:nowrap}
+#filter{border:1px solid #d3d7db;border-radius:4px;padding:4px 8px;font-size:12px;width:140px;background:#fff;color:#333}
+#filter:focus{border-color:#4a90d9;outline:none}
 .mon-row{display:flex;gap:10px;margin-bottom:12px}
 .mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
 .mon-label{font-size:11px;font-weight:600;color:#777;text-transform:uppercase;letter-spacing:.4px}
@@ -1430,6 +1432,8 @@ canvas{margin-left:auto;flex:none}
 .table-wrap{border:1px solid #e0e4e8;border-radius:6px;overflow:hidden;background:#fff}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead th{position:sticky;top:0;background:#f8f9fa;font-size:11px;color:#666;text-align:left;padding:6px 10px;border-bottom:1px solid #e0e4e8;font-weight:600;z-index:1}
+thead th{cursor:pointer;user-select:none}
+thead th:hover{background:#eef1f4}
 tbody td{padding:4px 10px;border-bottom:1px solid #f0f2f4;white-space:nowrap}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:#eef3fa}
@@ -1440,7 +1444,7 @@ tr.zombie{background:#fff3e0}
 </style>
 </head>
 <body>
-<div class="tm-header"><h1>]] .. changes_escape(t("Task Manager")) .. [[</h1><span class="err" id="err"></span><span class="count" id="count">–</span></div>
+<div class="tm-header"><h1>]] .. changes_escape(t("Task Manager")) .. [[</h1><input id="filter" type="search" placeholder="]] .. changes_escape(t("Filter")) .. [["><span class="err" id="err"></span><span class="count" id="count">–</span></div>
 <div class="mon-row">
 <div class="mon">
 <div class="mon-label">]] .. changes_escape(t("CPU")) .. [[</div>
@@ -1452,7 +1456,7 @@ tr.zombie{background:#fff3e0}
 </div>
 </div>
 <div class="table-wrap"><table>
-<thead><tr><th>]] .. changes_escape(t("PID")) .. [[</th><th>]] .. changes_escape(t("Process")) .. [[</th><th>]] .. changes_escape(t("User")) .. [[</th><th>]] .. changes_escape(t("Status")) .. [[</th><th class="num">]] .. changes_escape(t("CPU")) .. [[</th><th class="num">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
+<thead><tr><th data-key="pid">]] .. changes_escape(t("PID")) .. [[</th><th data-key="process">]] .. changes_escape(t("Process")) .. [[</th><th data-key="user">]] .. changes_escape(t("User")) .. [[</th><th data-key="state">]] .. changes_escape(t("Status")) .. [[</th><th class="num" data-key="cpu">]] .. changes_escape(t("CPU")) .. [[</th><th class="num" data-key="memory">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
 <tbody id="tbody"><tr><td colspan="6">–</td></tr></tbody>
 </table></div>
 <script>
@@ -1467,8 +1471,26 @@ tr.zombie{background:#fff3e0}
         return d.innerHTML;
     }
     var prev = null;            // {ticks: N, jf: {pid: jiffies}}
+    var last = null;            // computed snapshot (rows get _pct), re-rendered on sort/filter
     var cpuArr = [], memArr = [];
     var MAX = 60;
+    var sort = { key: 'cpu', dir: -1 };   // default: CPU% descending (Windows style)
+    var filter = '';
+
+    function cmpStr(a, b) {
+        var x = String(a == null ? '' : a).toLowerCase();
+        var y = String(b == null ? '' : b).toLowerCase();
+        return x < y ? -1 : (x > y ? 1 : 0);
+    }
+    // ascending comparators; dir multiplies
+    var cmp = {
+        pid:     function(a, b) { return a.pid - b.pid; },
+        process: function(a, b) { return cmpStr(a.comm, b.comm); },
+        user:    function(a, b) { return cmpStr(a.user, b.user); },
+        state:   function(a, b) { return cmpStr(a.state, b.state); },
+        cpu:     function(a, b) { return (a._pct || 0) - (b._pct || 0); },
+        memory:  function(a, b) { return (a.rss_kb || 0) - (b.rss_kb || 0); }
+    };
 
     function draw(id, arr, color) {
         var cv = document.getElementById(id);
@@ -1494,8 +1516,120 @@ tr.zombie{background:#fff3e0}
         return (mb < 100 ? mb.toFixed(1) : String(Math.round(mb))) + ' MB';
     }
 
+    // diff vs the previous poll, paint the monitors, remember the snapshot.
     // 4s cadence, page-owned: stops when the window is closed (iframe gone)
     // or hidden/minimized (document.hidden), never occupies a shell timer.
+    function compute(j) {
+        var dT = (prev && j.ticks_total > prev.ticks) ? (j.ticks_total - prev.ticks) : 0;
+        var busy = null;
+        var jfMap = {};
+        var list = j.list.slice(0);
+        for (var i = 0; i < list.length; i++) {
+            var p = list[i];
+            if (dT > 0) {
+                var pct = Math.max(0, p.jf - (prev.jf[p.pid] || 0)) * 100 / dT;
+                p._pct = pct;
+                busy = (busy || 0) + pct;
+            }
+            jfMap[p.pid] = p.jf;
+        }
+        var memTotal = j.mem_total_kb || 0, memAvail = j.mem_avail_kb || 0;
+        var memPct = memTotal > 0 ? (memTotal - memAvail) * 100 / memTotal : null;
+        if (busy !== null) {
+            cpuArr.push(busy);
+            if (cpuArr.length > MAX) cpuArr.shift();
+        }
+        if (memPct !== null) {
+            memArr.push(memPct);
+            if (memArr.length > MAX) memArr.shift();
+        }
+        document.getElementById('cpu-val').textContent =
+            busy === null ? '–' : busy.toFixed(0) + '%';
+        document.getElementById('mem-val').textContent =
+            memPct === null ? '–' : memPct.toFixed(0) + '%';
+        if (memTotal > 0) {
+            document.getElementById('mem-val').title =
+                fmtMb(memTotal - memAvail) + ' / ' + fmtMb(memTotal);
+        }
+        draw('cpu-graph', cpuArr, '#4a90d9');
+        draw('mem-graph', memArr, '#2e7d32');
+        prev = { ticks: j.ticks_total || 0, jf: jfMap };
+        last = { list: list };
+    }
+
+    // filter -> sort -> paint (re-run on every poll, and on live
+    // filter input / header clicks without refetching)
+    function render() {
+        if (!last) return;
+        var v = last.list;
+        if (filter) {
+            v = v.filter(function(p) {
+                var nm = String(p.comm || '').toLowerCase();
+                var cmd = String(p.cmd || '').toLowerCase();
+                var usr = String(p.user || '').toLowerCase();
+                return String(p.pid).indexOf(filter) !== -1
+                    || nm.indexOf(filter) !== -1
+                    || usr.indexOf(filter) !== -1
+                    || cmd.indexOf(filter) !== -1;
+            });
+        }
+        var c = cmp[sort.key];
+        v = v.slice(0).sort(function(a, b) { return c(a, b) * sort.dir; });
+        var out = '';
+        for (var k = 0; k < v.length; k++) {
+            var q = v[k];
+            var cell = q._pct === undefined ? '–' : q._pct.toFixed(1) + '%';
+            out += '<tr' + (q.state === 'Z' ? ' class="zombie"' : '') + '>'
+                + '<td>' + String(q.pid) + '</td>'
+                + '<td class="name" title="' + esc(q.cmd || q.comm || '') + '">' + esc(q.comm || q.cmd || '?') + '</td>'
+                + '<td>' + esc(q.user || '?') + '</td>'
+                + '<td class="' + (q.state === 'Z' ? 'state-z' : '') + '">' + esc(q.state || '?') + '</td>'
+                + '<td class="num">' + cell + '</td>'
+                + '<td class="num">' + fmtMb(q.rss_kb) + '</td>'
+                + '</tr>';
+        }
+        if (!v.length) out = '<tr><td colspan="6">–</td></tr>';
+        document.getElementById('tbody').innerHTML = out;
+        document.getElementById('count').textContent =
+            txt.tasks.replace('%d', v.length);
+        paintHdr();
+    }
+
+    // clickable column headers (arrow appended to the server-baked label)
+    var hdr = {};
+    (function() {
+        var ths = document.querySelectorAll('thead th[data-key]');
+        for (var i = 0; i < ths.length; i++) {
+            (function(th) {
+                var key = th.getAttribute('data-key');
+                hdr[key] = th.textContent;
+                th.addEventListener('click', function() {
+                    if (sort.key === key) {
+                        sort.dir = -sort.dir;
+                    } else {
+                        sort.key = key;
+                        sort.dir = (key === 'cpu' || key === 'memory') ? -1 : 1;
+                    }
+                    render();
+                });
+            })(ths[i]);
+        }
+    })();
+    function paintHdr() {
+        var ths = document.querySelectorAll('thead th[data-key]');
+        for (var i = 0; i < ths.length; i++) {
+            var key = ths[i].getAttribute('data-key');
+            var arrow = (key === sort.key) ? (sort.dir < 0 ? ' ↓' : ' ↑') : '';
+            ths[i].textContent = hdr[key] + arrow;
+        }
+    }
+
+    var fEl = document.getElementById('filter');
+    if (fEl) fEl.addEventListener('input', function() {
+        filter = String(fEl.value || '').trim().toLowerCase();
+        render();
+    });
+
     function poll() {
         if (document.hidden) return;
         var x = new XMLHttpRequest();
@@ -1508,61 +1642,8 @@ tr.zombie{background:#fff3e0}
                 return;
             }
             document.getElementById('err').textContent = '';
-            var list = j.list.slice(0);
-            var dT = (prev && j.ticks_total > prev.ticks) ? (j.ticks_total - prev.ticks) : 0;
-            var busy = null;
-            var jfMap = {};
-            for (var i = 0; i < list.length; i++) {
-                var p = list[i];
-                if (dT > 0) {
-                    var pct = Math.max(0, p.jf - (prev.jf[p.pid] || 0)) * 100 / dT;
-                    p._pct = pct;
-                    busy = (busy || 0) + pct;
-                }
-                jfMap[p.pid] = p.jf;
-            }
-            if (dT > 0) list.sort(function(a, b) { return (b._pct || 0) - (a._pct || 0); });
-
-            var memTotal = j.mem_total_kb || 0, memAvail = j.mem_avail_kb || 0;
-            var memPct = memTotal > 0 ? (memTotal - memAvail) * 100 / memTotal : null;
-
-            if (busy !== null) {
-                cpuArr.push(busy);
-                if (cpuArr.length > MAX) cpuArr.shift();
-            }
-            if (memPct !== null) {
-                memArr.push(memPct);
-                if (memArr.length > MAX) memArr.shift();
-            }
-
-            document.getElementById('cpu-val').textContent =
-                busy === null ? '–' : busy.toFixed(0) + '%';
-            document.getElementById('mem-val').textContent =
-                memPct === null ? '–' : memPct.toFixed(0) + '%';
-            if (memTotal > 0) {
-                document.getElementById('mem-val').title =
-                    fmtMb(memTotal - memAvail) + ' / ' + fmtMb(memTotal);
-            }
-            draw('cpu-graph', cpuArr, '#4a90d9');
-            draw('mem-graph', memArr, '#2e7d32');
-
-            var out = '';
-            for (var k = 0; k < list.length; k++) {
-                var q = list[k];
-                var cell = q._pct === undefined ? '–' : q._pct.toFixed(1) + '%';
-                out += '<tr' + (q.state === 'Z' ? ' class="zombie"' : '') + '>'
-                    + '<td>' + String(q.pid) + '</td>'
-                    + '<td class="name" title="' + esc(q.cmd || q.comm || '') + '">' + esc(q.comm || q.cmd || '?') + '</td>'
-                    + '<td>' + esc(q.user || '?') + '</td>'
-                    + '<td class="' + (q.state === 'Z' ? 'state-z' : '') + '">' + esc(q.state || '?') + '</td>'
-                    + '<td class="num">' + cell + '</td>'
-                    + '<td class="num">' + fmtMb(q.rss_kb) + '</td>'
-                    + '</tr>';
-            }
-            document.getElementById('tbody').innerHTML = out;
-            document.getElementById('count').textContent =
-                txt.tasks.replace('%d', String(list.length));
-            prev = { ticks: j.ticks_total || 0, jf: jfMap };
+            compute(j);
+            render();
         };
         x.onerror = function() {
             document.getElementById('err').textContent = txt.failed;

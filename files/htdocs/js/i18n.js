@@ -106,6 +106,7 @@
             'Diagnostics': '诊断信息',
             'Diagnostics copied': '诊断信息已复制',
             'Saved': '已保存',
+            'Filter': '筛选',
             'Save & Apply': '保存并应用',
             'Revert': '还原',
             'Applying': '应用中',
