@@ -63,7 +63,7 @@
     // caller's HTML, append, then clamp. Callers that inject content after
     // this returns reintroduce the off-screen bug.
     function _makeMenu(x, y, html) {
-        document.querySelectorAll('#desktop-context-menu, #icon-context-menu, #pin-menu, #taskbar-context-menu')
+        document.querySelectorAll('#desktop-context-menu, #icon-context-menu, #pin-menu')
             .forEach(function(m) { m.remove(); });
         var menu = document.createElement('div');
         menu.className = 'context-menu';
@@ -116,24 +116,6 @@
                         State.hidden().push(url);
                         State.saveHidden();
                     }
-                }
-                m.remove();
-            });
-        },
-
-        // Windows-style taskbar context menu: right-click on the empty
-        // taskbar surface (taskbar.js routes window-button right clicks to
-        // their own close behavior). v1 is read-only; kill-task stays out
-        // of scope on purpose.
-        showTaskbarMenu: function(x, y) {
-            var m = _makeMenu(x, y,
-                '<div class="context-item" data-act="taskmgr">' + _('Task Manager') + '</div>');
-            m.id = 'taskbar-context-menu';
-            m.addEventListener('click', function(e) {
-                var act = e.target.closest('.context-item');
-                if (!act) return;
-                if (act.getAttribute('data-act') === 'taskmgr' && window.WM) {
-                    window.WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
                 }
                 m.remove();
             });
@@ -281,7 +263,8 @@
         },
 
         // Order (0.1.0-234, user-specified): settings first (theme/widgets),
-        // then a single separator, then the actions (new/rearrange/refresh).
+        // then a single separator, then the actions
+        // (new/rearrange/refresh/taskmgr; taskmgr joined in 0.1.0-274).
         _showDesktopMenu: function(x, y) {
             var m = _makeMenu(x, y,
                 '<div class="context-item" data-act="theme">' + _('Theme') + '</div>' +
@@ -294,7 +277,8 @@
                     '</div>' +
                 '</div>' +
                 '<div class="context-item" data-act="rearrange">' + _('Rearrange Icons') + '</div>' +
-                '<div class="context-item" data-act="refresh">' + _('Refresh') + '</div>');
+                '<div class="context-item" data-act="refresh">' + _('Refresh') + '</div>' +
+                '<div class="context-item" data-act="taskmgr">' + _('Task Manager') + '</div>');
             m.id = 'desktop-context-menu';
             m.addEventListener('mouseenter', function(e) {
                 var row = e.target.closest && e.target.closest('.context-has-sub');
@@ -321,6 +305,9 @@
                         var iframe = w.el && w.el.querySelector('iframe');
                         if (iframe) iframe.src = iframe.src;
                     });
+                }
+                else if (a === 'taskmgr' && window.WM) {
+                    window.WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
                 }
                 m.remove();
             });

@@ -798,11 +798,11 @@ describe('Desktop context menu: item order', function() {
         return rows(menu).map(function(el) { return el.getAttribute('data-act'); });
     }
 
-    it('renders theme, widgets, new, rearrange, refresh in that DOM order', function() {
+    it('renders theme, widgets, new, rearrange, refresh, taskmgr in that DOM order', function() {
         window.Desktop._showDesktopMenu(10, 60);
         var menu = document.getElementById('desktop-context-menu');
         assert.ok(menu, 'menu rendered');
-        assert.equal(acts(menu).join(','), 'theme,widgets,new,rearrange,refresh',
+        assert.equal(acts(menu).join(','), 'theme,widgets,new,rearrange,refresh,taskmgr',
             'top-level data-act order');
     });
 
@@ -830,6 +830,24 @@ describe('Desktop context menu: item order', function() {
         var sub = row.querySelector('.context-submenu > .context-item');
         assert.ok(sub, 'New still has a submenu item');
         assert.equal(sub.getAttribute('data-act'), 'addlink', 'submenu item is the Link action');
+    });
+
+    it('Task Manager entry opens the taskmgr window (0.1.0-274)', function() {
+        var opened = null;
+        var origOpen = window.WM.open;
+        window.WM.open = function(url, title) { opened = { url: url, title: title }; };
+        try {
+            window.Desktop._showDesktopMenu(10, 60);
+            var menu = document.getElementById('desktop-context-menu');
+            var item = menu.querySelector('.context-item[data-act="taskmgr"]');
+            assert.ok(item, 'Task Manager entry present in the desktop menu');
+            item.click();
+            assert.ok(opened, 'window opened after click');
+            assert.ok(opened.url.indexOf('/admin/desktop/taskmgr') !== -1,
+                'taskmgr url: ' + (opened && opened.url));
+        } finally {
+            window.WM.open = origOpen;
+        }
     });
 });
 

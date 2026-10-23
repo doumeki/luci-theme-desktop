@@ -162,15 +162,15 @@
                 }
             });
 
-            // Right-click on the empty taskbar surface: Windows-style
-            // taskbar menu (Task Manager entry — see desktop-menus.js).
-            // Window buttons keep their own close-on-right-click above.
+            // Right-click on the empty taskbar surface: inert since
+            // 0.1.0-274 — the Task Manager entry lives in the desktop
+            // context menu now. Window buttons keep their individual
+            // close-on-right-click above; the browser's own menu stays
+            // suppressed on the taskbar surface.
             var bar = document.getElementById('taskbar');
             if (bar) bar.addEventListener('contextmenu', function(e) {
                 if (e.target.closest('.taskbar-window-btn')) return;
-                if (!DESKTOP.desktopMenus || !DESKTOP.desktopMenus.showTaskbarMenu) return;
                 e.preventDefault();
-                DESKTOP.desktopMenus.showTaskbarMenu(e.clientX, e.clientY);
             });
         },
 

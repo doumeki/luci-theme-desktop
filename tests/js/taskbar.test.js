@@ -199,35 +199,16 @@ describe('Taskbar window button management', function() {
         assert.ok(/\d{1,2}:\d{2}/.test(text), 'clock format: ' + text);
     });
 
-    it('showTaskbarMenu should offer Task Manager and open its window', function() {
-        setupTaskbarDOM();
-        var opened = null;
-        var origOpen = WM.open;
-        WM.open = function(url, title) { opened = { url: url, title: title }; };
-        try {
-            LuCIDesktop.desktopMenus.showTaskbarMenu(30, 30);
-            var m = document.getElementById('taskbar-context-menu');
-            assert.ok(m, 'taskbar menu created');
-            var item = m.querySelector('.context-item[data-act="taskmgr"]');
-            assert.ok(item, 'Task Manager entry present');
-            item.click();
-            assert.ok(opened, 'window opened after click');
-            assert.ok(opened.url.indexOf('/admin/desktop/taskmgr') !== -1, 'taskmgr url: ' + opened.url);
-            assert.ok(!document.getElementById('taskbar-context-menu'), 'menu removed after click');
-        } finally {
-            WM.open = origOpen;
-            var stale = document.getElementById('taskbar-context-menu');
-            if (stale) stale.remove();
-        }
-    });
-
-    it('right-click on empty taskbar area should open the taskbar menu', function() {
+    it('right-click on empty taskbar area opens no theme menu (0.1.0-274)', function() {
+        // entry moved to the desktop context menu; the surface stays inert
+        // (native browser menu is still suppressed)
         setupTaskbarDOM();
         var tb = document.getElementById('taskbar');
         tb.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-        var m = document.getElementById('taskbar-context-menu');
-        assert.ok(m, 'menu opens from a taskbar right-click');
-        if (m) m.remove();
+        assert.isNull(document.getElementById('desktop-context-menu'),
+            'no desktop menu from a taskbar right-click');
+        assert.isNull(document.getElementById('taskbar-context-menu'),
+            'retired taskbar menu stays gone');
     });
 });
 
