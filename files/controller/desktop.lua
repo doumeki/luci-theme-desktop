@@ -1443,11 +1443,11 @@ h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 td.c-path{overflow:hidden;text-overflow:ellipsis;color:#666}
 .col-off{display:none}
 thead th span.drag{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;z-index:2}
-thead th span.drag::before{content:'';position:absolute;top:0;bottom:0;right:4px;width:1px;background:#d7dbdf}
-thead th span.drag:hover{background:rgba(74,144,217,.12)}
-thead th span.drag:hover::before{width:2px;right:3px;background:#4a90d9}
-thead th span.drag.drag-active{background:rgba(74,144,217,.18)}
-thead th span.drag.drag-active::before{width:2px;right:3px;background:#4a90d9}
+thead th span.drag::before{content:'';position:absolute;top:50%;right:4px;width:2px;height:14px;margin-top:-7px;background:#d4d8dc;border-radius:1px}
+thead th span.drag:hover{background:rgba(74,144,217,.08)}
+thead th span.drag:hover::before{height:16px;margin-top:-8px;background:#4a90d9}
+thead th span.drag.drag-active{background:rgba(74,144,217,.15)}
+thead th span.drag.drag-active::before{height:16px;margin-top:-8px;background:#4a90d9}
 body.col-resizing{cursor:col-resize;user-select:none}
 .mon-row{display:flex;gap:10px;margin-bottom:12px}
 .mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
@@ -1508,6 +1508,10 @@ tr.zombie{background:#fff3e0}
     var sort = { key: 'cpu', dir: -1 };   // default: CPU% descending (Windows style)
     var filter = '';
     var lastDragEnd = 0;   // suppresses the sort-click that follows a resize drag
+    // 'fit' = columns share the window width (percentage widths, re-flow on
+    // resize); 'px' = exact widths, entered on the first drag or when the
+    // stored widths differ from the defaults
+    var MODE = 'fit';
     // user preferences, persisted in the iframe's localStorage — the
     // server keeps no state for this page.
     var INTERVALS = [2000, 4000, 8000, 15000, 30000];
@@ -1530,6 +1534,13 @@ tr.zombie{background:#fff3e0}
             }
         }
         if (o.w && typeof o.w === 'object') {
+            // older builds stored blanket defaults; a map identical to DEF_W
+            // means "never actually resized", so keep auto-fit
+            var same = true;
+            for (var wchk in DEF_W) {
+                if (o.w[wchk] !== DEF_W[wchk]) { same = false; break; }
+            }
+            MODE = same ? 'fit' : 'px';
             for (var wk in DEF_W) {
                 if (typeof o.w[wk] === 'number' && o.w[wk] >= W_MIN && o.w[wk] <= W_MAX) {
                     cfg.w[wk] = Math.round(o.w[wk]);
@@ -1540,7 +1551,13 @@ tr.zombie{background:#fff3e0}
         cfg.cols.process = 1;
     })();
     function saveCfg() {
-        try { localStorage.setItem('desktop.taskmgr', JSON.stringify(cfg)); } catch (e) {}
+        try {
+            // while in fit mode the default map is not "user widths": storing
+            // it would flip the next load into px mode for no reason
+            var o = { interval: cfg.interval, cols: cfg.cols };
+            if (MODE === 'px') o.w = cfg.w;
+            localStorage.setItem('desktop.taskmgr', JSON.stringify(o));
+        } catch (e) {}
     }
 
     function cmpStr(a, b) {
@@ -1734,15 +1751,33 @@ tr.zombie{background:#fff3e0}
     }
     function applyWidths() {
         if (!tbl) return;
-        var sum = 0;
         var ths = document.querySelectorAll('thead th[data-key]');
-        for (var i = 0; i < ths.length; i++) {
-            var key = ths[i].getAttribute('data-key');
-            var w = widthOf(key);
-            ths[i].style.width = w + 'px';
-            if (cfg.cols[key]) sum += w;
+        if (MODE === 'fit') {
+            // share the window width, keeping the designed proportions;
+            // percentage widths re-flow on their own when the window resizes
+            var parts = {};
+            var sum = 0;
+            for (var i = 0; i < ths.length; i++) {
+                var key = ths[i].getAttribute('data-key');
+                if (cfg.cols[key]) { parts[key] = DEF_W[key]; sum += DEF_W[key]; }
+            }
+            if (!sum) return;
+            for (var j = 0; j < ths.length; j++) {
+                var k2 = ths[j].getAttribute('data-key');
+                ths[j].style.width =
+                    parts[k2] ? ((DEF_W[k2] * 100 / sum).toFixed(2) + '%') : '';
+            }
+            tbl.style.width = '';
+            return;
         }
-        tbl.style.width = sum ? (sum + 'px') : '';
+        var sum2 = 0;
+        for (var i2 = 0; i2 < ths.length; i2++) {
+            var key2 = ths[i2].getAttribute('data-key');
+            var w2 = widthOf(key2);
+            ths[i2].style.width = w2 + 'px';
+            if (cfg.cols[key2]) sum2 += w2;
+        }
+        tbl.style.width = sum2 ? (sum2 + 'px') : '';
     }
     (function() {
         if (!tbl) return;
@@ -1755,6 +1790,21 @@ tr.zombie{background:#fff3e0}
                 h.addEventListener('mousedown', function(ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
+                    if (MODE === 'fit') {
+                        // first user drag: freeze the rendered auto-fit layout
+                        // into exact px (hidden columns fall back to their
+                        // default width if re-shown later)
+                        var all = document.querySelectorAll('thead th[data-key]');
+                        for (var wk = 0; wk < all.length; wk++) {
+                            var k2 = all[wk].getAttribute('data-key');
+                            cfg.w[k2] = cfg.cols[k2]
+                                ? Math.round(all[wk].getBoundingClientRect().width)
+                                : DEF_W[k2];
+                        }
+                        MODE = 'px';
+                        applyWidths();
+                        saveCfg();
+                    }
                     var sx = ev.clientX, sw = widthOf(key);
                     h.classList.add('drag-active');
                     document.body.classList.add('col-resizing');
