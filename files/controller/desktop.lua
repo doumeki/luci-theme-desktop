@@ -1678,6 +1678,13 @@ tr.zombie{background:#fff3e0}
             (function(th) {
                 var key = th.getAttribute('data-key');
                 hdr[key] = th.textContent;
+                // header content becomes [label span][drag handle]; paintHdr
+                // then only rewrites the label and never wipes the handle
+                th.textContent = '';
+                var lbl = document.createElement('span');
+                lbl.className = 'lbl';
+                lbl.textContent = hdr[key];
+                th.appendChild(lbl);
                 th.addEventListener('click', function() {
                     if (Date.now() - lastDragEnd < 250) return;   // that was a drag, not a sort click
                     if (sort.key === key) {
@@ -1696,7 +1703,8 @@ tr.zombie{background:#fff3e0}
         for (var i = 0; i < ths.length; i++) {
             var key = ths[i].getAttribute('data-key');
             var arrow = (key === sort.key) ? (sort.dir < 0 ? ' ↓' : ' ↑') : '';
-            ths[i].textContent = hdr[key] + arrow;
+            var lbl = ths[i].querySelector('span.lbl');
+            if (lbl) lbl.textContent = hdr[key] + arrow;
         }
     }
     // column visibility: idempotent class toggling on th + td
