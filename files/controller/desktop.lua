@@ -1443,11 +1443,11 @@ h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 td.c-path{overflow:hidden;text-overflow:ellipsis;color:#666}
 .col-off{display:none}
 thead th span.drag{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;z-index:2}
-thead th span.drag::before{content:'';position:absolute;top:50%;right:4px;width:2px;height:14px;margin-top:-7px;background:#d4d8dc;border-radius:1px}
+thead th span.drag::before{content:'';position:absolute;top:50%;right:4px;width:2px;height:16px;margin-top:-8px;background:transparent;border-radius:1px}
 thead th span.drag:hover{background:rgba(74,144,217,.08)}
-thead th span.drag:hover::before{height:16px;margin-top:-8px;background:#4a90d9}
+thead th span.drag:hover::before{background:#4a90d9}
 thead th span.drag.drag-active{background:rgba(74,144,217,.15)}
-thead th span.drag.drag-active::before{height:16px;margin-top:-8px;background:#4a90d9}
+thead th span.drag.drag-active::before{background:#4a90d9}
 body.col-resizing{cursor:col-resize;user-select:none}
 .mon-row{display:flex;gap:10px;margin-bottom:12px}
 .mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
@@ -1762,11 +1762,24 @@ tr.zombie{background:#fff3e0}
                 if (cfg.cols[key]) { parts[key] = DEF_W[key]; sum += DEF_W[key]; }
             }
             if (!sum) return;
+            // visible columns share the width by designed proportion; the
+            // LAST visible one gets no explicit width and therefore absorbs
+            // the exact remainder — the table always really reaches the
+            // right edge, no rounding residue at the end
+            var vis = [];
+            for (var i = 0; i < ths.length; i++) {
+                var k3 = ths[i].getAttribute('data-key');
+                if (cfg.cols[k3]) vis.push(ths[i]);
+            }
             for (var j = 0; j < ths.length; j++) {
                 var k2 = ths[j].getAttribute('data-key');
-                ths[j].style.width =
-                    parts[k2] ? ((DEF_W[k2] * 100 / sum).toFixed(2) + '%') : '';
+                if (vis.indexOf(ths[j]) === -1) { ths[j].style.width = ''; continue; }
             }
+            for (var j3 = 0; j3 < vis.length - 1; j3++) {
+                var k4 = vis[j3].getAttribute('data-key');
+                vis[j3].style.width = ((DEF_W[k4] * 100 / sum).toFixed(2) + '%');
+            }
+            if (vis.length) vis[vis.length - 1].style.width = '';
             tbl.style.width = '';
             return;
         }
