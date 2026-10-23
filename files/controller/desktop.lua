@@ -1442,9 +1442,12 @@ h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 #set-cols input[type=checkbox]{accent-color:#4a90d9}
 td.c-path{overflow:hidden;text-overflow:ellipsis;color:#666}
 .col-off{display:none}
-thead th span.drag{position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:2}
-thead th span.drag:hover{background:rgba(74,144,217,.3)}
-thead th span.drag.drag-active{background:rgba(74,144,217,.45)}
+thead th span.drag{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;z-index:2}
+thead th span.drag::before{content:'';position:absolute;top:0;bottom:0;right:4px;width:1px;background:#d7dbdf}
+thead th span.drag:hover{background:rgba(74,144,217,.12)}
+thead th span.drag:hover::before{width:2px;right:3px;background:#4a90d9}
+thead th span.drag.drag-active{background:rgba(74,144,217,.18)}
+thead th span.drag.drag-active::before{width:2px;right:3px;background:#4a90d9}
 body.col-resizing{cursor:col-resize;user-select:none}
 .mon-row{display:flex;gap:10px;margin-bottom:12px}
 .mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
