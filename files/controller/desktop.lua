@@ -1440,16 +1440,20 @@ h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 .set-row select{border:1px solid #d3d7db;border-radius:4px;padding:3px 6px;font-size:12px;background:#fff;color:#333}
 #set-cols label{display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer}
 #set-cols input[type=checkbox]{accent-color:#4a90d9}
-td.c-path{max-width:200px;overflow:hidden;text-overflow:ellipsis;color:#666}
+td.c-path{overflow:hidden;text-overflow:ellipsis;color:#666}
 .col-off{display:none}
+thead th span.drag{position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:2}
+thead th span.drag:hover{background:rgba(74,144,217,.3)}
+thead th span.drag.drag-active{background:rgba(74,144,217,.45)}
+body.col-resizing{cursor:col-resize;user-select:none}
 .mon-row{display:flex;gap:10px;margin-bottom:12px}
 .mon{flex:1;min-width:0;background:#fff;border:1px solid #e0e4e8;border-radius:6px;padding:10px 12px}
 .mon-label{font-size:11px;font-weight:600;color:#777;text-transform:uppercase;letter-spacing:.4px}
 .mon-foot{display:flex;align-items:flex-end;gap:8px;margin-top:4px}
 .mon-val{font-size:20px;font-weight:600;line-height:1.2}
 canvas{margin-left:auto;flex:none}
-.table-wrap{border:1px solid #e0e4e8;border-radius:6px;overflow:hidden;background:#fff}
-table{width:100%;border-collapse:collapse;font-size:12px}
+.table-wrap{border:1px solid #e0e4e8;border-radius:6px;overflow:auto;background:#fff}
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
 thead th{position:sticky;top:0;background:#f8f9fa;font-size:11px;color:#666;text-align:left;padding:6px 10px;border-bottom:1px solid #e0e4e8;font-weight:600;z-index:1}
 thead th{cursor:pointer;user-select:none}
 thead th:hover{background:#eef1f4}
@@ -1479,7 +1483,7 @@ tr.zombie{background:#fff3e0}
 <div class="mon-foot"><div class="mon-val" id="mem-val">–</div><canvas id="mem-graph" width="150" height="38"></canvas></div>
 </div>
 </div>
-<div class="table-wrap"><table>
+<div class="table-wrap"><table id="tbl">
 <thead><tr><th data-key="pid">]] .. changes_escape(t("PID")) .. [[</th><th data-key="process">]] .. changes_escape(t("Process")) .. [[</th><th data-key="path">]] .. changes_escape(t("Path")) .. [[</th><th data-key="user">]] .. changes_escape(t("User")) .. [[</th><th data-key="state">]] .. changes_escape(t("Status")) .. [[</th><th class="num" data-key="cpu">]] .. changes_escape(t("CPU")) .. [[</th><th class="num" data-key="memory">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
 <tbody id="tbody"><tr><td colspan="7">–</td></tr></tbody>
 </table></div>
@@ -1500,10 +1504,18 @@ tr.zombie{background:#fff3e0}
     var MAX = 60;
     var sort = { key: 'cpu', dir: -1 };   // default: CPU% descending (Windows style)
     var filter = '';
+    var lastDragEnd = 0;   // suppresses the sort-click that follows a resize drag
     // user preferences, persisted in the iframe's localStorage — the
     // server keeps no state for this page.
     var INTERVALS = [2000, 4000, 8000, 15000, 30000];
-    var cfg = { interval: 4000, cols: { pid: 1, process: 1, user: 1, state: 1, path: 1, cpu: 1, memory: 1 } };
+    var W_MIN = 40, W_MAX = 640;
+    var DEF_W = { pid: 60, process: 140, path: 200, user: 80, state: 60, cpu: 80, memory: 110 };
+    var cfg = {
+        interval: 4000,
+        cols: { pid: 1, process: 1, user: 1, state: 1, path: 1, cpu: 1, memory: 1 },
+        w: { pid: 60, process: 140, path: 200, user: 80, state: 60, cpu: 80, memory: 110 }
+    };
+    var tbl = document.getElementById('tbl');
     (function() {
         var o = null;
         try { o = JSON.parse(localStorage.getItem('desktop.taskmgr') || 'null'); } catch (e) { o = null; }
@@ -1512,6 +1524,13 @@ tr.zombie{background:#fff3e0}
         if (o.cols && typeof o.cols === 'object') {
             for (var k in cfg.cols) {
                 if (o.cols[k] !== undefined) cfg.cols[k] = o.cols[k] ? 1 : 0;
+            }
+        }
+        if (o.w && typeof o.w === 'object') {
+            for (var wk in DEF_W) {
+                if (typeof o.w[wk] === 'number' && o.w[wk] >= W_MIN && o.w[wk] <= W_MAX) {
+                    cfg.w[wk] = Math.round(o.w[wk]);
+                }
             }
         }
         // the name column is the identity of a row: always on
@@ -1657,6 +1676,7 @@ tr.zombie{background:#fff3e0}
                 var key = th.getAttribute('data-key');
                 hdr[key] = th.textContent;
                 th.addEventListener('click', function() {
+                    if (Date.now() - lastDragEnd < 250) return;   // that was a drag, not a sort click
                     if (sort.key === key) {
                         sort.dir = -sort.dir;
                     } else {
@@ -1690,7 +1710,72 @@ tr.zombie{background:#fff3e0}
                 tds[j].classList.toggle('col-off', !cfg.cols[ck]);
             }
         }
+        applyWidths();   // hidden columns drop out of the table width
     }
+
+    // ---- resizable columns ----------------------------------------------
+    // th widths are explicit px (layout is fixed), the table width equals
+    // the visible sum, and the wrapper scrolls horizontally. Drag the
+    // handle at a header's right edge; double-click resets that column.
+    function widthOf(key) {
+        var w = cfg.w[key];
+        return (w && w >= W_MIN && w <= W_MAX) ? w : DEF_W[key];
+    }
+    function applyWidths() {
+        if (!tbl) return;
+        var sum = 0;
+        var ths = document.querySelectorAll('thead th[data-key]');
+        for (var i = 0; i < ths.length; i++) {
+            var key = ths[i].getAttribute('data-key');
+            var w = widthOf(key);
+            ths[i].style.width = w + 'px';
+            if (cfg.cols[key]) sum += w;
+        }
+        tbl.style.width = sum ? (sum + 'px') : '';
+    }
+    (function() {
+        if (!tbl) return;
+        var ths = document.querySelectorAll('thead th[data-key]');
+        for (var i = 0; i < ths.length; i++) {
+            (function(th) {
+                var key = th.getAttribute('data-key');
+                var h = document.createElement('span');
+                h.className = 'drag';
+                h.addEventListener('mousedown', function(ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    var sx = ev.clientX, sw = widthOf(key);
+                    h.classList.add('drag-active');
+                    document.body.classList.add('col-resizing');
+                    function moving(e2) {
+                        var w = Math.max(W_MIN, Math.min(W_MAX, sw + e2.clientX - sx));
+                        if (cfg.w[key] !== w) {
+                            cfg.w[key] = w;
+                            applyWidths();
+                        }
+                    }
+                    function done() {
+                        document.removeEventListener('mousemove', moving);
+                        document.removeEventListener('mouseup', done);
+                        h.classList.remove('drag-active');
+                        document.body.classList.remove('col-resizing');
+                        lastDragEnd = Date.now();   // the synthetic click right after must not re-sort
+                        saveCfg();
+                    }
+                    document.addEventListener('mousemove', moving);
+                    document.addEventListener('mouseup', done);
+                });
+                h.addEventListener('dblclick', function(ev) {
+                    ev.preventDefault();
+                    delete cfg.w[key];
+                    saveCfg();
+                    applyWidths();
+                });
+                th.appendChild(h);
+            })(ths[i]);
+        }
+        applyWidths();
+    })();
 
     var fEl = document.getElementById('filter');
     if (fEl) fEl.addEventListener('input', function() {
