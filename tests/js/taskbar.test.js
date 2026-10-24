@@ -232,6 +232,31 @@ describe('Taskbar window button management', function() {
             WM.open = origOpen;
         }
     });
+
+    it('setupTaskMgr defers while tray.js has not evaluated yet (0.1.0-277)', function() {
+        setupTaskbarDOM();
+        // clean slate: drop a button a prior test left in the DOM and the
+        // registry entry so the install path really runs again
+        var stale = document.querySelector('.tray-item[data-tray-id="taskmgr"]');
+        if (stale) stale.remove();
+        // tray.js keeps defs in .registry and rendered state in .items and
+        // has no unregister API — erase both so the install path re-runs
+        delete TrayManager.registry.taskmgr;
+        delete TrayManager.items.taskmgr;
+        var origTM = window.TrayManager;
+        window.TrayManager = undefined;
+        try {
+            Taskbar.setupTaskMgr();
+            assert.isNull(document.querySelector('.tray-item[data-tray-id="taskmgr"]'),
+                'deferred while window.TrayManager is absent (page keeps loading)');
+        } finally {
+            window.TrayManager = origTM;
+        }
+        Taskbar.setupTaskMgr();
+        var btn = document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]');
+        assert.ok(btn, 'button appears once tray.js is reachable');
+        assert.ok(btn.querySelector('svg'), 'SVG icon rendered through the deferral path');
+    });
 });
 
 })();

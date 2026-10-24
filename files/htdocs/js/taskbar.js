@@ -63,14 +63,32 @@
         // Bottom-right mini button: the Task Manager entry lives in the
         // system tray next to the clock, via the extensible TrayManager API
         // (0.1.0-275; replaces the desktop-context-menu entry of 274).
-        // Graceful no-op when the tray module or window manager is absent.
+        // Waits for the tray module when it has not evaluated yet (the
+        // real page loads taskbar.js before tray.js — deferred retry,
+        // 0.1.0-277); graceful no-op when the window manager is absent.
         setupTaskMgr: function() {
             // DESKTOP.register(name, impl) only fills the subsystems map —
             // it never exposes a DESKTOP.<name> property. tray.js mirrors
             // the manager on window.TrayManager; that mirror is the
             // cross-module access path.
             var trayMgr = window.TrayManager;
-            if (!trayMgr || !trayMgr.register || !trayMgr.enable || !window.WM) return;
+            if (!trayMgr || !trayMgr.register || !trayMgr.enable || !window.WM) {
+                // Production load order: taskbar.js evals BEFORE tray.js
+                // (header.htm script list), and DESKTOP.register runs
+                // init() right at eval time, so window.TrayManager is
+                // still missing here — the 0.1.0-276 button never appeared
+                // on real devices. Defer to a moment after every script
+                // has evaluated; the installed guard below keeps the
+                // retry idempotent (0.1.0-277).
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        Taskbar.setupTaskMgr();
+                    }, {once: true});
+                } else {
+                    setTimeout(function() { Taskbar.setupTaskMgr(); }, 0);
+                }
+                return;
+            }
             if (trayMgr.items.taskmgr) return;
             trayMgr.register({
                 id: 'taskmgr',
