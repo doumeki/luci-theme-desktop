@@ -26,6 +26,7 @@
             this.setupWindowList();
             this.setupShowDesktop();
             this.setupAutoRefresh();
+            this.setupTaskMgr();
             this.startClock();
             this.bindEvents();
         },
@@ -57,6 +58,38 @@
                 // TODO: emit event to control XHR polling in iframes
                 DESKTOP.emit('auto-refresh-toggled', {on: isOn});
             });
+        },
+
+        // Bottom-right mini button: the Task Manager entry lives in the
+        // system tray next to the clock, via the extensible TrayManager API
+        // (0.1.0-275; replaces the desktop-context-menu entry of 274).
+        // Graceful no-op when the tray module or window manager is absent.
+        setupTaskMgr: function() {
+            var trayMgr = DESKTOP.tray;
+            if (!trayMgr || !trayMgr.register || !trayMgr.enable || !window.WM) return;
+            if (trayMgr.items.taskmgr) return;
+            trayMgr.register({
+                id: 'taskmgr',
+                // the render API sets textContent; the SVG swaps in below
+                icon: '',
+                tooltip: _('Task Manager'),
+                onClick: function() {
+                    window.WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
+                },
+                order: 10
+            });
+            trayMgr.enable('taskmgr');
+            var el = trayMgr.items.taskmgr && trayMgr.items.taskmgr.el;
+            if (el && el.querySelector) {
+                var ic = el.querySelector('.tray-item-icon');
+                if (ic) {
+                    ic.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'
+                        + '<rect x="2" y="9" width="3" height="5" rx="0.8"/>'
+                        + '<rect x="6.5" y="6" width="3" height="8" rx="0.8"/>'
+                        + '<rect x="11" y="3" width="3" height="11" rx="0.8"/>'
+                        + '</svg>';
+                }
+            }
         },
 
         _setToggleState: function(btn, on) {

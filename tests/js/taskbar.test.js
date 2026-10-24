@@ -210,6 +210,28 @@ describe('Taskbar window button management', function() {
         assert.isNull(document.getElementById('taskbar-context-menu'),
             'retired taskbar menu stays gone');
     });
+
+    it('tray Task Manager button opens the taskmgr window (0.1.0-275)', function() {
+        setupTaskbarDOM();
+        var btn = document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]');
+        if (!btn && Taskbar.setupTaskMgr) {
+            Taskbar.setupTaskMgr();
+            btn = document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]');
+        }
+        assert.ok(btn, 'tray button exists next to the clock');
+        assert.ok(btn.querySelector('svg'), 'SVG bar-chart icon rendered');
+        var opened = null;
+        var origOpen = WM.open;
+        WM.open = function(url, title) { opened = { url: url, title: title }; };
+        try {
+            btn.click();
+            assert.ok(opened, 'window opened after click');
+            assert.ok(opened.url.indexOf('/admin/desktop/taskmgr') !== -1,
+                'taskmgr url: ' + (opened && opened.url));
+        } finally {
+            WM.open = origOpen;
+        }
+    });
 });
 
 })();
