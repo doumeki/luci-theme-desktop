@@ -19,6 +19,10 @@
 
     var DESKTOP = window.LuCIDesktop;
 
+    // Corner-overflow document listeners are bound once (they resolve the
+    // panel through TrayManager._panel, so recreated panels keep working)
+    var overflowDocBound = false;
+
     // Order sort: lower order = closer to clock (right side)
     function _insertSorted(trayEl, el, order) {
         var items = trayEl.querySelectorAll('.tray-item');
@@ -49,7 +53,8 @@
                 icon: def.icon || '?',
                 tooltip: def.tooltip || '',
                 onClick: def.onClick || null,
-                order: def.order || 100
+                order: def.order || 100,
+                overflow: !!def.overflow
             };
         },
 
@@ -57,9 +62,6 @@
             var def = this.registry[id];
             if (!def) throw new Error('Tray item "' + id + '" not registered');
             if (this.items[id]) return; // already enabled — no-op instead of throw (tolerance for restore)
-
-            var trayEl = document.getElementById('taskbar-tray');
-            if (!trayEl) return;
 
             var el = document.createElement('span');
             el.className = 'tray-item';
@@ -72,15 +74,31 @@
             iconEl.textContent = def.icon;
             el.appendChild(iconEl);
 
+            var trayEl = document.getElementById('taskbar-tray');
+            if (def.overflow) {
+                // Windows corner overflow (0.1.0-278): overflow items are
+                // NEVER direct children of the tray bar — the small
+                // chevron collects them and a popup shows them.
+                if (!this._ensureOverflow()) return;
+                this._panel.appendChild(el);
+            } else {
+                if (!trayEl) return;
+                _insertSorted(trayEl, el, def.order);
+            }
+
             if (def.onClick) {
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {
                     e.stopPropagation();
                     def.onClick();
+                    if (def.overflow) TrayManager.closeOverflow();
                 });
             }
 
-            _insertSorted(trayEl, el, def.order);
+            if (def.overflow) {
+                var chev = document.getElementById('tray-overflow');
+                if (chev) chev.style.display = '';
+            }
             this.items[id] = {id: id, el: el};
 
             DESKTOP.emit('tray-item-added', {id: id});
@@ -94,7 +112,85 @@
             }
             delete this.items[id];
 
+            // Windows behaviour: with no hidden icons left, hide the
+            // chevron; the next overflow enable() puts it back.
+            var hasOverflow = false;
+            for (var oid in this.items) {
+                var odef = this.registry[oid];
+                if (odef && odef.overflow) { hasOverflow = true; break; }
+            }
+            var chev = document.getElementById('tray-overflow');
+            if (chev) chev.style.display = hasOverflow ? '' : 'none';
+
             DESKTOP.emit('tray-item-removed', {id: id});
+        },
+
+        // ===== Corner Overflow (Windows taskbar ^) =====
+
+        toggleOverflow: function() {
+            var panel = this._ensureOverflow();
+            if (!panel) return;
+            if (panel.classList.contains('open')) {
+                this.closeOverflow();
+                return;
+            }
+            // registry order: lower order first (stable, def-controlled)
+            var rows = Array.prototype.slice.call(panel.children);
+            rows.sort(function(a, b) {
+                return (parseInt(a.getAttribute('data-order')) || 100)
+                     - (parseInt(b.getAttribute('data-order')) || 100);
+            });
+            rows.forEach(function(r) { panel.appendChild(r); });
+            panel.classList.add('open');
+        },
+
+        closeOverflow: function() {
+            if (this._panel) this._panel.classList.remove('open');
+        },
+
+        _ensureOverflow: function() {
+            var chev = document.getElementById('tray-overflow');
+            if (!chev) {
+                var trayEl = document.getElementById('taskbar-tray');
+                if (!trayEl) return null;
+                chev = document.createElement('button');
+                chev.id = 'tray-overflow';
+                chev.className = 'tray-overflow';
+                chev.setAttribute('title', _('Show hidden icons'));
+                chev.setAttribute('aria-label', _('Show hidden icons'));
+                chev.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+                    + '<path d="M3.5 9.5 8 5l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                chev.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    TrayManager.toggleOverflow();
+                });
+                trayEl.appendChild(chev);
+            }
+            var panel = document.getElementById('tray-overflow-panel');
+            if (!panel) {
+                panel = document.createElement('div');
+                panel.id = 'tray-overflow-panel';
+                document.body.appendChild(panel);
+            }
+            this._panel = panel;
+
+            if (!overflowDocBound) {
+                var self = this;
+                document.addEventListener('click', function(e) {
+                    var pnl = self._panel;
+                    if (!pnl || !pnl.classList.contains('open')) return;
+                    var ch = document.getElementById('tray-overflow');
+                    if (pnl.contains(e.target) || (ch && ch.contains(e.target))) return;
+                    self.closeOverflow();
+                });
+                document.addEventListener('keydown', function(e) {
+                    if (e.key !== 'Escape') return;
+                    var pnl = self._panel;
+                    if (pnl && pnl.classList.contains('open')) self.closeOverflow();
+                });
+                overflowDocBound = true;
+            }
+            return panel;
         },
 
         hide: function(id) {

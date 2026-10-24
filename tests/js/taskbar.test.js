@@ -211,23 +211,30 @@ describe('Taskbar window button management', function() {
             'retired taskbar menu stays gone');
     });
 
-    it('tray Task Manager button opens the taskmgr window (0.1.0-275)', function() {
+    it('Task Manager tucks into the tray overflow (^) popup (0.1.0-278)', function() {
         setupTaskbarDOM();
-        var btn = document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]');
-        if (!btn && Taskbar.setupTaskMgr) {
+        if (!TrayManager.registry.taskmgr && Taskbar.setupTaskMgr) {
             Taskbar.setupTaskMgr();
-            btn = document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]');
         }
-        assert.ok(btn, 'tray button exists next to the clock');
-        assert.ok(btn.querySelector('svg'), 'SVG bar-chart icon rendered');
+        assert.isNull(document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]'),
+            'taskmgr is not a direct tray item anymore');
+        var chev = document.querySelector('#taskbar-tray .tray-overflow');
+        assert.ok(chev, 'overflow chevron sits in the tray');
+        var panel = document.getElementById('tray-overflow-panel');
+        assert.ok(panel, 'overflow panel exists (hidden by default)');
+        chev.click();
+        var btn = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="taskmgr"]');
+        assert.ok(btn, 'taskmgr lives inside the overflow panel');
+        assert.ok(btn.querySelector('svg'), 'SVG bar-chart icon rendered in the panel');
         var opened = null;
         var origOpen = WM.open;
         WM.open = function(url, title) { opened = { url: url, title: title }; };
         try {
             btn.click();
-            assert.ok(opened, 'window opened after click');
+            assert.ok(opened, 'window opened after panel-icon click');
             assert.ok(opened.url.indexOf('/admin/desktop/taskmgr') !== -1,
                 'taskmgr url: ' + (opened && opened.url));
+            assert.ok(!panel.classList.contains('open'), 'panel closes after the icon is used');
         } finally {
             WM.open = origOpen;
         }
@@ -253,8 +260,10 @@ describe('Taskbar window button management', function() {
             window.TrayManager = origTM;
         }
         Taskbar.setupTaskMgr();
-        var btn = document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]');
-        assert.ok(btn, 'button appears once tray.js is reachable');
+        assert.ok(document.querySelector('#taskbar-tray .tray-overflow'),
+            'overflow chevron appears once tray.js is reachable');
+        var btn = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="taskmgr"]');
+        assert.ok(btn, 'taskmgr item appears once tray.js is reachable');
         assert.ok(btn.querySelector('svg'), 'SVG icon rendered through the deferral path');
     });
 });

@@ -273,4 +273,72 @@ describe('Keyboard shortcuts', function() {
     });
 });
 
+// ===== Corner overflow (Windows taskbar ^, 0.1.0-278) =====
+// defs registered with overflow:true must NOT be direct tray children;
+// the chevron collects them into a popup that toggles open/closed.
+describe('TrayManager corner overflow (^)', function() {
+    beforeEach(function() {
+        setupTrayDOM();
+        // stale overflow chrome from a previous test
+        var oldPanel = document.getElementById('tray-overflow-panel');
+        if (oldPanel) oldPanel.remove();
+        var oldChev = document.getElementById('tray-overflow');
+        if (oldChev) oldChev.remove();
+    });
+    afterEach(function() {
+        TrayManager.closeOverflow();
+    });
+
+    it('overflow item stays out of the tray; chevron collects it', function() {
+        TrayManager.register({id: 'ovf', icon: 'T', tooltip: 'Hidden Tool', overflow: true});
+        TrayManager.enable('ovf');
+        assert.isNull(document.querySelector('#taskbar-tray .tray-item[data-tray-id="ovf"]'),
+            'never a direct tray item');
+        assert.ok(document.getElementById('tray-overflow'), 'chevron sits in the tray');
+        var panel = document.getElementById('tray-overflow-panel');
+        assert.ok(panel, 'panel created');
+        assert.ok(panel.querySelector('.tray-item[data-tray-id="ovf"]'), 'item rendered inside the panel');
+        assert.ok(!panel.classList.contains('open'), 'panel starts closed');
+    });
+
+    it('chevron toggles the panel; outside click closes it', function() {
+        TrayManager.register({id: 'ovf2', icon: 'T', overflow: true});
+        TrayManager.enable('ovf2');
+        var chev = document.getElementById('tray-overflow');
+        var panel = document.getElementById('tray-overflow-panel');
+        chev.click();
+        assert.ok(panel.classList.contains('open'), 'opens on chevron click');
+        chev.click();
+        assert.ok(!panel.classList.contains('open'), 'closes on second chevron click');
+        chev.click();
+        assert.ok(panel.classList.contains('open'), 'opens again');
+        document.body.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        assert.ok(!panel.classList.contains('open'), 'outside click closes');
+    });
+
+    it('item click runs onClick and closes the panel', function() {
+        var fired = 0;
+        TrayManager.register({id: 'ovf3', icon: 'T', overflow: true, onClick: function() { fired++; }});
+        TrayManager.enable('ovf3');
+        document.getElementById('tray-overflow').click();
+        var item = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="ovf3"]');
+        item.click();
+        assert.equal(fired, 1, 'onClick fired');
+        assert.ok(!document.getElementById('tray-overflow-panel').classList.contains('open'),
+            'panel closed after the item is used');
+    });
+
+    it('disabling the last overflow item hides the chevron (like Windows)', function() {
+        TrayManager.register({id: 'ovf4', icon: 'T', overflow: true});
+        TrayManager.enable('ovf4');
+        assert.ok(document.getElementById('tray-overflow'), 'chevron present');
+        TrayManager.disable('ovf4');
+        var chev = document.getElementById('tray-overflow');
+        assert.equal(chev.style.display, 'none', 'chevron hidden when nothing is collected');
+        TrayManager.enable('ovf4');
+        assert.notEqual(document.getElementById('tray-overflow').style.display, 'none',
+            'chevron back when an overflow item exists');
+    });
+});
+
 })();

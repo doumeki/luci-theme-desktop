@@ -60,9 +60,10 @@
             });
         },
 
-        // Bottom-right mini button: the Task Manager entry lives in the
-        // system tray next to the clock, via the extensible TrayManager API
-        // (0.1.0-275; replaces the desktop-context-menu entry of 274).
+        // Tray entry for the Task Manager via the extensible TrayManager
+        // API (0.1.0-275; replaces the desktop-context-menu entry of 274).
+        // Windows-style: collected behind the corner overflow chevron (^)
+        // instead of a direct slot (0.1.0-278).
         // Waits for the tray module when it has not evaluated yet (the
         // real page loads taskbar.js before tray.js — deferred retry,
         // 0.1.0-277); graceful no-op when the window manager is absent.
@@ -98,7 +99,10 @@
                 onClick: function() {
                     window.WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
                 },
-                order: 10
+                order: 10,
+                // Windows taskbar-corner style: tuck the manager behind
+                // the small tray chevron (collected icons popup)
+                overflow: true
             });
             trayMgr.enable('taskmgr');
             var el = trayMgr.items.taskmgr && trayMgr.items.taskmgr.el;

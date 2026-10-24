@@ -431,6 +431,9 @@ msgstr ""
 msgid "Recent Apps"
 msgstr ""
 
+msgid "Show hidden icons"
+msgstr ""
+
 msgid "Install"
 msgstr ""
 
