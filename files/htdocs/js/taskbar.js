@@ -65,7 +65,11 @@
         // (0.1.0-275; replaces the desktop-context-menu entry of 274).
         // Graceful no-op when the tray module or window manager is absent.
         setupTaskMgr: function() {
-            var trayMgr = DESKTOP.tray;
+            // DESKTOP.register(name, impl) only fills the subsystems map —
+            // it never exposes a DESKTOP.<name> property. tray.js mirrors
+            // the manager on window.TrayManager; that mirror is the
+            // cross-module access path.
+            var trayMgr = window.TrayManager;
             if (!trayMgr || !trayMgr.register || !trayMgr.enable || !window.WM) return;
             if (trayMgr.items.taskmgr) return;
             trayMgr.register({
