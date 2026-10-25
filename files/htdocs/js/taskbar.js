@@ -109,10 +109,9 @@
             if (el && el.querySelector) {
                 var ic = el.querySelector('.tray-item-icon');
                 if (ic) {
-                    ic.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'
-                        + '<rect x="2" y="9" width="3" height="5" rx="0.8"/>'
-                        + '<rect x="6.5" y="6" width="3" height="8" rx="0.8"/>'
-                        + '<rect x="11" y="3" width="3" height="11" rx="0.8"/>'
+                    ic.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+                        + '<rect x="2" y="2" width="12" height="12" rx="2.2" stroke="currentColor" stroke-width="1.5"/>'
+                        + '<path d="M4.4 9.6l1.9-2.9 1.7 3.6 1.5-4.6 1.2 2.7h1.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
                         + '</svg>';
                 }
             }
