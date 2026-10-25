@@ -725,7 +725,11 @@ function action_random_wallpaper()
             log[#log + 1] = "url=" .. cache_url
             server_log("random_wallpaper mode=" .. mode .. " fallback=existing_cache url=" .. cache_url)
             luci.http.prepare_content("application/json")
-            luci.http.write('{"url":"' .. cache_url .. '","debug":"' .. table.concat(log, " | ") .. '"}')
+            -- Contract (shell.js bg-refresh guard): cached:true == "this is NOT
+            -- a fresh download". The old wallpaper stays on the desktop as the
+            -- OLD image: no re-apply, no confirm_wallpaper POST, no fake
+            -- "confirm ok" in the log. Fallback must honor it like cache_hit.
+            luci.http.write('{"url":"' .. cache_url .. '","cached":true,"debug":"' .. table.concat(log, " | ") .. '"}')
             return
         end
         local fallback = "/luci-static/desktop/img/bg1.jpg"
@@ -733,7 +737,8 @@ function action_random_wallpaper()
         log[#log + 1] = "url=" .. fallback
         server_log("random_wallpaper mode=" .. mode .. " fallback=default bg1")
         luci.http.prepare_content("application/json")
-        luci.http.write('{"url":"' .. fallback .. '","debug":"' .. table.concat(log, " | ") .. '"}')
+        -- Same contract: default bg1 is also not a fresh mode image.
+        luci.http.write('{"url":"' .. fallback .. '","cached":true,"debug":"' .. table.concat(log, " | ") .. '"}')
         return
     end
 

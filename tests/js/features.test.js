@@ -460,6 +460,50 @@ describe('Background refresh mode guard', function() {
             window.Image = origImage;
         }
     });
+    it('cached:true fallback is a no-op: desktop untouched, no confirm POST', function() {
+        var cfg = document.getElementById('desktop-config');
+        cfg.textContent = JSON.stringify({
+            widgets: {}, pins: [], hidden_icons: [],
+            theme: { desktop_wallpaper: 'bing', picsum_auto_refresh: '1' },
+            wallpaper: { mode: 'bing', url: '/cache/wallpaper_bing.jpg' }
+        });
+        var wp = document.getElementById('desktop-wallpaper');
+        if (!wp) { wp = document.createElement('div'); wp.id = 'desktop-wallpaper'; document.body.appendChild(wp); }
+        wp.style.backgroundImage = '';
+
+        var origSetTimeout = window.setTimeout;
+        var origXHR = window.XMLHttpRequest;
+        var origImage = window.Image;
+        var xhrs = [], imgObj = null;
+        window.setTimeout = function(fn) { fn(); return 1; };
+        window.XMLHttpRequest = function() {
+            var x = this;
+            x.open = function(m, u) { x.method = m; x.url = u; };
+            x.setRequestHeader = function() {};
+            x.send = function() { xhrs.push(x); };
+        };
+        window.Image = function() { imgObj = this; this.onload = null; this.onerror = null; this.src = ''; };
+
+        try {
+            LuCIDesktop._backgroundRefresh();
+            assert.ok(xhrs.length === 1, 'bg-refresh XHR fired');
+
+            // Server could not download a new image: fallback answers with the
+            // OLD cache file and cached:true (server contract since 0.1.0-281).
+            xhrs[0].status = 200;
+            xhrs[0].responseText = '{"url":"/luci-static/desktop/cache/wallpaper_bing.jpg","cached":true,"debug":"fallback=existing_cache"}';
+            xhrs[0].onload();
+
+            assert.equal(wp.style.backgroundImage, '',
+                'cached fallback must NOT re-apply the old image as if new');
+            assert.ok(imgObj === null, 'no preload attempted for a cached fallback (Image never constructed)');
+            assert.ok(xhrs.length === 1, 'no confirm_wallpaper POST for a cached fallback');
+        } finally {
+            window.setTimeout = origSetTimeout;
+            window.XMLHttpRequest = origXHR;
+            window.Image = origImage;
+        }
+    });
 });
 
 // ===== Picsum auto-refresh off must suppress login force-refresh =====

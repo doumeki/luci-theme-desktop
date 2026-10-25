@@ -21,14 +21,30 @@ fi
 
 # Fetch fresh URL
 URL=""
+# Cross-border links routinely stall longer than the old 3s cap; single-shot
+# fetching turned every stall into a silent "no new wallpaper today". Give each
+# attempt 8s, retry once, and send a browser UA + follow redirects (-L).
+# (PICPATH was renamed from PATH, which was shadowing the environment variable.)
+UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 case "$MODE" in
     bing)
-        DATA=$(/usr/bin/curl -fks --max-time 3 "https://www.bing.com/HPImageArchive.aspx?format=js&n=1" 2>/dev/null)
-        PATH=$(echo "$DATA" | /bin/sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
-        [ -n "$PATH" ] && URL="https://www.bing.com$PATH"
+        try=0
+        while [ "$try" -lt 2 ]; do
+            try=$((try + 1))
+            DATA=$(/usr/bin/curl -fksL --max-time 8 -A "$UA" "https://www.bing.com/HPImageArchive.aspx?format=js&n=1" 2>/dev/null)
+            PICPATH=$(echo "$DATA" | /bin/sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+            if [ -n "$PICPATH" ]; then URL="https://www.bing.com$PICPATH"; break; fi
+            [ "$try" -lt 2 ] && sleep 2
+        done
         ;;
     picsum)
-        URL=$(/usr/bin/curl -fksL --max-time 3 -o /dev/null -w "%{url_effective}" "https://picsum.photos/1920/1080" 2>/dev/null)
+        try=0
+        while [ "$try" -lt 2 ]; do
+            try=$((try + 1))
+            URL=$(/usr/bin/curl -fksL --max-time 8 -A "$UA" -o /dev/null -w "%{url_effective}" "https://picsum.photos/1920/1080" 2>/dev/null)
+            if [ -n "$URL" ]; then break; fi
+            [ "$try" -lt 2 ] && sleep 2
+        done
         ;;
 esac
 
