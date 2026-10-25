@@ -294,7 +294,10 @@ describe('TrayManager corner overflow (^)', function() {
         TrayManager.enable('ovf');
         assert.isNull(document.querySelector('#taskbar-tray .tray-item[data-tray-id="ovf"]'),
             'never a direct tray item');
-        assert.ok(document.getElementById('tray-overflow'), 'chevron sits in the tray');
+        var chev = document.getElementById('tray-overflow');
+        assert.ok(chev, 'chevron sits in the tray');
+        assert.equal(chev.nextElementSibling && chev.nextElementSibling.id, 'taskbar-clock',
+            'chevron sits immediately LEFT of the clock');
         var panel = document.getElementById('tray-overflow-panel');
         assert.ok(panel, 'panel created');
         assert.ok(panel.querySelector('.tray-item[data-tray-id="ovf"]'), 'item rendered inside the panel');

@@ -142,6 +142,14 @@
             });
             rows.forEach(function(r) { panel.appendChild(r); });
             panel.classList.add('open');
+            // anchor the popup above the chevron itself (Windows
+            // behaviour): right edge aligned to the chevron, clamped
+            // inside the viewport
+            var chev = document.getElementById('tray-overflow');
+            if (chev) {
+                var rect = chev.getBoundingClientRect();
+                panel.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
+            }
         },
 
         closeOverflow: function() {
@@ -164,7 +172,11 @@
                     e.stopPropagation();
                     TrayManager.toggleOverflow();
                 });
-                trayEl.appendChild(chev);
+                // not the far right corner: the chevron sits just LEFT of
+                // the clock (user request, 0.1.0-279)
+                var clock = trayEl.querySelector('#taskbar-clock');
+                if (clock) trayEl.insertBefore(chev, clock);
+                else trayEl.appendChild(chev);
             }
             var panel = document.getElementById('tray-overflow-panel');
             if (!panel) {
