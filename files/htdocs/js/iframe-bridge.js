@@ -499,16 +499,13 @@
                 if (!reason) return false;
                 window.open(href, '_blank', 'noopener');
                 // Toast is best-effort: DESKTOP is the shell namespace (the
-                // module var), its 'toast' handler maps msg/title/type/
+                // module var), its 'toast' handler maps msg/type/
                 // duration onto TrayManager.notify. A toast failure must
                 // never cancel the escape that already happened above.
                 try {
                     if (DESKTOP.emit) {
                         DESKTOP.emit('toast', {
-                            msg: reason === 'mixed'
-                                ? _('Opened in a new browser tab: the desktop runs on https, and browsers block loading http pages inside it (mixed content).')
-                                : _('Opened in a new browser tab: the target is an https site whose certificate the browser does not trust, so it cannot be shown inside the desktop. Accept the certificate once in that tab and the site will open anywhere afterwards.'),
-                            title: _('Opened in a new tab'),
+                            msg: _('This page cannot open inside the desktop window (untrusted https certificate or mixed content); it was opened in a new browser tab instead.'),
                             type: 'info',
                             duration: 9000
                         });
