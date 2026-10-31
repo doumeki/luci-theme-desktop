@@ -277,6 +277,15 @@
                     return;
                 }
             }
+            // A pin target that cannot render inside a desktop window
+            // (TLS cert wall, or mixed content while the shell runs on
+            // https) escapes to a real top-level tab with an explanatory
+            // toast — same policy as popups inside app pages (0.1.0-284).
+            // newTab pins and raw-HTML embeds never reach this point.
+            if (window.IframeBridge &&
+                IframeBridge.topLevelTarget(target, document)) {
+                return;
+            }
             WM.open(target, title);
         },
 

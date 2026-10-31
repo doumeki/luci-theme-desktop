@@ -949,4 +949,44 @@ describe('Desktop state: store <-> #desktop-config write-through', function() {
         assert.equal(cfg().icon_layout['/a'].icon, 'gost', 'DOM still has the new icon after save');
     });
 });
+
+// ===== openShortcut: unrenderable pin targets escape to a top-level tab =====
+describe('Desktop.openShortcut blocked-target escape', function() {
+
+    it('escapes an explicit https:// pin opened in-window to a top-level tab, no desktop window', function() {
+        var tabs = [], windows = [];
+        var origOpen = window.open, origWMO = window.WM.open;
+        window.open = function(u) { tabs.push(u); return null; };
+        window.WM.open = function(u) { windows.push(u); };
+        try {
+            window.Desktop.addCustomUrl('Wall', 'https://192.0.2.9:8443/x', false);
+            window.Desktop.openShortcut('https://192.0.2.9:8443/x', 'Wall');
+        } finally {
+            window.open = origOpen;
+            window.WM.open = origWMO;
+        }
+        assert.equal(tabs.length, 1, 'one native top-level tab opened');
+        assert.equal(tabs[0], 'https://192.0.2.9:8443/x', 'tab got the resolved target');
+        assert.equal(windows.length, 0, 'no desktop window for an unrenderable target');
+    });
+
+    it('http session embedding an http target keeps the desktop window', function() {
+        // The test page runs on http: — a plain http:// target has no wall
+        // (no cert issue, no mixed content) and must stay in-window.
+        var windows = [], tabs = [];
+        var origOpen = window.open, origWMO = window.WM.open;
+        window.open = function(u) { tabs.push(u); return null; };
+        window.WM.open = function(u) { windows.push(u); };
+        try {
+            window.Desktop.addCustomUrl('Plain', 'http://192.0.2.9:8080/ui', false);
+            window.Desktop.openShortcut('http://192.0.2.9:8080/ui', 'Plain');
+        } finally {
+            window.open = origOpen;
+            window.WM.open = origWMO;
+        }
+        assert.equal(windows.length, 1, 'http-to-http keeps the desktop window');
+        assert.equal(windows[0], 'http://192.0.2.9:8080/ui', 'window target exact');
+        assert.equal(tabs.length, 0, 'no tab for renderable targets');
+    });
+});
 })();
