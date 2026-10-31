@@ -444,6 +444,22 @@
                     if (!url || target === '_self' || target === '_parent' || target === '_top') {
                         return origOpen.call(win, url, target, features);
                     }
+                    // An https URL on a DIFFERENT origin would hit the TLS
+                    // error page inside the frame, and that error page has no
+                    // way to continue (the "accept risk" path exists only at
+                    // top level, never in an embedded frame). Let such popups
+                    // escape to a real browser tab instead: there the user
+                    // can accept the certificate once and afterwards the
+                    // same https site loads fine anywhere.
+                    var eu = String(url);
+                    if (eu.indexOf('https://') === 0) {
+                        try {
+                            var cut = eu.indexOf('/', 8);
+                            if (win.location.origin !== (cut === -1 ? eu : eu.slice(0, cut))) {
+                                return origOpen.call(win, url, '_blank', 'noopener');
+                            }
+                        } catch (e2) {}
+                    }
                     // Redirect popup/new-tab to same iframe
                     var embedUrl = IframeBridge.getEmbedUrl(url || 'about:blank');
                     var targetIframe = findIframeForDoc(doc);

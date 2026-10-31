@@ -194,6 +194,9 @@
             'Enter a valid http(s) address or a LuCI path.': '请输入有效的 http(s) 地址或 LuCI 路径。',
             '{router} = the host name you are using now, {httpx} = http or https, {port} = this port, {origin} = scheme://host:port. {noproto} = keep the address exactly as typed (no automatic http:// prefix). Example: {httpx}://{router}:3000': '{router} = 当前访问的主机名，{httpx} = http 或 https，{port} = 当前端口，{origin} = 协议://主机:端口。{noproto} = 地址按原样保留（不自动添加 http:// 前缀）。示例：{httpx}://{router}:3000',
 
+            // ===== https cert-wall notice (shell.js boot + guidance) =====
+            'HTTPS links': 'HTTPS \u94fe\u63a5',
+            'The desktop has %1 https link(s) that may not open inside a desktop window (untrusted certificate). Right-click one and run Edit to tick "Open in a new browser tab", or open that site once in an ordinary browser tab and accept the certificate.': '\u684c\u9762\u91cc\u6709 %1 \u4e2a https \u94fe\u63a5,\u53ef\u80fd\u56e0\u8bc1\u4e66\u4e0d\u88ab\u4fe1\u4efb\u800c\u65e0\u6cd5\u5728\u684c\u9762\u7a97\u53e3\u5185\u6253\u5f00\u3002\u53f3\u952e\u8be5\u56fe\u6807 \u2192 \u7f16\u8f91 \u2192 \u52fe\u9009\u300c\u5728\u65b0\u7684\u6d4f\u89c8\u5668\u6807\u7b7e\u9875\u6253\u5f00\u300d,\u6216\u5148\u5728\u666e\u901a\u6d4f\u89c8\u5668\u6807\u7b7e\u9875\u4e2d\u6253\u5f00\u4e00\u6b21\u5e76\u63a5\u53d7\u8bc1\u4e66\u3002',
             // ===== wm.js =====
             'Untitled': '无标题',
             'Router': '路由器',

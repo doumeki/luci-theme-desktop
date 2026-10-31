@@ -506,4 +506,36 @@ describe('LuCIDesktop.notificationRegistry', function() {
     });
 });
 
+
+// ===== HTTPS pin awareness (cert-wall) =====
+describe('LuCIDesktop.countHttpsPins', function() {
+
+    it('counts pins typed with an explicit https:// scheme', function() {
+        assert.equal(DESKTOP.countHttpsPins([
+            { url: 'https://192.0.2.1/ariang' },
+            { url: 'https://example.org:8443/ui' }
+        ]), 2, 'two explicit https pins counted');
+    });
+
+    it('ignores bare hosts, {httpx}:// placeholders, raw html, http pins and LuCI paths', function() {
+        assert.equal(DESKTOP.countHttpsPins([
+            { url: '192.0.2.2:8080' },
+            { url: '{httpx}://{router}:3000' },
+            { url: '{noproto}<iframe src="https://192.0.2.3/"></iframe>' },
+            { url: 'http://192.0.2.4/' },
+            { url: '/cgi-bin/luci/admin/status' }
+        ]), 0, 'none of those carries a literal https scheme');
+    });
+
+    it('accepts the {noproto} marker before an explicit https:// URL', function() {
+        assert.equal(DESKTOP.countHttpsPins([
+            { url: '{noproto}https://192.0.2.5/ui' }
+        ]), 1, 'marker stripped, https scheme counted');
+    });
+
+    it('tolerates missing or odd input', function() {
+        assert.equal(DESKTOP.countHttpsPins(null), 0);
+        assert.equal(DESKTOP.countHttpsPins([{}]), 0);
+    });
+});
 })();

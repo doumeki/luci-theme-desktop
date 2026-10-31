@@ -33,7 +33,26 @@ window.LuCIDesktop = (function() {
         'wp-refresh-failed':    { category: 'theme', suppressible: true,  label: _('Wallpaper refresh failed') },
         'wp-picsum-unreachable':{ category: 'theme', suppressible: true,  label: _('Picsum unreachable') },
         'wp-saved':             { category: 'theme', suppressible: true,  label: _('Wallpaper saved to built-in') },
-        'widget-max':           { category: 'theme', suppressible: true,  label: _('Max instances warning') }
+        'widget-max':           { category: 'theme', suppressible: true,  label: _('Max instances warning') },
+        'https-pin-cert':       { category: 'theme', suppressible: true,  label: _('HTTPS links') }
+    };
+
+    // ===== HTTPS cert-wall pin counter =====
+    // Counts pins whose stored URL carries an explicit https:// scheme.
+    // Bare host/IP pins are excluded (they open with the shell scheme),
+    // so are {httpx}:// pins (scheme placeholder resolves to the shell
+    // scheme, i.e. whatever protocol the shell itself was opened with)
+    // and {noproto}<html> raw embeds.
+    self.countHttpsPins = function(pins) {
+        var n = 0;
+        if (!pins || typeof pins.forEach !== 'function') return n;
+        pins.forEach(function(pin) {
+            var u = (pin && pin.url) ? String(pin.url).replace(/^\{noproto\}/i, '') : '';
+            if (!u) return;
+            if (/^\s*</.test(u)) return;              // raw HTML embed
+            if (/^https:\/\//i.test(u)) n++;
+        });
+        return n;
     };
 
     // Mobile detection: the server's UA verdict (footer.htm) is
@@ -244,6 +263,23 @@ window.LuCIDesktop = (function() {
         if (!self._platformProbed) {
             self._platformProbed = true;
             setTimeout(self.probePlatform, 500);
+        }
+
+        // HTTPS cert-wall awareness: a pin typed as https:// can never
+        // render inside a desktop window until the browser trusts the
+        // target cert once from a top-level tab (the in-frame error page
+        // has no "accept risk" path). Warn once per session at boot, with
+        // the fix spelled out, instead of a dead window later.
+        if (self._isNewSession && window.TrayManager && TrayManager.notify &&
+            self.desktopState && typeof self.desktopState.pins === 'function') {
+            try {
+                var nHttps = self.countHttpsPins(self.desktopState.pins());
+                if (nHttps > 0) {
+                    TrayManager.notify(
+                        _('The desktop has %1 https link(s) that may not open inside a desktop window (untrusted certificate). Right-click one and run Edit to tick "Open in a new browser tab", or open that site once in an ordinary browser tab and accept the certificate.').replace('%1', String(nHttps)),
+                        { type: 'info', title: _('HTTPS links'), key: 'https-pin-cert', suppressible: true });
+                }
+            } catch (e) {}
         }
 
 
