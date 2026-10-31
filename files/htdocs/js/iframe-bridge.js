@@ -213,6 +213,13 @@
                     var target = (a.getAttribute('target') || '').toLowerCase();
                     var escapes = target === '_blank' || target === '_new' || target === '_top' ||
                                   (target !== '' && target !== '_self' && target !== '_parent');
+                    // marked-cross-origin popups that cannot render in the
+                    // frame (cert wall / mixed content) go top-level too — so
+                    // the in-app hijack below never sees them.
+                    if (escapes && IframeBridge.topLevelTarget(href, doc)) {
+                        e.preventDefault();
+                        return;
+                    }
 
                     if (escapes) {
                         // Would open a new browser tab — keep it in the app
@@ -234,6 +241,11 @@
                     // natively, but repair the href so the target page
                     // renders embedded (single round-trip, no reload).
                     if (href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+                    // Plain anchors to unshowable targets: same escape path.
+                    if (IframeBridge.topLevelTarget(href, doc)) {
+                        e.preventDefault();
+                        return;
+                    }
                     if (IframeBridge.isLuCIUrl(href) || href.charAt(0) === '/') {
                         var fixed = IframeBridge.getEmbedUrl(href);
                         if (fixed !== href) a.setAttribute('href', fixed);
@@ -444,21 +456,12 @@
                     if (!url || target === '_self' || target === '_parent' || target === '_top') {
                         return origOpen.call(win, url, target, features);
                     }
-                    // An https URL on a DIFFERENT origin would hit the TLS
-                    // error page inside the frame, and that error page has no
-                    // way to continue (the "accept risk" path exists only at
-                    // top level, never in an embedded frame). Let such popups
-                    // escape to a real browser tab instead: there the user
-                    // can accept the certificate once and afterwards the
-                    // same https site loads fine anywhere.
-                    var eu = String(url);
-                    if (eu.indexOf('https://') === 0) {
-                        try {
-                            var cut = eu.indexOf('/', 8);
-                            if (win.location.origin !== (cut === -1 ? eu : eu.slice(0, cut))) {
-                                return origOpen.call(win, url, '_blank', 'noopener');
-                            }
-                        } catch (e2) {}
+                    // Cross-origin pages that cannot render inside the
+                    // frame (like https cert walls, and http targets of an
+                    // https shell) go to a real top-level tab, and the
+                    // shell toasts why.
+                    if (IframeBridge.topLevelTarget(url, doc)) {
+                        return null; // handled natively as a top-level tab
                     }
                     // Redirect popup/new-tab to same iframe
                     var embedUrl = IframeBridge.getEmbedUrl(url || 'about:blank');
@@ -467,6 +470,54 @@
                     return null; // block the popup
                 };
             } catch(e) {}
+        },
+
+        // An absolute http(s) page on another origin can often NOT be shown
+        // inside the desktop frame:
+        //   - https target: TLS error page, and frames have no "accept risk"
+        //     path (the decision only exists at top level);
+        //   - http target while the desktop runs on https: mixed content,
+        //     silently blocked by the browser.
+        // isBlockedInFrame() is the pure policy (motion for tests);
+        // topLevelTarget() acts on it: open a real top-level tab and let the
+        // shell toast why.
+        isBlockedInFrame: function(url, parentOrigin, parentProto) {
+            var u = String(url || '');
+            var isHttp = u.indexOf('http://') === 0;
+            var isHttps = u.indexOf('https://') === 0;
+            if (!isHttp && !isHttps) return '';
+            var hs = u.indexOf('://') + 3;
+            var cut = u.indexOf('/', hs);
+            if (u.slice(0, cut === -1 ? u.length : cut) === parentOrigin) return '';
+            if (isHttps) return 'cert';
+            return parentProto === 'https:' ? 'mixed' : '';
+        },
+        topLevelTarget: function(href, doc) {
+            try {
+                var loc = doc.defaultView.location;
+                var reason = IframeBridge.isBlockedInFrame(href, loc.origin, loc.protocol);
+                if (!reason) return false;
+                window.open(href, '_blank', 'noopener');
+                // Toast is best-effort: DESKTOP is the shell namespace (the
+                // module var), its 'toast' handler maps msg/title/type/
+                // duration onto TrayManager.notify. A toast failure must
+                // never cancel the escape that already happened above.
+                try {
+                    if (DESKTOP.emit) {
+                        DESKTOP.emit('toast', {
+                            msg: reason === 'mixed'
+                                ? _('Opened in a new browser tab: the desktop runs on https, and browsers block loading http pages inside it (mixed content).')
+                                : _('Opened in a new browser tab: the target is an https site whose certificate the browser does not trust, so it cannot be shown inside the desktop. Accept the certificate once in that tab and the site will open anywhere afterwards.'),
+                            title: _('Opened in a new tab'),
+                            type: 'info',
+                            duration: 9000
+                        });
+                    }
+                } catch (te) {}
+                return true;
+            } catch (e) {
+                return false;
+            }
         },
 
         // Handle postMessage from iframe windows

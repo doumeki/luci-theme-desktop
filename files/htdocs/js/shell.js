@@ -302,9 +302,11 @@ window.LuCIDesktop = (function() {
         if (!d || !d.msg || !window.TrayManager) return;
         var reg = (d.key && self.notificationRegistry && self.notificationRegistry[d.key]) || null;
         var persistent = !(typeof d.duration === 'number' && d.duration > 0);
+        var title = (typeof d.title === 'string' && d.title) ? d.title : undefined;
         TrayManager.notify(d.msg, {
             type: d.type || 'info',
             duration: (typeof d.duration === 'number') ? d.duration : 0,
+            title: title,
             key: d.key || undefined,
             suppressible: !!(reg && reg.suppressible && persistent)
         });

@@ -505,6 +505,15 @@ msgstr "HTTPS u94feu63a5"
 msgid "The desktop has %1 https link(s) that may not open inside a desktop window (untrusted certificate). Right-click one and run Edit to tick \"Open in a new browser tab\", or open that site once in an ordinary browser tab and accept the certificate."
 msgstr "u684cu9762u91ccu6709 %1 u4e2a https u94feu63a5,u53efu80fdu56e0u8bc1u4e66u4e0du88abu4fe1u4efbu800cu65e0u6cd5u5728u684cu9762u7a97u53e3u5185u6253u5f00u3002u53f3u952eu8be5u56feu6807 u2192 u7f16u8f91 u2192 u52feu9009u300cu5728u65b0u7684u6d4fu89c8u5668u6807u7b7eu9875u6253u5f00u300d,u6216u5148u5728u666eu901au6d4fu89c8u5668u6807u7b7eu9875u4e2du6253u5f00u4e00u6b21u5e76u63a5u53d7u8bc1u4e66u3002"
 
+msgid "Opened in a new tab"
+msgstr "u5df2u5728u65b0u6807u7b7eu6253u5f00"
+
+msgid "Opened in a new browser tab: the desktop runs on https, and browsers block loading http pages inside it (mixed content)."
+msgstr "u5df2u5728u65b0u7684u6d4fu89c8u5668u6807u7b7eu9875u6253u5f00:u684cu9762u58f3u662f https u800cu76eeu6807u662f http,u6d4fu89c8u5668u7981u6b62u5728 https u9875u9762u4e2du5d4cu5165 http u9875u9762(u6df7u5408u5185u5bb9);u9875u9762u672cu8eabu4ecdu4ee5 http u6b63u5e38u8bbfu95eeu3002"
+
+msgid "Opened in a new browser tab: the target is an https site whose certificate the browser does not trust, so it cannot be shown inside the desktop. Accept the certificate once in that tab and the site will open anywhere afterwards."
+msgstr "u5df2u5728u65b0u7684u6d4fu89c8u5668u6807u7b7eu9875u6253u5f00:u76eeu6807u662f https u4f46u6d4fu89c8u5668u4e0du4fe1u4efbu5176u8bc1u4e66,u684cu9762u7a97u53e3u5185u65e0u6cd5u663eu793a;u5728u65b0u6807u7b7eu4e2du63a5u53d7u4e00u6b21u8bc1u4e66u540eu5373u968fu5904u53efu7528u3002"
+
 # wm.js
 msgid "Untitled"
 msgstr "无标题"

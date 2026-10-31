@@ -617,4 +617,24 @@ describe('IframeBridge.fitTtydIframe', function() {
         }
     });
 });
+// ===== IframeBridge.isBlockedInFrame (top-level escape policy) =====
+describe('IframeBridge.isBlockedInFrame', function() {
+    var SHELL = 'https://192.0.2.1';
+
+    it('flags cross-origin https targets as cert walls', function() {
+        assert.equal(IframeBridge.isBlockedInFrame('https://192.0.2.9:8080/x', SHELL, 'https:'), 'cert');
+    });
+
+    it('flags http targets inside https shells as mixed content; http-to-http stays in-frame', function() {
+        assert.equal(IframeBridge.isBlockedInFrame('http://192.0.2.9/ariang', SHELL, 'https:'), 'mixed');
+        assert.equal(IframeBridge.isBlockedInFrame('http://192.0.2.9/ariang', SHELL, 'http:'), '',
+            'http shell embedding http cross-origin still works');
+    });
+
+    it('same-origin and relative targets never escape', function() {
+        assert.equal(IframeBridge.isBlockedInFrame('https://192.0.2.1/admin', SHELL, 'https:'), '',
+            'same-origin https is already trusted by the shell load');
+        assert.equal(IframeBridge.isBlockedInFrame('/cgi-bin/luci/admin/status', SHELL, 'https:'), '');
+    });
+});
 })();

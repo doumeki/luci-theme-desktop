@@ -268,4 +268,5 @@ describe('Taskbar window button management', function() {
     });
 });
 
+
 })();

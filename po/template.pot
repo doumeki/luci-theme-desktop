@@ -505,6 +505,15 @@ msgstr ""
 msgid "The desktop has %1 https link(s) that may not open inside a desktop window (untrusted certificate). Right-click one and run Edit to tick \"Open in a new browser tab\", or open that site once in an ordinary browser tab and accept the certificate."
 msgstr ""
 
+msgid "Opened in a new tab"
+msgstr ""
+
+msgid "Opened in a new browser tab: the desktop runs on https, and browsers block loading http pages inside it (mixed content)."
+msgstr ""
+
+msgid "Opened in a new browser tab: the target is an https site whose certificate the browser does not trust, so it cannot be shown inside the desktop. Accept the certificate once in that tab and the site will open anywhere afterwards."
+msgstr ""
+
 # wm.js
 msgid "Untitled"
 msgstr ""
