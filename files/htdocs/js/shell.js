@@ -38,19 +38,27 @@ window.LuCIDesktop = (function() {
     };
 
     // ===== HTTPS cert-wall pin counter =====
-    // Counts pins whose stored URL carries an explicit https:// scheme.
-    // Bare host/IP pins are excluded (they open with the shell scheme),
-    // so are {httpx}:// pins (scheme placeholder resolves to the shell
-    // scheme, i.e. whatever protocol the shell itself was opened with)
-    // and {noproto}<html> raw embeds.
-    self.countHttpsPins = function(pins) {
+    // Counts pins that can hit the TLS wall in THIS session: those typed
+    // with an explicit https:// scheme, plus {httpx}:// pins when the shell
+    // itself was opened over https (the placeholder resolves to the shell
+    // scheme at open time). Bare host/IP pins (plain http default) and
+    // {noproto}<html> raw embeds never count. Exposed for tests: pass an
+    // explicit scheme to simulate any session protocol.
+    self.countHttpsPins = function(pins, scheme) {
         var n = 0;
+        var proto = scheme ||
+            ((typeof location !== 'undefined' && location.protocol) || 'http:');
+        proto = String(proto).replace(/:$/, '').toLowerCase();
         if (!pins || typeof pins.forEach !== 'function') return n;
         pins.forEach(function(pin) {
             var u = (pin && pin.url) ? String(pin.url).replace(/^\{noproto\}/i, '') : '';
             if (!u) return;
             if (/^\s*</.test(u)) return;              // raw HTML embed
-            if (/^https:\/\//i.test(u)) n++;
+            if (/^https:\/\//i.test(u)) { n++; return; }
+            // {httpx}-prefixed pins resolve to the shell scheme at open
+            // time ({httpx}//host is normalized to {httpx}://host), so they
+            // can only wall on a session that itself runs on https.
+            if (u.indexOf('{httpx}:') === 0 && proto === 'https') n++;
         });
         return n;
     };

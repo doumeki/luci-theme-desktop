@@ -538,4 +538,21 @@ describe('LuCIDesktop.countHttpsPins', function() {
         assert.equal(DESKTOP.countHttpsPins([{}]), 0);
     });
 });
+
+// ===== HTTPS pin awareness: {httpx} pins follow the session scheme =====
+describe('LuCIDesktop.countHttpsPins (scheme-aware {httpx})', function() {
+
+    it('counts {httpx} pins only when the session runs on https', function() {
+        var pins = [{ url: '{httpx}://192.0.2.1:3000' }, { url: 'https://192.0.2.2/x' }];
+        assert.equal(DESKTOP.countHttpsPins(pins, 'https:'), 2,
+            'https session: placeholder resolves to https, counted');
+        assert.equal(DESKTOP.countHttpsPins(pins, 'http:'), 1,
+            'http session: placeholder resolves to http, not counted');
+    });
+
+    it('still ignores {httpx}-hosted pins in the default (http) test context', function() {
+        assert.equal(DESKTOP.countHttpsPins([{ url: '{httpx}://192.0.2.3' }]), 0,
+            'default location is http in the test page');
+    });
+});
 })();
