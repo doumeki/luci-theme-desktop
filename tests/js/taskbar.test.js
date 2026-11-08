@@ -21,6 +21,16 @@ function cleanup() {
     if (tb) tb.querySelector('#taskbar-windows').innerHTML = '';
 }
 
+// Pin the mobile/desktop verdict for tray-placement assertions: the test
+// viewport is narrow, but these cases describe the desktop shell (and one
+// describes the phone shell). LuCIDesktop.isMobile() is the theme's single
+// source of truth, so stubbing it is the honest seam.
+function withLayout(mobile, fn) {
+    var orig = window.LuCIDesktop.isMobile;
+    window.LuCIDesktop.isMobile = function() { return mobile; };
+    try { fn(); } finally { window.LuCIDesktop.isMobile = orig; }
+}
+
 describe('Taskbar.init()', function() {
     it('should register as a LuCIDesktop subsystem', function() {
         setupTaskbarDOM();
@@ -213,31 +223,52 @@ describe('Taskbar window button management', function() {
 
     it('Task Manager tucks into the tray overflow (^) popup (0.1.0-278)', function() {
         setupTaskbarDOM();
-        if (!TrayManager.registry.taskmgr && Taskbar.setupTaskMgr) {
+        withLayout(false, function() {
+            if (!TrayManager.registry.taskmgr && Taskbar.setupTaskMgr) {
+                Taskbar.setupTaskMgr();
+            }
+            assert.isNull(document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]'),
+                'taskmgr is not a direct tray item anymore');
+            var chev = document.querySelector('#taskbar-tray .tray-overflow');
+            assert.ok(chev, 'overflow chevron sits in the tray');
+            var panel = document.getElementById('tray-overflow-panel');
+            assert.ok(panel, 'overflow panel exists (hidden by default)');
+            chev.click();
+            var btn = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="taskmgr"]');
+            assert.ok(btn, 'taskmgr lives inside the overflow panel');
+            assert.ok(btn.querySelector('svg'), 'SVG bar-chart icon rendered in the panel');
+            var opened = null;
+            var origOpen = WM.open;
+            WM.open = function(url, title) { opened = { url: url, title: title }; };
+            try {
+                btn.click();
+                assert.ok(opened, 'window opened after panel-icon click');
+                assert.ok(opened.url.indexOf('/admin/desktop/taskmgr') !== -1,
+                    'taskmgr url: ' + (opened && opened.url));
+                assert.ok(!panel.classList.contains('open'), 'panel closes after the icon is used');
+            } finally {
+                WM.open = origOpen;
+            }
+        });
+    });
+
+    it('Task Manager leaves the mobile taskbar (entry lives by the bell) (0.1.0-300)', function() {
+        setupTaskbarDOM();
+        // clean slate: the desktop case above left a chevron and an
+        // overflow-panel child behind
+        var stale = document.querySelector('.tray-item[data-tray-id="taskmgr"]');
+        if (stale) stale.remove();
+        var oldChev = document.querySelector('#taskbar-tray .tray-overflow');
+        if (oldChev) oldChev.remove();
+        delete TrayManager.registry.taskmgr;
+        delete TrayManager.items.taskmgr;
+        withLayout(true, function() {
             Taskbar.setupTaskMgr();
-        }
-        assert.isNull(document.querySelector('#taskbar-tray .tray-item[data-tray-id="taskmgr"]'),
-            'taskmgr is not a direct tray item anymore');
-        var chev = document.querySelector('#taskbar-tray .tray-overflow');
-        assert.ok(chev, 'overflow chevron sits in the tray');
-        var panel = document.getElementById('tray-overflow-panel');
-        assert.ok(panel, 'overflow panel exists (hidden by default)');
-        chev.click();
-        var btn = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="taskmgr"]');
-        assert.ok(btn, 'taskmgr lives inside the overflow panel');
-        assert.ok(btn.querySelector('svg'), 'SVG bar-chart icon rendered in the panel');
-        var opened = null;
-        var origOpen = WM.open;
-        WM.open = function(url, title) { opened = { url: url, title: title }; };
-        try {
-            btn.click();
-            assert.ok(opened, 'window opened after panel-icon click');
-            assert.ok(opened.url.indexOf('/admin/desktop/taskmgr') !== -1,
-                'taskmgr url: ' + (opened && opened.url));
-            assert.ok(!panel.classList.contains('open'), 'panel closes after the icon is used');
-        } finally {
-            WM.open = origOpen;
-        }
+            assert.isNull(document.querySelector('.tray-item[data-tray-id="taskmgr"]'),
+                'no task-manager tray icon on mobile (it sits next to the notifications bell)');
+            assert.isNull(document.querySelector('#taskbar-tray .tray-overflow'),
+                'no overflow chevron on mobile');
+        });
     });
 
     it('setupTaskMgr defers while tray.js has not evaluated yet (0.1.0-277)', function() {
@@ -246,25 +277,29 @@ describe('Taskbar window button management', function() {
         // registry entry so the install path really runs again
         var stale = document.querySelector('.tray-item[data-tray-id="taskmgr"]');
         if (stale) stale.remove();
+        var oldChev = document.querySelector('#taskbar-tray .tray-overflow');
+        if (oldChev) oldChev.remove();
         // tray.js keeps defs in .registry and rendered state in .items and
         // has no unregister API — erase both so the install path re-runs
         delete TrayManager.registry.taskmgr;
         delete TrayManager.items.taskmgr;
-        var origTM = window.TrayManager;
-        window.TrayManager = undefined;
-        try {
+        withLayout(false, function() {
+            var origTM = window.TrayManager;
+            window.TrayManager = undefined;
+            try {
+                Taskbar.setupTaskMgr();
+                assert.isNull(document.querySelector('.tray-item[data-tray-id="taskmgr"]'),
+                    'deferred while window.TrayManager is absent (page keeps loading)');
+            } finally {
+                window.TrayManager = origTM;
+            }
             Taskbar.setupTaskMgr();
-            assert.isNull(document.querySelector('.tray-item[data-tray-id="taskmgr"]'),
-                'deferred while window.TrayManager is absent (page keeps loading)');
-        } finally {
-            window.TrayManager = origTM;
-        }
-        Taskbar.setupTaskMgr();
-        assert.ok(document.querySelector('#taskbar-tray .tray-overflow'),
-            'overflow chevron appears once tray.js is reachable');
-        var btn = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="taskmgr"]');
-        assert.ok(btn, 'taskmgr item appears once tray.js is reachable');
-        assert.ok(btn.querySelector('svg'), 'SVG icon rendered through the deferral path');
+            assert.ok(document.querySelector('#taskbar-tray .tray-overflow'),
+                'overflow chevron appears once tray.js is reachable');
+            var btn = document.querySelector('#tray-overflow-panel .tray-item[data-tray-id="taskmgr"]');
+            assert.ok(btn, 'taskmgr item appears once tray.js is reachable');
+            assert.ok(btn.querySelector('svg'), 'SVG icon rendered through the deferral path');
+        });
     });
 });
 

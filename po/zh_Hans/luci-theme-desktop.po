@@ -11,8 +11,74 @@ msgstr ""
 msgid "Task Manager"
 msgstr "任务管理器"
 
+msgid "Kernel sockets"
+msgstr "内核套接字"
+
+msgid "Listening ports"
+msgstr "监听端口"
+
 msgid "%d processes"
 msgstr "%d 个进程"
+
+msgid "Overview"
+msgstr "概览"
+
+msgid "Command line"
+msgstr "命令行"
+
+msgid "Open files"
+msgstr "打开的文件"
+
+msgid "Sockets"
+msgstr "套接字"
+
+msgid "No data"
+msgstr "无数据"
+
+msgid "Process is gone"
+msgstr "进程已结束"
+
+msgid "Show environment"
+msgstr "显示环境变量"
+
+msgid "Environment"
+msgstr "环境变量"
+
+msgid "Parent PID"
+msgstr "父进程 PID"
+
+msgid "Threads"
+msgstr "线程数"
+
+msgid "Start time"
+msgstr "启动时间"
+
+msgid "Nice"
+msgstr "优先级"
+
+msgid "CPU time"
+msgstr "CPU 时间"
+
+msgid "I/O read"
+msgstr "I/O 读取"
+
+msgid "I/O write"
+msgstr "I/O 写入"
+
+msgid "Working directory"
+msgstr "工作目录"
+
+msgid "Executable"
+msgstr "可执行文件"
+
+msgid "Local"
+msgstr "本地"
+
+msgid "Remote"
+msgstr "远程"
+
+msgid "State"
+msgstr "状态"
 
 msgid "Process"
 msgstr "进程"
@@ -196,6 +262,12 @@ msgstr "管理"
 
 msgid "Refresh"
 msgstr "刷新"
+
+msgid "Back"
+msgstr "后退"
+
+msgid "Forward"
+msgstr "前进"
 
 msgid "Rearrange Icons"
 msgstr "重排图标"

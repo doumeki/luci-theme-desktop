@@ -99,7 +99,11 @@
 }
 
 .window-title {
-    flex: 1;
+    /* 0.1.0-305: content width, so the nav group can sit right after the
+       title while the whole cluster stays on the left (the controls keep
+       margin-left:auto and remain pinned right). */
+    flex: 0 1 auto;
+    min-width: 0;
     font-size: 12px;
     font-weight: 500;
     color: var(--win-titlebar-fg);
@@ -107,6 +111,39 @@
     overflow: hidden;
     text-overflow: ellipsis;
     pointer-events: none;
+}
+
+/* In-window navigation (back / forward / reload), 0.1.0-304:
+   right of the title, just before the window controls (user request). */
+.window-nav {
+    display: flex;
+    gap: 1px;
+    margin: 0 0 0 8px;
+    flex-shrink: 0;
+}
+.window-nav button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--win-titlebar-fg);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s, opacity 0.1s;
+}
+.window-nav button:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+.window-nav button:disabled {
+    opacity: 0.3;
+    cursor: default;
+    background: transparent;
 }
 
 .window-controls {

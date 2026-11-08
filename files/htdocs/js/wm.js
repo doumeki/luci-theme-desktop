@@ -112,6 +112,11 @@
             titlebar.innerHTML =
                 '<button class="btn-pin" title="' + _('Pin to top') + '">&#x1F4CC;</button>' +
                 '<span class="window-title">' + escapeHTML(title) + '</span>' +
+                '<div class="window-nav">' +
+                '<button class="btn-back" title="' + _('Back') + '">&#x2190;</button>' +
+                '<button class="btn-forward" title="' + _('Forward') + '">&#x2192;</button>' +
+                '<button class="btn-reload" title="' + _('Refresh') + '">&#x21BB;</button>' +
+                '</div>' +
                 '<div class="window-controls">' +
                 '<button class="btn-minimize" title="' + _('Minimize') + '">&minus;</button>' +
                 '<button class="btn-maximize" title="' + _('Maximize') + '">&#x25A1;</button>' +
@@ -195,6 +200,74 @@
             win.querySelector('.btn-pin').addEventListener('click', function() {
                 WM.togglePin(id);
             });
+
+            // In-window browser navigation (0.1.0-303). A LuCI page can hop
+            // the frame to another port (ttyd :7681, https :443, …) — a
+            // different origin, where the browser forbids reading history.
+            // So the window keeps its own URL stack and navigates by src;
+            // cross-origin hops still get a working "back" (to the last
+            // page we know) instead of three dead buttons.
+            var navBtns = {
+                back: win.querySelector('.btn-back'),
+                forward: win.querySelector('.btn-forward'),
+                reload: win.querySelector('.btn-reload')
+            };
+            var navStack = [iframe.src];
+            var navIndex = 0;
+            var navOpaque = false;        // current document is cross-origin
+            var navSeenSameOrigin = false; // at least one readable URL so far
+
+            function navGo(urlTo) {
+                navOpaque = false;
+                iframe.src = urlTo;
+            }
+            function updateNav() {
+                navBtns.back.disabled = !(navIndex > 0 || (navOpaque && navSeenSameOrigin));
+                navBtns.forward.disabled = !(!navOpaque && navIndex < navStack.length - 1);
+                navBtns.reload.disabled = false;
+            }
+            navBtns.back.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (navIndex > 0) {
+                    navIndex--;
+                    navGo(navStack[navIndex]);
+                } else if (navOpaque && navSeenSameOrigin) {
+                    navGo(navStack[navIndex]);
+                }
+            });
+            navBtns.forward.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!navOpaque && navIndex < navStack.length - 1) {
+                    navIndex++;
+                    navGo(navStack[navIndex]);
+                }
+            });
+            navBtns.reload.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (navOpaque) {
+                    navGo(navStack[navIndex]);
+                } else {
+                    try { iframe.contentWindow.location.reload(); }
+                    catch (err) { navGo(navStack[navIndex]); }
+                }
+            });
+            iframe.addEventListener('load', function() {
+                var href = null;
+                try { href = iframe.contentWindow.location.href; } catch (err) { href = null; }
+                if (href) {
+                    navOpaque = false;
+                    navSeenSameOrigin = true;
+                    if (href !== navStack[navIndex]) {
+                        navStack = navStack.slice(0, navIndex + 1);
+                        navStack.push(href);
+                        navIndex = navStack.length - 1;
+                    }
+                } else {
+                    navOpaque = true;
+                }
+                updateNav();
+            });
+            updateNav();
 
             // Focus on mousedown anywhere in window
             win.addEventListener('mousedown', function() {

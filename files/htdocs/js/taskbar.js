@@ -62,8 +62,10 @@
 
         // Tray entry for the Task Manager via the extensible TrayManager
         // API (0.1.0-275; replaces the desktop-context-menu entry of 274).
-        // Windows-style: collected behind the corner overflow chevron (^)
-        // instead of a direct slot (0.1.0-278).
+        // Desktop = Windows-style corner overflow chevron (0.1.0-278);
+        // mobile = a first-class tray icon, never tucked behind the small
+        // chevron (user request 2026-11-04: on a phone the manager must be
+        // one tap away, so it shows directly in the tray bar).
         // Waits for the tray module when it has not evaluated yet (the
         // real page loads taskbar.js before tray.js — deferred retry,
         // 0.1.0-277); graceful no-op when the window manager is absent.
@@ -90,6 +92,14 @@
                 }
                 return;
             }
+            // Mobile: the task manager entry lives in the switcher header
+            // next to the notifications bell (0.1.0-299). Keeping a second
+            // tray icon here made the phone taskbar four buttons wide, which
+            // the user rejected — so the tray entry is desktop-only.
+            if (Taskbar.isMobileLayout()) {
+                Taskbar.watchMobileLayout();
+                return;
+            }
             if (trayMgr.items.taskmgr) return;
             trayMgr.register({
                 id: 'taskmgr',
@@ -100,21 +110,61 @@
                     window.WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
                 },
                 order: 10,
-                // Windows taskbar-corner style: tuck the manager behind
-                // the small tray chevron (collected icons popup)
+                // desktop: Windows-style, tucked behind the tray chevron
                 overflow: true
             });
             trayMgr.enable('taskmgr');
-            var el = trayMgr.items.taskmgr && trayMgr.items.taskmgr.el;
-            if (el && el.querySelector) {
-                var ic = el.querySelector('.tray-item-icon');
-                if (ic) {
-                    ic.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
-                        + '<rect x="2" y="2" width="12" height="12" rx="2.2" stroke="currentColor" stroke-width="1.5"/>'
-                        + '<path d="M4.4 9.6l1.9-2.9 1.7 3.6 1.5-4.6 1.2 2.7h1.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
-                        + '</svg>';
-                }
+            Taskbar.paintTaskMgrIcon();
+            Taskbar.watchMobileLayout();
+        },
+
+        // Same verdict as LuCIDesktop.isMobile(), without depending on
+        // shell.js having evaluated first; 768px matches the CSS breakpoint.
+        isMobileLayout: function() {
+            if (window.LuCIDesktop && window.LuCIDesktop.isMobile) {
+                return !!window.LuCIDesktop.isMobile();
             }
+            return !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        },
+
+        paintTaskMgrIcon: function() {
+            var trayMgr = window.TrayManager;
+            var el = trayMgr && trayMgr.items && trayMgr.items.taskmgr && trayMgr.items.taskmgr.el;
+            if (!el || !el.querySelector) return;
+            var ic = el.querySelector('.tray-item-icon');
+            if (!ic) return;
+            ic.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+                + '<rect x="2" y="2" width="12" height="12" rx="2.2" stroke="currentColor" stroke-width="1.5"/>'
+                + '<path d="M4.4 9.6l1.9-2.9 1.7 3.6 1.5-4.6 1.2 2.7h1.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+                + '</svg>';
+        },
+
+        // Rotation / resize across the 768px breakpoint adds or removes the
+        // desktop tray entry (mobile keeps the switcher-header entry only).
+        watchMobileLayout: function() {
+            if (Taskbar._layoutMq) return;
+            var mq = window.matchMedia && window.matchMedia('(max-width: 768px)');
+            if (!mq || !mq.addEventListener) return;
+            Taskbar._layoutMq = mq;
+            mq.addEventListener('change', function() {
+                var trayMgr = window.TrayManager;
+                if (!trayMgr) return;
+                if (Taskbar.isMobileLayout()) {
+                    if (trayMgr.items.taskmgr) trayMgr.disable('taskmgr');
+                    return;
+                }
+                if (!trayMgr.items.taskmgr) {
+                    Taskbar.setupTaskMgr();
+                    return;
+                }
+                var def = trayMgr.registry.taskmgr;
+                if (def && !def.overflow) {
+                    def.overflow = true;
+                    trayMgr.disable('taskmgr');
+                    trayMgr.enable('taskmgr');
+                    Taskbar.paintTaskMgrIcon();
+                }
+            });
         },
 
         _setToggleState: function(btn, on) {

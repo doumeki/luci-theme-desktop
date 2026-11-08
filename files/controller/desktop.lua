@@ -125,6 +125,12 @@ function index()
     taskmgr_page.leaf = true
     taskmgr_page.sysauth = false
 
+    -- One-process detail (cmdline / open files / sockets / io) for the
+    -- taskmgr drawer; fetched on demand, never part of the 4s snapshot.
+    local procdetail_api = entry({"admin", "desktop", "proc_detail"}, call("action_proc_detail"))
+    procdetail_api.leaf = true
+    procdetail_api.sysauth = false
+
     local ifaces_api = entry({"admin", "desktop", "interfaces"}, call("action_interfaces"))
     ifaces_api.leaf = true
     ifaces_api.sysauth = false
@@ -1398,17 +1404,234 @@ local function taskmgr_collect()
     return procs, ticks, mem_total, mem_avail
 end
 
+-- GET /admin/desktop/tasklist -- listening sockets snapshot for the
+-- task manager's ports section. busybox netstat -tulnp, one spawn per poll
+-- (same cadence as the /proc scan; a few ms at most). Row shapes verified
+-- live 2026-11-01 (busybox 1.36 on a real device):
+--   tcp  0 0 0.0.0.0:53    0.0.0.0:* LISTEN 21775/dnsmasq
+--   udp  0 0 0.0.0.0:53    0.0.0.0:*         21775/dnsmasq   (no State)
+--   IPv6 rows keep proto tcp/udp with local ":::5000" (host "::", port 5000)
+--   kernel-owned sockets show "-" as PID/Program
+local function taskmgr_ports()
+    local ports = {}
+    local ns = io.popen("netstat -tulnp 2>/dev/null")
+    if not ns then return ports end
+    for line in ns:lines() do
+        local proto = line:match("^(tcp)%s+") or line:match("^(udp)%s+")
+        if proto then
+            local body = line:match("^%S+%s+%d+%s+%d+%s+(.+)$")
+            if body then
+                local tok, n = {}, 0
+                for tk in body:gmatch("%S+") do
+                    n = n + 1
+                    tok[n] = tk
+                end
+                -- tcp row: local foreign LISTEN pid/prog ; udp: local foreign pid/prog
+                if n >= 3 then
+                    local who = tok[n]
+                    local raw_pid, raw_prog = who:match("^(%d+)/(.+)$")
+                    local prog
+                    if raw_prog then
+                        -- busybox may append a trailing ":"/whitespace; keep
+                        -- the reveal-able name only (dnsmasq_acl_d, cname ids,
+                        -- kernel "-" rows keep proc=nil and group as unknown)
+                        prog = raw_prog:gsub("%s+$", ""):gsub(":$", "")
+                    end
+                    local addr, service = tok[1]:match("^(.+):(%d+)$")
+                    if addr and service then
+                        if addr == "" then addr = "*" end
+                        ports[#ports + 1] = {
+                            proto = proto,
+                            addr = addr,
+                            port = tonumber(service),
+                            pid = raw_pid and tonumber(raw_pid) or nil,
+                            proc = (prog and prog ~= "" and prog ~= "-") and prog or nil
+                        }
+                    end
+                end
+            end
+        end
+    end
+    ns:close()
+    return ports
+end
+
 -- GET /admin/desktop/tasklist — snapshot feed for the taskmgr page
 function action_tasklist()
     local procs, ticks, mem_total, mem_avail = taskmgr_collect()
+    local ports = taskmgr_ports()
     luci.http.prepare_content("application/json")
     luci.http.write_json({
         ok = true,
         list = procs,
         ticks_total = ticks,
         mem_total_kb = mem_total,
-        mem_avail_kb = mem_avail
+        mem_avail_kb = mem_avail,
+        ports = ports
     })
+end
+
+-- GET /admin/desktop/proc_detail?pid=N[&env=1] — one-process detail for the
+-- task manager drawer. Read-only and defensive: every file is optional on a
+-- locked-down box, so a missing /proc entry just leaves that field out.
+local function proc_slurp(path)
+    local f = io.open(path)
+    if not f then return nil end
+    local s = f:read("*a")
+    f:close()
+    return s
+end
+
+local function proc_link(path)
+    local h = io.popen("readlink " .. path .. " 2>/dev/null")
+    if not h then return nil end
+    local v = h:read("*l")
+    h:close()
+    return v
+end
+
+local function proc_detail(pid, want_env)
+    local base = "/proc/" .. pid
+    local stat = proc_slurp(base .. "/stat")
+    if not stat then return nil end
+
+    local d = { pid = pid }
+
+    local st = proc_slurp(base .. "/status")
+    if st then
+        d.name = st:match("^Name:%s*([^\n]+)")
+        d.state = st:match("^State:%s*(%S+)")
+        d.ppid = tonumber(st:match("^PPid:%s*(%d+)"))
+        d.threads = tonumber(st:match("^Threads:%s*(%d+)"))
+        d.uid = tonumber(st:match("^Uid:%s*(%d+)"))
+        d.gid = tonumber(st:match("^Gid:%s*(%d+)"))
+        d.vsz_kb = tonumber(st:match("^VmSize:%s*(%d+)%s*kB"))
+        d.rss_kb = tonumber(st:match("^VmRSS:%s*(%d+)%s*kB"))
+        d.vmpeak_kb = tonumber(st:match("^VmPeak:%s*(%d+)%s*kB"))
+        d.swap_kb = tonumber(st:match("^VmSwap:%s*(%d+)%s*kB"))
+        d.ctxt_switches = tonumber(st:match("^voluntary_ctxt_switches:%s*(%d+)"))
+    end
+
+    -- stat field N lives at tok[N-2] because state (3) is tok[1]
+    local _, rest = stat:match("^(%d+)%s+%((.*)%) (.*)$")
+    if rest then
+        local tok = {}
+        for tk in rest:gmatch("%S+") do tok[#tok + 1] = tk end
+        d.utime = tonumber(tok[12]) or 0
+        d.stime = tonumber(tok[13]) or 0
+        d.nice = tonumber(tok[17])
+        d.start_ticks = tonumber(tok[20])
+    end
+
+    local pstat = proc_slurp("/proc/stat")
+    local btime = pstat and tonumber(pstat:match("btime%s+(%d+)"))
+    if btime and d.start_ticks then
+        -- USER_HZ is 100 on every OpenWrt target
+        d.started_epoch = btime + math.floor(d.start_ticks / 100)
+    end
+
+    local cl = proc_slurp(base .. "/cmdline")
+    if cl and cl ~= "" then
+        local args = {}
+        for a in cl:gmatch("([^%z]+)") do args[#args + 1] = a end
+        d.args = args
+        d.cmdline = table.concat(args, " ")
+    end
+
+    d.exe = proc_link(base .. "/exe")
+    d.cwd = proc_link(base .. "/cwd")
+
+    local ios = proc_slurp(base .. "/io")
+    if ios then
+        d.io = {
+            rchar = tonumber(ios:match("rchar:%s*(%d+)")),
+            wchar = tonumber(ios:match("wchar:%s*(%d+)")),
+            read_bytes = tonumber(ios:match("read_bytes:%s*(%d+)")),
+            write_bytes = tonumber(ios:match("write_bytes:%s*(%d+)"))
+        }
+    end
+
+    -- open files: one shell pass over the numeric fd entries
+    local fds = {}
+    local h = io.popen("for f in " .. base .. "/fd/*; do printf '%s\\t%s\\n' \"${f##*/}\" \"$(readlink \"$f\")\"; done 2>/dev/null")
+    if h then
+        for line in h:lines() do
+            local fd, target = line:match("^(%d+)\t(.*)$")
+            if fd and target and target ~= "" then
+                local kind = "file"
+                if target:match("^socket:%[") then kind = "socket"
+                elseif target:match("^pipe:%[") then kind = "pipe"
+                elseif target:match("^anon_inode:") then kind = "anon"
+                end
+                fds[#fds + 1] = { fd = tonumber(fd), type = kind, target = target }
+            end
+        end
+        h:close()
+    end
+    table.sort(fds, function(a, b) return a.fd < b.fd end)
+    d.fds = fds
+    d.fd_count = #fds
+
+    -- sockets owned by this pid: busybox netstat already decodes addresses
+    -- and states; -a is required or LISTEN sockets (dnsmasq's :53) are missing
+    local socks = {}
+    local ns = io.popen("netstat -tunap 2>/dev/null")
+    if ns then
+        for line in ns:lines() do
+            local proto = line:match("^(tcp)%s+") or line:match("^(udp)%s+")
+            if proto then
+                local body = line:match("^%S+%s+%d+%s+%d+%s+(.+)$")
+                if body then
+                    local tok, n = {}, 0
+                    for tk in body:gmatch("%S+") do
+                        n = n + 1
+                        tok[n] = tk
+                    end
+                    local who = tok[n] or ""
+                    local lpid = who:match("^(%d+)/")
+                    if lpid and tonumber(lpid) == pid then
+                        local state = ""
+                        if proto == "tcp" and n >= 4 then state = tok[n - 1] end
+                        socks[#socks + 1] = {
+                            proto = proto,
+                            local_addr = tok[1] or "",
+                            remote_addr = tok[2] or "",
+                            state = state
+                        }
+                    end
+                end
+            end
+        end
+        ns:close()
+    end
+    d.sockets = socks
+
+    if want_env then
+        local ev = proc_slurp(base .. "/environ")
+        if ev then
+            local envs = {}
+            for kv in ev:gmatch("([^%z]+)") do envs[#envs + 1] = kv end
+            d.env = envs
+        end
+    end
+
+    return d
+end
+
+function action_proc_detail()
+    local pid = tonumber(luci.http.formvalue("pid") or "")
+    luci.http.prepare_content("application/json")
+    if not pid or pid < 1 then
+        luci.http.write_json({ ok = false, err = "bad pid" })
+        return
+    end
+    local d = proc_detail(pid, luci.http.formvalue("env") == "1")
+    if not d then
+        luci.http.write_json({ ok = false, err = "no such process" })
+        return
+    end
+    d.ok = true
+    luci.http.write_json(d)
 end
 
 -- GET /admin/desktop/taskmgr — standalone task manager page
@@ -1419,12 +1642,14 @@ function action_taskmgr()
     local uci = require("luci.desktop.runtime").newCursor()
     local page_lang = uci:get("luci", "main", "lang") or "en"
 
+    luci.http.header("Cache-Control", "no-store")
     luci.http.prepare_content("text/html; charset=UTF-8")
     luci.http.write([[<!DOCTYPE html>
 <html lang="]] .. (page_lang or "en") .. [[">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
 <title>]] .. changes_escape(t("Task Manager")) .. [[</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1443,6 +1668,7 @@ h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap}
 .set-row{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12px}
 .set-row span{flex:1}
 .set-row select{border:1px solid #d3d7db;border-radius:4px;padding:3px 6px;font-size:12px;background:#fff;color:#333}
+#set-interval:disabled{opacity:.5}
 #set-cols label{display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer}
 #set-cols input[type=checkbox]{accent-color:#4a90d9}
 td.c-path{overflow:hidden;text-overflow:ellipsis;color:#666}
@@ -1472,6 +1698,33 @@ th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
 td.name{max-width:180px;overflow:hidden;text-overflow:ellipsis}
 td.state-z{color:#c62828;font-weight:600}
 tr.zombie{background:#fff3e0}
+.pk{display:inline-block;background:#eef3fa;border:1px solid #d9e3ee;border-radius:4px;font-size:11px;padding:1px 8px;margin:1px 5px 1px 0;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pk .p{color:#1565c0;font-weight:600}
+.pk.more{cursor:pointer;color:#1565c0;background:#e8f1fd;border-color:#c9dbf2;font-weight:600}
+.pk.more:hover{background:#dbe9fb}
+#tbl td.c-ports{white-space:normal}
+tbody tr.sel{background:#e8f1fd}
+#dr{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:94vw;background:#fff;border-left:1px solid #e0e4e8;box-shadow:-8px 0 24px rgba(0,0,0,.12);display:flex;flex-direction:column;z-index:30}
+#dr[hidden]{display:none}
+.dr-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #eef1f4}
+#dr-title{flex:1;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#dr-close{border:none;background:transparent;font-size:18px;line-height:1;color:#666;cursor:pointer;padding:0 4px}
+#dr-close:hover{color:#333}
+.dr-body{overflow:auto;padding:10px 14px 24px;font-size:12px}
+.dr-sec{margin-bottom:14px}
+.dr-sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#888;margin:0 0 6px;font-weight:600}
+.dr-kv{display:grid;grid-template-columns:104px 1fr;gap:3px 8px}
+.dr-kv div:nth-child(odd){color:#777}
+.dr-kv div{overflow-wrap:anywhere}
+.dr-cmd{background:#f6f8fa;border:1px solid #e6eaee;border-radius:4px;padding:6px 8px;font-family:ui-monospace,Consolas,monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto}
+.dr-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+.dr-tbl td{padding:2px 4px;border-bottom:1px solid #f2f4f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dr-tbl td.fd{width:44px;color:#999;text-align:right}
+.dr-tbl td.ty{width:56px;color:#777}
+.dr-tbl td.st{width:86px;color:#777}
+.dr-empty{color:#999;padding:2px 0}
+.dr-btn{border:1px solid #d3d7db;background:#fff;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;color:#333}
+.dr-btn:hover{background:#f2f5f8}
 </style>
 </head>
 <body>
@@ -1492,14 +1745,40 @@ tr.zombie{background:#fff3e0}
 </div>
 </div>
 <div class="table-wrap"><table id="tbl">
-<thead><tr><th data-key="pid">]] .. changes_escape(t("PID")) .. [[</th><th data-key="process">]] .. changes_escape(t("Process")) .. [[</th><th data-key="path">]] .. changes_escape(t("Path")) .. [[</th><th data-key="user">]] .. changes_escape(t("User")) .. [[</th><th data-key="state">]] .. changes_escape(t("Status")) .. [[</th><th class="num" data-key="cpu">]] .. changes_escape(t("CPU")) .. [[</th><th class="num" data-key="memory">]] .. changes_escape(t("Memory")) .. [[</th></tr></thead>
-<tbody id="tbody"><tr><td colspan="7">–</td></tr></tbody>
+<thead><tr><th data-key="pid">]] .. changes_escape(t("PID")) .. [[</th><th data-key="process">]] .. changes_escape(t("Process")) .. [[</th><th data-key="path">]] .. changes_escape(t("Path")) .. [[</th><th data-key="user">]] .. changes_escape(t("User")) .. [[</th><th data-key="state">]] .. changes_escape(t("Status")) .. [[</th><th class="num" data-key="cpu">]] .. changes_escape(t("CPU")) .. [[</th><th class="num" data-key="memory">]] .. changes_escape(t("Memory")) .. [[</th><th data-key="ports">]] .. changes_escape(t("Listening ports")) .. [[</th></tr></thead>
+<tbody id="tbody"><tr><td colspan="8">–</td></tr></tbody>
 </table></div>
+<div id="dr" hidden>
+<div class="dr-head"><span id="dr-title"></span><button id="dr-close" title="]] .. changes_escape(t("Close")) .. [[">×</button></div>
+<div class="dr-body" id="dr-body"></div>
+</div>
 <script>
 (function() {
     var txt = {
         tasks: ']] .. changes_escape(t("%d processes")) .. [[',
-        failed: ']] .. changes_escape(t("Load failed")) .. [['
+        failed: ']] .. changes_escape(t("Load failed")) .. [[',
+        paused: ']] .. changes_escape(t("Auto Refresh: OFF")) .. [[',
+        kernel: ']] .. changes_escape(t("Kernel sockets")) .. [[',
+        overview: ']] .. changes_escape(t("Overview")) .. [[',
+        cmdline: ']] .. changes_escape(t("Command line")) .. [[',
+        files: ']] .. changes_escape(t("Open files")) .. [[',
+        socks: ']] .. changes_escape(t("Sockets")) .. [[',
+        noData: ']] .. changes_escape(t("No data")) .. [[',
+        noProc: ']] .. changes_escape(t("Process is gone")) .. [[',
+        showEnv: ']] .. changes_escape(t("Show environment")) .. [[',
+        env: ']] .. changes_escape(t("Environment")) .. [[',
+        parentPid: ']] .. changes_escape(t("Parent PID")) .. [[',
+        threads: ']] .. changes_escape(t("Threads")) .. [[',
+        started: ']] .. changes_escape(t("Start time")) .. [[',
+        nice: ']] .. changes_escape(t("Nice")) .. [[',
+        cpuTime: ']] .. changes_escape(t("CPU time")) .. [[',
+        ioRead: ']] .. changes_escape(t("I/O read")) .. [[',
+        ioWrite: ']] .. changes_escape(t("I/O write")) .. [[',
+        cwd: ']] .. changes_escape(t("Working directory")) .. [[',
+        exe: ']] .. changes_escape(t("Executable")) .. [[',
+        local: ']] .. changes_escape(t("Local")) .. [[',
+        remote: ']] .. changes_escape(t("Remote")) .. [[',
+        state: ']] .. changes_escape(t("State")) .. [['
     };
     function esc(s) {
         var d = document.createElement('div');
@@ -1508,6 +1787,8 @@ tr.zombie{background:#fff3e0}
     }
     var prev = null;            // {ticks: N, jf: {pid: jiffies}}
     var last = null;            // computed snapshot (rows get _pct), re-rendered on sort/filter
+    var selectedPid = null;     // row whose detail drawer is open
+    var envShown = false;
     var cpuArr = [], memArr = [];
     var MAX = 60;
     var sort = { key: 'cpu', dir: -1 };   // default: CPU% descending (Windows style)
@@ -1521,11 +1802,13 @@ tr.zombie{background:#fff3e0}
     // server keeps no state for this page.
     var INTERVALS = [2000, 4000, 8000, 15000, 30000];
     var W_MIN = 40, W_MAX = 640;
-    var DEF_W = { pid: 60, process: 140, path: 200, user: 80, state: 60, cpu: 80, memory: 110 };
+    var LIST_LIMIT = 3;         // chips per row before collapsing
+    var openPids = {};          // expanded rows, kept across polls ('k' = kernel tail row)
+    var DEF_W = { pid: 60, process: 140, path: 200, user: 80, state: 60, cpu: 80, memory: 110, ports: 220 };
     var cfg = {
         interval: 4000,
-        cols: { pid: 1, process: 1, user: 1, state: 1, path: 1, cpu: 1, memory: 1 },
-        w: { pid: 60, process: 140, path: 200, user: 80, state: 60, cpu: 80, memory: 110 }
+        cols: { pid: 1, process: 1, user: 1, state: 1, path: 1, cpu: 1, memory: 1, ports: 1 },
+        w: { pid: 60, process: 140, path: 200, user: 80, state: 60, cpu: 80, memory: 110, ports: 220 }
     };
     var tbl = document.getElementById('tbl');
     (function() {
@@ -1543,7 +1826,7 @@ tr.zombie{background:#fff3e0}
             // means "never actually resized", so keep auto-fit
             var same = true;
             for (var wchk in DEF_W) {
-                if (o.w[wchk] !== DEF_W[wchk]) { same = false; break; }
+                if (o.w[wchk] !== undefined && o.w[wchk] !== DEF_W[wchk]) { same = false; break; }
             }
             MODE = same ? 'fit' : 'px';
             for (var wk in DEF_W) {
@@ -1554,6 +1837,17 @@ tr.zombie{background:#fff3e0}
         }
         // the name column is the identity of a row: always on
         cfg.cols.process = 1;
+    })();
+    // the global auto-refresh switch (taskbar, bottom-right) owns the
+    // cadence: this page follows it instead of keeping a second switch
+    var autoOn = true;
+    (function() {
+        try {
+            if (window.parent && window.parent !== window) {
+                var pb = window.parent.document.getElementById('btn-auto-refresh');
+                if (pb && pb.classList) autoOn = pb.classList.contains('on');
+            }
+        } catch (e) {}
     })();
     function saveCfg() {
         try {
@@ -1578,7 +1872,8 @@ tr.zombie{background:#fff3e0}
         user:    function(a, b) { return cmpStr(a.user, b.user); },
         state:   function(a, b) { return cmpStr(a.state, b.state); },
         cpu:     function(a, b) { return (a._pct || 0) - (b._pct || 0); },
-        memory:  function(a, b) { return (a.rss_kb || 0) - (b.rss_kb || 0); }
+        memory:  function(a, b) { return (a.rss_kb || 0) - (b.rss_kb || 0); },
+        ports:   function(a, b) { return (a._np || 0) - (b._np || 0); }
     };
 
     function draw(id, arr, color) {
@@ -1643,26 +1938,106 @@ tr.zombie{background:#fff3e0}
         draw('cpu-graph', cpuArr, '#4a90d9');
         draw('mem-graph', memArr, '#2e7d32');
         prev = { ticks: j.ticks_total || 0, jf: jfMap };
-        last = { list: list };
+        last = { list: list, ports: j.ports || [] };
     }
 
     // filter -> sort -> paint (re-run on every poll, and on live
     // filter input / header clicks / column toggles without refetching)
+    function fmtAddr(p) {
+        var a = p.addr || '';
+        var isV6 = a.indexOf(':') !== -1;
+        return (isV6 ? '[' + a + ']' : a) + ':' + (p.port != null ? p.port : '?');
+    }
+    // sockets are attached to rows per process in render(); pid is the join
+    // key (netstat program names can differ from the /proc comm), and
+    // pid-less kernel sockets aggregate on an em-dash tail row
     function render() {
         if (!last) return;
-        var v = last.list;
-        if (filter) {
-            v = v.filter(function(p) {
-                var nm = String(p.comm || '').toLowerCase();
-                var cmd = String(p.cmd || '').toLowerCase();
-                var usr = String(p.user || '').toLowerCase();
-                var pth = String(p.path || '').toLowerCase();
-                return String(p.pid).indexOf(filter) !== -1
-                    || nm.indexOf(filter) !== -1
-                    || usr.indexOf(filter) !== -1
-                    || cmd.indexOf(filter) !== -1
-                    || pth.indexOf(filter) !== -1;
+        var all = last.ports || [];
+        var allByPid = {};   // pid -> every socket of that pid
+        var hitByPid = {};   // pid -> sockets that themselves hit the filter
+        var kernHit = [];    // pid-less sockets that hit the filter
+        var i, pt;
+        for (i = 0; i < all.length; i++) {
+            pt = all[i];
+            if (pt.pid != null) {
+                if (!allByPid[pt.pid]) allByPid[pt.pid] = [];
+                allByPid[pt.pid].push(pt);
+            }
+        }
+        for (i = 0; i < all.length; i++) {
+            pt = all[i];
+            if (filter) {
+                // a socket matches when its own details hit the filter:
+                // program name, address, port number or pid
+                var pn = String(pt.port == null ? '' : pt.port);
+                var pd = String(pt.pid == null ? '' : pt.pid);
+                var phit = String(pt.proc || '').toLowerCase().indexOf(filter) !== -1
+                    || String(pt.addr || '').toLowerCase().indexOf(filter) !== -1
+                    || pn.indexOf(filter) !== -1
+                    || pd.indexOf(filter) !== -1;
+                if (!phit) continue;
+            }
+            if (pt.pid != null) {
+                if (!hitByPid[pt.pid]) hitByPid[pt.pid] = [];
+                hitByPid[pt.pid].push(pt);
+            } else {
+                kernHit.push(pt);
+            }
+        }
+        // chip html is rebuilt on every render (poll / filter / sort /
+        // column toggle) from `last.ports` so no refetch is needed
+        function chipHtml(ports) {
+            ports = ports.slice(0).sort(function(a, b) {
+                return cmpStr(String(a.addr), String(b.addr))
+                    || ((a.port || 0) - (b.port || 0))
+                    || cmpStr(String(a.proto), String(b.proto));
             });
+            var h = '';
+            for (var c = 0; c < ports.length; c++) {
+                h += '<span class="pk"><span class="p">' + esc(ports[c].proto)
+                    + '</span> ' + esc(fmtAddr(ports[c])) + '</span>';
+            }
+            return h;
+        }
+        // collapsed view: up to LIST_LIMIT chips, then a "+N" chip that
+        // expands the row (the "-" chip collapses it back); openPids keeps
+        // user intent across polls and re-sorts
+        function portsCell(mp, key) {
+            if (mp.length > LIST_LIMIT) {
+                if (openPids[key]) {
+                    return chipHtml(mp)
+                        + '<span class="pk more" data-k="' + key + '">-</span>';
+                }
+                return chipHtml(mp.slice(0, LIST_LIMIT))
+                    + '<span class="pk more" data-k="' + key + '">+'
+                    + (mp.length - LIST_LIMIT) + '</span>';
+            }
+            return chipHtml(mp);
+        }
+        var v = last.list;
+        for (i = 0; i < v.length; i++) {
+            var q = v[i];
+            var fieldHit = true;
+            if (filter) {
+                fieldHit = String(q.pid).indexOf(filter) !== -1
+                    || String(q.comm || '').toLowerCase().indexOf(filter) !== -1
+                    || String(q.user || '').toLowerCase().indexOf(filter) !== -1
+                    || String(q.cmd || '').toLowerCase().indexOf(filter) !== -1
+                    || String(q.path || '').toLowerCase().indexOf(filter) !== -1;
+            }
+            // one rule for every query: the port column always shows what
+            // this pid owns; the filter only decides which rows stay visible
+            var mp = allByPid[q.pid] || [];
+            q._chips = mp;
+            q._np = mp.length;
+            // a row stays visible when its own fields match the filter OR
+            // when one of its sockets matches
+            var hs = hitByPid[q.pid];
+            q._keep = fieldHit || (hs && hs.length > 0);
+        }
+        if (filter) {
+            v = v.filter(function(p) { return p._keep; });
         }
         var c = cmp[sort.key];
         v = v.slice(0).sort(function(a, b) { return c(a, b) * sort.dir; });
@@ -1670,7 +2045,7 @@ tr.zombie{background:#fff3e0}
         for (var k = 0; k < v.length; k++) {
             var q = v[k];
             var cell = q._pct === undefined ? '–' : q._pct.toFixed(1) + '%';
-            out += '<tr' + (q.state === 'Z' ? ' class="zombie"' : '') + '>'
+            out += '<tr data-pid="' + q.pid + '"' + (q.state === 'Z' ? ' class="zombie"' : '') + '>'
                 + '<td class="c-pid">' + String(q.pid) + '</td>'
                 + '<td class="c-process name" title="' + esc(q.cmd || q.comm || '') + '">' + esc(q.comm || q.cmd || '?') + '</td>'
                 + '<td class="c-path" title="' + esc(q.path || '') + '">' + esc(q.path || '–') + '</td>'
@@ -1678,14 +2053,32 @@ tr.zombie{background:#fff3e0}
                 + '<td class="c-state' + (q.state === 'Z' ? ' state-z' : '') + '">' + esc(q.state || '?') + '</td>'
                 + '<td class="c-cpu num">' + cell + '</td>'
                 + '<td class="c-memory num">' + fmtMb(q.rss_kb) + '</td>'
+                + '<td class="c-ports">' + portsCell(q._chips || [], String(q.pid)) + '</td>'
                 + '</tr>';
         }
-        if (!v.length) {
+        // kernel-owned sockets (pid unknown) get their own tail row
+        if (kernHit.length) {
+            out += '<tr>'
+                + '<td class="c-pid">—</td>'
+                + '<td class="c-process name">' + esc(txt.kernel) + '</td>'
+                + '<td class="c-path">—</td>'
+                + '<td class="c-user">—</td>'
+                + '<td class="c-state">—</td>'
+                + '<td class="c-cpu num">—</td>'
+                + '<td class="c-memory num">—</td>'
+                + '<td class="c-ports">' + portsCell(kernHit, 'k') + '</td>'
+                + '</tr>';
+        }
+        if (!v.length && !kernHit.length) {
             var ncols = 0;
             for (var m in cfg.cols) if (cfg.cols[m]) ncols++;
             out = '<tr><td colspan="' + ncols + '">–</td></tr>';
         }
         document.getElementById('tbody').innerHTML = out;
+        if (selectedPid) {
+            var selTr = document.querySelector('#tbody tr[data-pid="' + selectedPid + '"]');
+            if (selTr) selTr.className += ' sel';
+        }
         document.getElementById('count').textContent =
             txt.tasks.replace('%d', v.length);
         paintHdr();
@@ -1862,6 +2255,162 @@ tr.zombie{background:#fff3e0}
         render();
     });
 
+    // "+N" expands / collapsed "-" re-folds one port cell; delegation on the
+    // table body survives row html rewrites. A plain click on any other part
+    // of a row (or a right click) opens the per-process detail drawer.
+    document.getElementById('tbody').addEventListener('click', function(ev) {
+        var t = ev.target;
+        if (t && t.classList && t.classList.contains('more')) {
+            var k = t.getAttribute('data-k');
+            if (!k) return;
+            if (openPids[k]) delete openPids[k];
+            else openPids[k] = 1;
+            render();
+            return;
+        }
+        var tr = t && t.closest ? t.closest('tr') : null;
+        var pid = tr && tr.getAttribute('data-pid');
+        if (pid) openDetail(parseInt(pid, 10));
+    });
+    document.getElementById('tbody').addEventListener('contextmenu', function(ev) {
+        var tr = ev.target && ev.target.closest ? ev.target.closest('tr') : null;
+        var pid = tr && tr.getAttribute('data-pid');
+        if (!pid) return;
+        ev.preventDefault();
+        openDetail(parseInt(pid, 10));
+    });
+
+    // ---- per-process detail drawer -------------------------------------
+    var dr = document.getElementById('dr');
+    var drBody = document.getElementById('dr-body');
+    var drTitle = document.getElementById('dr-title');
+    function fmtBytes(n) {
+        if (n == null) return '–';
+        var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0, v = n;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return (i === 0 ? Math.round(v) : v.toFixed(v < 10 ? 1 : 0)) + ' ' + u[i];
+    }
+    function fmtDur(s) {
+        if (s == null || s < 0) return '–';
+        s = Math.round(s);
+        var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+        if (d) return d + 'd ' + h + 'h';
+        if (h) return h + 'h ' + m + 'm';
+        if (m) return m + 'm ' + (s % 60) + 's';
+        return s + 's';
+    }
+    function fmtTime(epoch) {
+        if (!epoch) return '–';
+        var t = new Date(epoch * 1000);
+        var p = function(n) { return (n < 10 ? '0' : '') + n; };
+        return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate())
+            + ' ' + p(t.getHours()) + ':' + p(t.getMinutes());
+    }
+    function kv(k, v) {
+        return '<div>' + esc(k) + '</div><div>' + v + '</div>';
+    }
+    function renderDetail(d) {
+        if (!d || !d.ok) {
+            drBody.innerHTML = '<div class="dr-empty">' + esc(txt.noProc) + '</div>';
+            return;
+        }
+        drTitle.textContent = 'PID ' + d.pid + ' · ' + (d.name || '?');
+        var h = '<div class="dr-sec"><h3>' + esc(txt.overview) + '</h3><div class="dr-kv">'
+            + kv('PID', String(d.pid))
+            + kv(txt.parentPid, d.ppid == null ? '–' : String(d.ppid))
+            + kv(txt.threads, d.threads == null ? '–' : String(d.threads))
+            + kv(txt.started, esc(fmtTime(d.started_epoch)))
+            + kv(txt.cpuTime, esc(fmtDur(((d.utime || 0) + (d.stime || 0)) / 100)))
+            + kv(txt.nice, d.nice == null ? '–' : String(d.nice))
+            + kv('VSZ', esc(fmtBytes((d.vsz_kb || 0) * 1024)))
+            + kv('RSS', esc(fmtBytes((d.rss_kb || 0) * 1024)))
+            + kv(txt.ioRead, d.io && d.io.read_bytes != null ? esc(fmtBytes(d.io.read_bytes)) : '–')
+            + kv(txt.ioWrite, d.io && d.io.write_bytes != null ? esc(fmtBytes(d.io.write_bytes)) : '–')
+            + kv(txt.cwd, esc(d.cwd || '–'))
+            + kv(txt.exe, esc(d.exe || '–'))
+            + '</div></div>';
+        h += '<div class="dr-sec"><h3>' + esc(txt.cmdline) + '</h3><div class="dr-cmd">'
+            + esc(d.cmdline || ('[' + (d.name || '') + ']')) + '</div></div>';
+        h += '<div class="dr-sec"><h3>' + esc(txt.files) + ' (' + (d.fd_count || 0) + ')</h3>';
+        if (!d.fds || !d.fds.length) {
+            h += '<div class="dr-empty">' + esc(txt.noData) + '</div>';
+        } else {
+            h += '<table class="dr-tbl">';
+            var lim = Math.min(d.fds.length, 200);
+            for (var i = 0; i < lim; i++) {
+                var f = d.fds[i];
+                h += '<tr><td class="fd">' + f.fd + '</td><td class="ty">' + esc(f.type)
+                    + '</td><td title="' + esc(f.target) + '">' + esc(f.target) + '</td></tr>';
+            }
+            h += '</table>';
+            if (d.fds.length > lim) {
+                h += '<div class="dr-empty">+' + (d.fds.length - lim) + '</div>';
+            }
+        }
+        h += '</div>';
+        h += '<div class="dr-sec"><h3>' + esc(txt.socks) + ' (' + (d.sockets ? d.sockets.length : 0) + ')</h3>';
+        if (!d.sockets || !d.sockets.length) {
+            h += '<div class="dr-empty">' + esc(txt.noData) + '</div>';
+        } else {
+            h += '<table class="dr-tbl"><tbody>';
+            var sl = Math.min(d.sockets.length, 200);
+            for (var s = 0; s < sl; s++) {
+                var so = d.sockets[s];
+                h += '<tr title="' + esc(so.proto + ' ' + so.local_addr + ' -> ' + so.remote_addr + ' ' + (so.state || '')) + '">'
+                    + '<td class="ty">' + esc(so.proto) + '</td>'
+                    + '<td>' + esc(so.local_addr) + '</td>'
+                    + '<td>' + esc(so.remote_addr) + '</td>'
+                    + '<td class="st">' + esc(so.state || '') + '</td></tr>';
+            }
+            h += '</tbody></table>';
+        }
+        h += '</div>';
+        if (!envShown) {
+            h += '<div class="dr-sec"><button class="dr-btn" id="dr-env">' + esc(txt.showEnv) + '</button></div>';
+        } else if (d.env && d.env.length) {
+            h += '<div class="dr-sec"><h3>' + esc(txt.env) + ' (' + d.env.length + ')</h3><div class="dr-cmd">'
+                + esc(d.env.join('\n')) + '</div></div>';
+        }
+        drBody.innerHTML = h;
+        var envBtn = document.getElementById('dr-env');
+        if (envBtn) envBtn.addEventListener('click', function() {
+            envShown = true;
+            fetchDetail();
+        });
+    }
+    function fetchDetail() {
+        if (!selectedPid) return;
+        var x = new XMLHttpRequest();
+        x.open('GET', '/cgi-bin/luci/admin/desktop/proc_detail?pid=' + selectedPid + (envShown ? '&env=1' : ''), true);
+        x.onload = function() {
+            if (!selectedPid) return;
+            var j = null;
+            try { j = JSON.parse(x.responseText); } catch (e) {}
+            renderDetail(j || { ok: false });
+        };
+        x.onerror = function() {
+            drBody.innerHTML = '<div class="dr-empty">' + esc(txt.failed) + '</div>';
+        };
+        x.send();
+    }
+    function openDetail(pid) {
+        selectedPid = pid;
+        envShown = false;
+        dr.hidden = false;
+        render();
+        fetchDetail();
+    }
+    function closeDetail() {
+        selectedPid = null;
+        envShown = false;
+        dr.hidden = true;
+        render();
+    }
+    document.getElementById('dr-close').addEventListener('click', closeDetail);
+    document.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Escape' && selectedPid) closeDetail();
+    });
+
     var gear = document.getElementById('gear');
     var panel = document.getElementById('panel');
     if (gear && panel) {
@@ -1876,6 +2425,30 @@ tr.zombie{background:#fff3e0}
     }
 
     var sel = document.getElementById('set-interval');
+    var errEl = document.getElementById('err');
+    function paintPaused() {
+        if (errEl) errEl.textContent = autoOn ? '' : txt.paused;
+    }
+    paintPaused();
+    if (sel) sel.disabled = !autoOn;
+    // the shell rebroadcasts the taskbar switch to every iframe on toggle;
+    // this page has no switch of its own and just follows the global one
+    window.addEventListener('message', function(ev) {
+        var d = ev.data;
+        if (!d || d.type !== 'set-auto-refresh') return;
+        autoOn = !!d.on;
+        if (sel) sel.disabled = !autoOn;
+        armPoll();
+        if (autoOn) poll();
+        paintPaused();
+    });
+    // a tab restored from the back/forward cache still runs its old
+    // script and old timers: reload once so a stale snapshot cannot
+    // masquerade as a live one after the toggle was turned off
+    window.addEventListener('pageshow', function(ev) {
+        if (ev.persisted) location.reload();
+    });
+
     if (sel) {
         sel.value = String(cfg.interval);
         sel.addEventListener('change', function() {
@@ -1884,7 +2457,7 @@ tr.zombie{background:#fff3e0}
             cfg.interval = v;
             saveCfg();
             armPoll();
-            poll();
+            if (autoOn) poll();
         });
     }
     (function() {
@@ -1915,8 +2488,13 @@ tr.zombie{background:#fff3e0}
     })();
 
     var tpid = null;
+    var painted = false;   // the first snapshot always paints, even with the global switch off
     function armPoll() {
         if (tpid) clearInterval(tpid);
+        tpid = null;
+        // the global auto-refresh switch stops the cadence entirely: no timer
+        // while off, and the snapshot stays frozen until re-enabled
+        if (!autoOn) return;
         tpid = setInterval(poll, cfg.interval);
     }
 
@@ -1925,15 +2503,22 @@ tr.zombie{background:#fff3e0}
         var x = new XMLHttpRequest();
         x.open('GET', '/cgi-bin/luci/admin/desktop/tasklist', true);
         x.onload = function() {
+            // a request already in flight when the switch went OFF: drop it,
+            // the whole page stays frozen (data, order, graphs) until re-enabled
+            // (the very first snapshot still paints, so a page opened while
+            // the switch is off is not left blank)
+            if (!autoOn && painted) return;
             var j = null;
             try { j = JSON.parse(x.responseText); } catch (e) {}
             if (!j || !j.list) {
                 document.getElementById('err').textContent = txt.failed;
                 return;
             }
-            document.getElementById('err').textContent = '';
             compute(j);
             render();
+            painted = true;
+            paintPaused();
+            if (selectedPid) fetchDetail();
         };
         x.onerror = function() {
             document.getElementById('err').textContent = txt.failed;

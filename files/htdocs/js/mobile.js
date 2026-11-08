@@ -69,6 +69,14 @@
         } catch(e) {}
     }
 
+    // HTML-escape for any string that came from outside our own code
+    // (window titles include remote iframe document.title).
+    function escName(s) {
+        var d = document.createElement("div");
+        d.textContent = s == null ? "" : String(s);
+        return d.innerHTML;
+    }
+
     // ===== Build switcher overlay (once) =====
     function buildSwitcher() {
         if (switcher) return;
@@ -79,6 +87,11 @@
         switcher.innerHTML =
             '<div class="switcher-header">' +
             '  <span class="switcher-title">' + (_('Recent Apps') || 'Recent Apps') + '</span>' +
+            '  <button class="switcher-taskmgr" title="' + (_('Task Manager') || 'Task Manager') + '">' +
+                 '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+                 '<rect x="2" y="2" width="12" height="12" rx="2.2" stroke="currentColor" stroke-width="1.5"/>' +
+                 '<path d="M4.4 9.6l1.9-2.9 1.7 3.6 1.5-4.6 1.2 2.7h1.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+                 '</svg></button>' +
             '  <button class="switcher-bell" title="' + (_('Notifications') || 'Notifications') + '">🔔<span class="switcher-bell-badge" hidden></span></button>' +
             '</div>' +
             '<div class="switcher-options">' +
@@ -100,6 +113,13 @@
             if (window.LuCIDesktop && typeof LuCIDesktop.replayNotifications === 'function') {
                 LuCIDesktop.replayNotifications(true);
             }
+        });
+
+        // Task manager lives next to the 🔔 (user request 2026-11-04): the
+        // phone tray icon alone was too easy to miss.
+        switcher.querySelector('.switcher-taskmgr').addEventListener('click', function() {
+            closeSwitcher();
+            if (window.WM) WM.open('/cgi-bin/luci/admin/desktop/taskmgr', _('Task Manager'));
         });
 
         // Top-right ✕: close ALL open apps, then exit the switcher
@@ -208,7 +228,7 @@
             var meta = document.createElement('div');
             meta.className = 'switcher-meta';
             meta.innerHTML =
-                '<span class="switcher-name">' + (w.title || id) + '</span>' +
+                '<span class="switcher-name">' + escName(w.title || id) + '</span>' +
                 '<button class="switcher-kill" title="' + (_('Close') || 'Close') + '">✕</button>';
             card.appendChild(meta);
 

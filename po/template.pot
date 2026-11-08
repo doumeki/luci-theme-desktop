@@ -11,7 +11,73 @@ msgstr ""
 msgid "Task Manager"
 msgstr ""
 
+msgid "Kernel sockets"
+msgstr ""
+
+msgid "Listening ports"
+msgstr ""
+
 msgid "%d processes"
+msgstr ""
+
+msgid "Overview"
+msgstr ""
+
+msgid "Command line"
+msgstr ""
+
+msgid "Open files"
+msgstr ""
+
+msgid "Sockets"
+msgstr ""
+
+msgid "No data"
+msgstr ""
+
+msgid "Process is gone"
+msgstr ""
+
+msgid "Show environment"
+msgstr ""
+
+msgid "Environment"
+msgstr ""
+
+msgid "Parent PID"
+msgstr ""
+
+msgid "Threads"
+msgstr ""
+
+msgid "Start time"
+msgstr ""
+
+msgid "Nice"
+msgstr ""
+
+msgid "CPU time"
+msgstr ""
+
+msgid "I/O read"
+msgstr ""
+
+msgid "I/O write"
+msgstr ""
+
+msgid "Working directory"
+msgstr ""
+
+msgid "Executable"
+msgstr ""
+
+msgid "Local"
+msgstr ""
+
+msgid "Remote"
+msgstr ""
+
+msgid "State"
 msgstr ""
 
 msgid "Process"
@@ -195,6 +261,12 @@ msgid "Manage"
 msgstr ""
 
 msgid "Refresh"
+msgstr ""
+
+msgid "Back"
+msgstr ""
+
+msgid "Forward"
 msgstr ""
 
 msgid "Rearrange Icons"

@@ -110,6 +110,23 @@
     }
     #app-switcher .switcher-bell:active { opacity: 1; transform: scale(0.92); }
 
+    /* Task manager entry, immediately LEFT of the 🔔 (user request
+       2026-11-04) — same hit area language as the bell. */
+    #app-switcher .switcher-taskmgr {
+        position: absolute;
+        top: 14px; right: 58px;
+        background: transparent;
+        border: none;
+        color: #fff;
+        line-height: 1;
+        padding: 6px;
+        cursor: pointer;
+        opacity: 0.8;
+        display: flex;
+        align-items: center;
+    }
+    #app-switcher .switcher-taskmgr:active { opacity: 1; transform: scale(0.92); }
+
     /* ===== Auto-refresh toggle (mobile entry in the switcher) =====
        Same visual language as the desktop #btn-auto-refresh switch —
        the desktop button is hidden on mobile, so the switcher row is
