@@ -275,3 +275,297 @@
 .window.maximized .window-titlebar {
     cursor: default;
 }
+
+/* ===== Two-row window chrome (browser-style) =====
+ * Row 1 (main): title + the app page's top tabs, mirrored by wm.js
+ *               into .titlebar-tabs (the page's own bar is hidden),
+ *               then the window controls on the right.
+ * Row 2 (tools): pin / back / forward / reload.
+ * The former `.window-titlebar > .btn-pin` child selectors cannot
+ * reach the button inside the row anymore, so the pin rules are
+ * re-declared here as descendant selectors. */
+.window-titlebar {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0;
+}
+.titlebar-row {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: 0;
+}
+.titlebar-row.titlebar-main {
+    height: var(--win-titlebar-height);
+    padding: 0 4px 0 12px;
+}
+.titlebar-row.window-tools {
+    height: var(--win-tools-height, 30px);
+    padding: 0 4px 0 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.window-titlebar .btn-pin {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-right: 2px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--win-titlebar-fg);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.1s;
+}
+.window-titlebar .btn-pin:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+.window-titlebar .btn-pin.active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffd866;
+}
+.titlebar-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 8px 0 10px;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+.titlebar-tabs:empty {
+    display: none;
+}
+.tb-tab {
+    height: 24px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--win-titlebar-fg);
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.1s;
+}
+.tb-tab:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+.tb-tab.tb-active {
+    background: rgba(255, 255, 255, 0.16);
+    font-weight: 600;
+}
+/* ===== Two-row chrome v2 (tab-picker batch) =====
+ * Later rules beat the two-row block above where specificity is
+ * equal: white pill active tab + 8px radius, scrollable strip with
+ * hidden scrollbar (touch swipe + wheel), darkened tools row, svg
+ * glyphs, title-to-address-bar identity switch, full-height corner
+ * close button. */
+.titlebar-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.titlebar-tabs::-webkit-scrollbar {
+    display: none;
+}
+.tb-tab {
+    height: 26px;
+    border-radius: 8px;
+}
+.tb-tab.tb-active {
+    background: #ffffff;
+    color: #24292e;
+}
+.titlebar-row.window-tools {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.10), rgba(0, 0, 0, 0.10));
+    border-top: none;
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+.titlebar-row.titlebar-main {
+    padding-right: 0;
+}
+.tb-ic {
+    width: 14px;
+    height: 14px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+.window-titlebar .btn-pin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.window-titlebar .btn-pin .tb-ic {
+    width: 12px;
+    height: 12px;
+}
+.window-titlebar .window-nav .tb-ic {
+    width: 14px;
+    height: 14px;
+}
+.titlebar-addr {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 22px;
+    margin: 0 6px 0 8px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.14);
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.92);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.titlebar-addr .tb-ic {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+.titlebar-addr-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.window.has-tabs .window-title {
+    display: none;
+}
+.window.has-tabs .titlebar-addr {
+    display: flex;
+}
+.titlebar-row.window-tools .window-nav.window-nav-reload {
+    margin-left: 2px;
+}
+.window:not(.has-tabs) .titlebar-row.window-tools .window-nav-reload {
+    margin-left: auto;
+}
+.window-titlebar .window-controls {
+    align-self: stretch;
+    height: auto;
+    align-items: center;
+}
+.window-titlebar .window-controls .btn-close {
+    align-self: stretch;
+    height: auto;
+    border-radius: 0;
+}
+@keyframes tbStripFade {
+    from { opacity: 0.2; }
+    to   { opacity: 1; }
+}
+.titlebar-tabs.tb-fade {
+    animation: tbStripFade 0.22s ease;
+}
+
+/* ===== Address-strip quick-launch (0.1.0-312): the strip shows the
+   window title (tabbed windows) or a Search hint (untabbed ones);
+   clicking it opens a plain-text app search over the dynamic menu
+   JSON. No URL entry: unmatched input shows the empty notice only. ===== */
+.titlebar-addr-hint {
+    display: none;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.window:not(.has-tabs) .titlebar-addr-hint {
+    display: inline;
+}
+.window:not(.has-tabs) .titlebar-addr-text {
+    display: none;
+}
+.titlebar-addr.addr-editing {
+    background: rgba(0, 0, 0, 0.22);
+}
+.titlebar-addr.addr-editing .titlebar-addr-text,
+.titlebar-addr.addr-editing .titlebar-addr-hint,
+.titlebar-addr.addr-editing .tb-ic {
+    display: none;
+}
+.addr-quick-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 20px;
+    padding: 0 2px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    caret-color: currentColor;
+}
+.addr-quick-pop {
+    position: absolute;
+    z-index: 60;
+    padding: 5px;
+    border-radius: 10px;
+    background: #26282d;
+    color: #e8eaed;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+    overflow: hidden;
+}
+.addr-quick-row,
+.addr-quick-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 26px;
+    padding: 0 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.addr-quick-row.addr-sel,
+.addr-quick-row:hover {
+    background: rgba(255, 255, 255, 0.10);
+    cursor: pointer;
+}
+.addr-quick-cat {
+    flex-shrink: 0;
+    max-width: 45%;
+    opacity: 0.62;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.addr-quick-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.addr-quick-empty {
+    opacity: 0.6;
+}
+.addr-quick-pop {
+    /* viewport = exactly 8 rows (8 x 26 + padding); see 316 */
+    max-height: 218px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.addr-quick-pop::-webkit-scrollbar {
+    width: 8px;
+}
+.addr-quick-pop::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.28);
+    border-radius: 4px;
+}

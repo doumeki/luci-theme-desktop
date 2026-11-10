@@ -15,7 +15,7 @@
             if (!header) return;
             header.style.cursor = 'move';
             header.addEventListener('mousedown', function(e) {
-                if (e.target.tagName === 'BUTTON') return;
+                if (e.target.closest('button')) return;
                 var sx = e.clientX, sy = e.clientY;
                 var rect = panel.getBoundingClientRect();
                 var ox = rect.left, oy = rect.top;

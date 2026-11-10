@@ -109,29 +109,67 @@
             // Titlebar
             var titlebar = document.createElement('div');
             titlebar.className = 'window-titlebar';
+            /* Monochrome svg glyphs for the chrome buttons: they inherit
+             * hover / pinned tint via currentColor and stay crisp at any
+             * row height (the old emoji + unicode arrows could not tint). */
+            var TBIC = {
+                pin: '<svg class="tb-ic" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>',
+                back: '<svg class="tb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>',
+                forward: '<svg class="tb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>',
+                reload: '<svg class="tb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
+                lock: '<svg class="tb-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+            };
+            /* Two-row chrome v2 (tab-picker batch):
+             * row 1 = the app page's top tabs (mirrored out of the iframe)
+             *         + window controls on the right. No static window
+             *         title here: a tabbed window is identified by the
+             *         address bar on row 2 (window.has-tabs switches it).
+             * row 2 = pin / back / forward / address (= window title) /
+             *         reload. The page's own top tab bar is hidden by the
+             *         bridge; the mirror proxies clicks back into the
+             *         iframe document. */
             titlebar.innerHTML =
-                '<button class="btn-pin" title="' + _('Pin to top') + '">&#x1F4CC;</button>' +
+                '<div class="titlebar-row titlebar-main">' +
                 '<span class="window-title">' + escapeHTML(title) + '</span>' +
-                '<div class="window-nav">' +
-                '<button class="btn-back" title="' + _('Back') + '">&#x2190;</button>' +
-                '<button class="btn-forward" title="' + _('Forward') + '">&#x2192;</button>' +
-                '<button class="btn-reload" title="' + _('Refresh') + '">&#x21BB;</button>' +
+                '<div class="titlebar-tabs">' +
                 '</div>' +
                 '<div class="window-controls">' +
                 '<button class="btn-minimize" title="' + _('Minimize') + '">&minus;</button>' +
                 '<button class="btn-maximize" title="' + _('Maximize') + '">&#x25A1;</button>' +
                 '<button class="btn-close" title="' + _('Close') + '">&#x2715;</button>' +
+                '</div>' +
+                '</div>' +
+                '<div class="titlebar-row window-tools">' +
+                '<button class="btn-pin" title="' + _('Pin to top') + '">' + TBIC.pin + '</button>' +
+                '<div class="window-nav">' +
+                '<button class="btn-back" title="' + _('Back') + '">' + TBIC.back + '</button>' +
+                '<button class="btn-forward" title="' + _('Forward') + '">' + TBIC.forward + '</button>' +
+                '</div>' +
+                '<div class="titlebar-addr">' + TBIC.lock +
+                '<span class="titlebar-addr-text"></span>' +
+                '<span class="titlebar-addr-hint">' + _('Search...') + '</span>' +
+                '</div>' +
+                '<div class="window-nav window-nav-reload">' +
+                '<button class="btn-reload" title="' + _('Refresh') + '">' + TBIC.reload + '</button>' +
+                '</div>' +
                 '</div>';
+            titlebar.querySelector('.titlebar-addr-text').textContent = title;
 
             titlebar.addEventListener('mousedown', function(e) {
-                if (e.target.tagName === 'BUTTON') return;
+                /* The nav buttons carry <svg> glyphs (v2): pressing the
+                 * icon makes e.target the svg/path, not the BUTTON, and
+                 * a BUTTON-only check started a window drag on arrow
+                 * presses ("clicking the arrow does nothing, clicking
+                 * beside it works"). closest('button') covers glyph
+                 * hits. */
+                if (e.target.closest('button') || e.target.closest('.titlebar-addr')) return;
                 startDrag(id, e.clientX, e.clientY);
             });
 
             // Double-click detection (manual — more reliable than dblclick event)
             var lastClickTime = 0;
             titlebar.addEventListener('mousedown', function(e) {
-                if (e.target.closest('button')) return; // ignore control buttons
+                if (e.target.closest('button') || e.target.closest('.titlebar-addr')) return; // ignore control buttons
                 var now = Date.now();
                 if (!DESKTOP.isMobile() && now - lastClickTime < 400) {
                     // Double-click detected
@@ -207,6 +245,172 @@
             // So the window keeps its own URL stack and navigates by src;
             // cross-origin hops still get a working "back" (to the last
             // page we know) instead of three dead buttons.
+            /* ---- Tab mirror: browser-style tabs for the app page ----
+             * Mirrors the first ul.cbi-tabmenu/ul.tabs/ul.nav-tabs of the
+             * frame document (same-origin only) into .titlebar-tabs; clicks
+             * are proxied back into the page. Activation and re-rendered
+             * bars follow through a debounced MutationObserver - no polling. */
+            var tabStrip = titlebar.querySelector('.titlebar-tabs');
+            /* Mouse utility: wheel over the strip pans it horizontally.
+             * Touch devices pan natively via overflow-x:auto; phones get
+             * finger swipe for free, hidden scrollbar either way. */
+            tabStrip.addEventListener('wheel', function(ev) {
+                if (tabStrip.scrollWidth <= tabStrip.clientWidth) return;
+                tabStrip.scrollLeft += (ev.deltaY || 0);
+                if (tabStrip.scrollLeft > 0 &&
+                    tabStrip.scrollLeft < tabStrip.scrollWidth - tabStrip.clientWidth) {
+                    ev.preventDefault();
+                }
+            }, { passive: false });
+            /* Keep the active pill inside the viewport when the strip
+             * overflows (called on rebuilds only, never mid-scroll). */
+            function alignTabStrip() {
+                var act = tabStrip.querySelector('.tb-active');
+                var max = tabStrip.scrollWidth - tabStrip.clientWidth;
+                if (!act || max <= 0) return;
+                var t = act.offsetLeft + act.offsetWidth - tabStrip.clientWidth + 8;
+                tabStrip.scrollLeft = Math.max(0, Math.min(t, max));
+            }
+            var tabSig = '';
+            var tabUl = null;
+            var tabObs = null;
+            var tabTail = null;
+            var tabScanAt = 0;
+            function stopTabObs() {
+                if (tabObs) { try { tabObs.disconnect(); } catch (e) {} tabObs = null; }
+                if (tabTail) { try { clearTimeout(tabTail); } catch (e) {} tabTail = null; }
+            }
+            function tabActive(li) {
+                if (li.classList.contains('active') ||
+                    li.classList.contains('selected') ||
+                    li.classList.contains('cbi-tab')) return true;
+                return !!li.querySelector('a.active, a.selected');
+            }
+            function syncWindowTabs() {
+                tabScanAt = Date.now();
+                var doc = null;
+                try { doc = iframe.contentDocument; } catch (e) { doc = null; }
+                var ul = null;
+                if (doc && doc.body) {
+                    try { ul = doc.querySelector('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs'); } catch (e2) { ul = null; }
+                }
+                if (!ul || !ul.parentNode) ul = null;
+                if (ul) {
+                    /* the page's own top bar moves into the chrome */
+                    try { ul.style.setProperty('display', 'none', 'important'); } catch (e3) {}
+                    /* a re-rendered bar (client-side nav) needs a fresh
+                       mirror even when labels and active state are equal */
+                    if (ul !== tabUl) { tabUl = ul; tabSig = ''; }
+                    var lis = ul.querySelectorAll(':scope > li');
+                    if (!lis.length) lis = ul.children;
+                    var labs = [], act = -1, k;
+                    for (k = 0; k < lis.length; k++) {
+                        if (tabActive(lis[k])) act = labs.length;
+                        labs.push((lis[k].textContent || '').replace(/\s+/g, ' ').trim());
+                    }
+                    var sig = labs.join('\u0001') + '#' + act;
+                    if (sig !== tabSig) {
+                        tabSig = sig;
+                        tabStrip.innerHTML = '';
+                        for (k = 0; k < labs.length; k++) {
+                            var b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'tb-tab' + (k === act ? ' tb-active' : '');
+                            b.textContent = labs[k];
+                            (function(node, lab) {
+                                b.addEventListener('click', function(ev) {
+                                    ev.stopPropagation();
+                                    ev.preventDefault();
+                                    var t = null;
+                                    try {
+                                        /* Resolve against the live document: the
+                                         * captured node dies with its page on
+                                         * navigation and a click on a detached
+                                         * node is a silent no-op. Re-find the
+                                         * tab by its label in the current page. */
+                                        var docL = null;
+                                        try { docL = iframe.contentDocument; } catch (eL0) { docL = null; }
+                                        if (docL && docL.body) {
+                                            var ulL = null;
+                                            try {
+                                                ulL = docL.querySelector('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs');
+                                            } catch (eL1) { ulL = null; }
+                                            if (ulL && ulL.parentNode) {
+                                                var lisL = ulL.querySelectorAll(':scope > li');
+                                                if (!lisL.length) lisL = ulL.children;
+                                                var k2;
+                                                for (k2 = 0; k2 < lisL.length; k2++) {
+                                                    if (((lisL[k2].textContent || '').
+                                                        replace(/\s+/g, ' ').trim()) === lab) {
+                                                        t = lisL[k2].querySelector('a, button') || lisL[k2];
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (eL) { t = null; }
+                                    try {
+                                        if (t) {
+                                            try {
+                                                var hT = t.getAttribute ? t.getAttribute('href') : null;
+                                                if (hT) pendSet(pendCalc(hT), ev.currentTarget);
+                                            } catch (eT) {}
+                                            t.click();
+                                            return;
+                                        }
+                                        /* Stale mirror (document swapped under
+                                         * the strip mid-load): drive the
+                                         * navigation instead of dead-clicking
+                                         * the detached node. Hash/javascript
+                                         * targets have no embed form and must
+                                         * stay out of src. */
+                                        var aS = node.querySelector('a[href]');
+                                        var href = aS ? aS.getAttribute('href') : null;
+                                        var uT = pendCalc(href);
+                                        /* One load per destination: rapid
+                                         * taps inside the committed/empty
+                                         * window must wait for the same
+                                         * flight instead of restarting it. */
+                                        if (uT && navPend !== uT) {
+                                            pendSet(uT, ev.currentTarget);
+                                            iframe.src = uT;
+                                        } else if (uT) {
+                                            pendSet(uT, ev.currentTarget);
+                                        }
+                                    } catch (e4) {}
+                                });
+                            })(lis[k], labs[k]);
+                            tabStrip.appendChild(b);
+                        }
+                        /* Window identity: static title in row 1 leaves,
+                         * the tools-row address bar takes over. */
+                        win.classList.add('has-tabs');
+                        alignTabStrip();
+                        tabStrip.classList.remove('tb-fade');
+                        void tabStrip.offsetWidth;
+                        tabStrip.classList.add('tb-fade');
+                    }
+                } else if (tabSig !== '' || tabUl) {
+                    tabSig = '';
+                    tabUl = null;
+                    tabStrip.innerHTML = '';
+                    win.classList.remove('has-tabs');
+                }
+                stopTabObs();
+                if (doc && doc.body) {
+                    try {
+                        tabObs = new MutationObserver(function() { scheduleTabScan(); });
+                        tabObs.observe(doc.body, { subtree: true, childList: true,
+                            attributes: true, attributeFilter: ['class'] });
+                    } catch (e5) { tabObs = null; }
+                }
+            }
+            function scheduleTabScan() {
+                var wait = 60 - (Date.now() - tabScanAt);
+                if (tabTail) { try { clearTimeout(tabTail); } catch (e6) {} tabTail = null; }
+                if (wait <= 0) { syncWindowTabs(); return; }
+                tabTail = setTimeout(syncWindowTabs, wait);
+            }
             var navBtns = {
                 back: win.querySelector('.btn-back'),
                 forward: win.querySelector('.btn-forward'),
@@ -216,6 +420,21 @@
             var navIndex = 0;
             var navOpaque = false;        // current document is cross-origin
             var navSeenSameOrigin = false; // at least one readable URL so far
+            var navPend = null;           // embed URL of an in-flight mirror navigation
+            var navPendBtn = null;        // mirror pill waiting for that load
+            function pendCalc(hRaw) {
+                try {
+                    if (!hRaw || hRaw.charAt(0) === '#' || hRaw.indexOf('javascript:') === 0) return null;
+                    return (window.IframeBridge && IframeBridge.getEmbedUrl) ? IframeBridge.getEmbedUrl(hRaw) : hRaw;
+                } catch (eP) { return null; }
+            }
+            function pendSet(u, btn) { navPend = u || null; navPendBtn = btn || null; }
+            function pendClear() {
+                var b1 = navPendBtn;
+                navPend = null;
+                navPendBtn = null;
+                try { if (b1 && b1.style) b1.style.opacity = ''; } catch (eC) {}
+            }
 
             function navGo(urlTo) {
                 navOpaque = false;
@@ -233,6 +452,24 @@
                     navGo(navStack[navIndex]);
                 } else if (navOpaque && navSeenSameOrigin) {
                     navGo(navStack[navIndex]);
+                } else {
+                    /* Empty own stack. A mirror navigation may still be
+                     * in flight: LET IT FINISH. Stopping it here turned
+                     * impatient back presses into "page never opens"
+                     * (user-reported regression). Give visible feedback
+                     * instead: dim the pending pill briefly. With no
+                     * pending flight of ours, still stop stray loading. */
+                    var b0 = navPend;
+                    var btn0 = navPendBtn;
+                    try {
+                        if (btn0 && btn0.style) {
+                            btn0.style.opacity = '0.35';
+                            setTimeout(function() {
+                                try { btn0.style.opacity = ''; } catch (eB2) {}
+                            }, 900);
+                        }
+                    } catch (eB1) {}
+                    if (!b0) { try { iframe.contentWindow.stop(); } catch (eB3) {} }
                 }
             });
             navBtns.forward.addEventListener('click', function(e) {
@@ -252,6 +489,7 @@
                 }
             });
             iframe.addEventListener('load', function() {
+                pendClear();
                 var href = null;
                 try { href = iframe.contentWindow.location.href; } catch (err) { href = null; }
                 if (href) {
@@ -266,8 +504,10 @@
                     navOpaque = true;
                 }
                 updateNav();
+                syncWindowTabs();
             });
             updateNav();
+            syncWindowTabs();
 
             // Focus on mousedown anywhere in window
             win.addEventListener('mousedown', function() {
@@ -286,6 +526,7 @@
                 pinned: false,
                 el: win
             };
+            DESKTOP.windows[id]._tabStop = function() { stopTabObs(); };
 
             WM.focus(id);
 
@@ -303,6 +544,7 @@
             var w = DESKTOP.windows[id];
             if (!w || w._closing) return;
             w._closing = true;
+            if (w._tabStop) { try { w._tabStop(); } catch (e) {} }
             var done = false;
             var finish = function() {
                 if (done) return;
@@ -418,6 +660,10 @@
             var titleEl = w.el.querySelector('.window-title');
             if (titleEl) {
                 titleEl.textContent = title;
+            }
+            var addrEl = w.el.querySelector('.titlebar-addr-text');
+            if (addrEl) {
+                addrEl.textContent = title;
             }
             if (DESKTOP.emit) DESKTOP.emit('window-title-changed', {id: id, title: title});
         },

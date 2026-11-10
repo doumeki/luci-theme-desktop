@@ -148,6 +148,13 @@
             // each other at top:0 (2026-08-29: cbi-tabmenu appeared over
             // the main tabs). De-stick every later match.
             var cands = doc.querySelectorAll('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs');
+            /* multi-tab chrome: the page's own top bar moves into the
+               window titlebar (wm.js mirrors it), so hide the first
+               bar here. Later matches stay (they are form sub-tabs).
+               Inline !important beats the sticky rule of TOP_TAB_CSS. */
+            if (cands.length > 0) {
+                try { cands[0].style.setProperty('display', 'none', 'important'); } catch (err0) {}
+            }
             if (cands.length > 1) {
                 for (var i = 1; i < cands.length; i++) {
                     if (cands[i].style) {

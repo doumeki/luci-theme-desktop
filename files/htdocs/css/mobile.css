@@ -29,7 +29,9 @@
     .window-body { overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
     .window-titlebar {
         cursor: default !important;
-        height: 44px;
+        /* Two-row chrome: keep the rows' own heights (34px + 30px);
+         * a fixed 44px clipped row 2 and blocked the scrollable strip. */
+        height: auto;
         flex-shrink: 0;
     }
     /* Hide button (minimize) stays — it hides the window; the app
@@ -438,4 +440,18 @@
      * warning, and a fixed top banner would cover the single fullscreen
      * app window (user report 2026-08-15: banner on top of mobile view). */
     #desktop-pw-alert { display: none !important; }
+
+    /* Address-strip quick-launch touch sizes (0.1.0-312) */
+    .addr-quick-input {
+        font-size: 16px;   /* >=16px stops iOS focus auto-zoom */
+    }
+    .addr-quick-row,
+    .addr-quick-empty {
+        min-height: 36px;
+        height: auto;
+    }
+    .addr-quick-pop {
+        max-height: 298px;   /* 8 touch rows (8 x 36 + padding) */
+        -webkit-overflow-scrolling: touch;
+    }
 }
