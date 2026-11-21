@@ -49,6 +49,10 @@
             'User': '用户',
             'Memory': '内存',
             'Load failed': '加载失败',
+            // ===== session expiry (changes window + shell toast, 2026-11-17) =====
+            'Session expired. Please log in again.': '会话已过期，请重新登录。',
+            'Login session has expired.': '登录会话已过期。',
+            'Log in again': '重新登录',
             // ===== theme-config.js =====
             'Titlebar (active)': '标题栏（活动）',
             'Titlebar (inactive)': '标题栏（非活动）',
@@ -93,6 +97,11 @@
             'Angle': '角度',
             'Menu Hover': '菜单悬停切换',
             'Swipe Step': '滑动灵敏度',
+            'Tab Priority': 'Tab 优先',
+            'Compatibility': '兼容性',
+            'Auto (titlebar)': '自动（标题栏）',
+            'In page (old LuCI 19.07)': '页面内（老 LuCI 19.07）',
+            'In titlebar (modern)': '标题栏（现代）',
             'Auto Refresh': '自动刷新',
             'Picsum Auto Refresh': '登录刷新',
             // Layout section labels
@@ -165,6 +174,14 @@
             '?\n\nThis cannot be undone.': ' 中的所有内容？\n\n此操作不可撤销。',
 
             // ===== wallpaper-settings.js =====
+            'Storage path': '存储路径',
+            'Change path': '更改路径',
+            'Restore default': '恢复默认',
+            '(default)': '（默认）',
+            'Save': '保存',
+            'Move existing images to the new path?': '将现有图片迁移到新路径？',
+            'Move images back to the default path?': '将图片迁回默认路径？',
+            'Moved %d image(s), skipped %d': '已迁移 %d 张图片，跳过 %d 张',
             'Wallpapers': '壁纸管理',
             'Browse': '浏览',
             'Upload': '上传',

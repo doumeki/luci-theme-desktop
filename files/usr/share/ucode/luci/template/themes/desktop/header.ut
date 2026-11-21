@@ -8,7 +8,7 @@
 -#}
 
 {%
-    import { readfile, access, glob, basename, writefile } from 'fs';
+    import { readfile, access, glob, basename, writefile, stat } from 'fs';
     import { cursor } from 'uci';
     import { getuid, getspnam } from 'luci.core';
 
@@ -33,14 +33,45 @@
     // shell renders and the front end auto-opens this path as an app
     // window (e.g. visiting /admin/status/overview opens the status app).
     let boot_app = "";
-    if (!is_embedded && ctx.authsession && length(request_path) > 0)
+    if (!is_embedded && ctx.authsession && length(request_path) > 0) {
         boot_app = "/cgi-bin/luci/" + join("/", request_path);
+        // Firstchild parent URLs render a client-side boot page without a
+        // tab bar; open the first satisfied child instead so the window
+        // lands on a full page (Administration -> Router Password + tabs).
+        // An explicit action.preferred (dispatcher semantics) wins.
+        let bn = dispatcher.menu_json();
+        let bwalk = true;
+        for (let i = 0; i < length(request_path); i++) {
+            if (bn.children && bn.children[request_path[i]])
+                bn = bn.children[request_path[i]];
+            else { bwalk = false; break; }
+        }
+        if (bwalk && bn.action && bn.action.type == 'firstchild') {
+            let bfirst = null;
+            let pref = bn.action.preferred;
+            if (pref && bn.children && bn.children[pref] &&
+                bn.children[pref].satisfied != false && bn.children[pref].title)
+                bfirst = { name: pref, o: 0 };
+            if (!bfirst) {
+                for (let name, child in bn.children ?? {}) {
+                    if (child.satisfied != false && child.title && child.title != "") {
+                        let o = child.order ?? 100;
+                        if (!bfirst || o < bfirst.o)
+                            bfirst = { name: name, o: o };
+                    }
+                }
+            }
+            if (bfirst)
+                boot_app += "/" + bfirst.name;
+        }
+    }
 
     // Embedded theme: read individual UCI keys for app colors
     let embed_dark_attr = '';
     let embed_primary_light = '';
     let embed_primary_dark = '';
     let embed_dark_css = '';     // dark.css content (like argon)
+    let era_legacy = false;      // content-tab era (see marker below)
     if (is_embedded) {
         if ((uci.get("desktop", "settings", "app_dark_mode") ?? "") == "1") {
             embed_dark_attr = ' data-theme="dark"';
@@ -48,12 +79,22 @@
         }
         embed_primary_light = uci.get("desktop", "settings", "app_primary_color") ?? '';
         embed_primary_dark  = uci.get("desktop", "settings", "app_primary_color_dark") ?? '';
+        // Content-tab era: deploy-theme.sh writes tab_era="legacy" on devices
+        // whose apps render CBI content tabs; unset = "modern" (zero change).
+        era_legacy = (uci.get("desktop", "settings", "tab_era") ?? '') == 'legacy';
     }
 
     // No-password security warning (argon master convention: getuid() +
     // getspnam() check; show an alert when root has no password set)
     let no_pw = (getuid() == 0 && getspnam('root')?.pwdp === '');
     let can_admin = dispatcher.lookup && dispatcher.lookup("admin/system/admin");
+    // Where the password form lives depends on the LuCI tree: ucode builds
+    // (>=24.10, apk) register admin/system/admin/password, while Lua-derived
+    // trees keep it on admin/system/admin itself. Resolve at render time so
+    // the banner never links to a 404 (q687: iStoreOS 24.10.5).
+    let pw_url = dispatcher.build_url(
+        (dispatcher.lookup && dispatcher.lookup("admin/system/admin/password"))
+            ? "admin/system/admin/password" : "admin/system/admin");
 
     // Static resource version: read version.txt written by postinst.
     // Without a query version browsers cache theme JS/CSS indefinitely —
@@ -65,6 +106,15 @@
     // without a trailing newline; sprintf() coerces readfile's blob to a
     // string (readfile returns a blob, not a string, on this ucode).
     let theme_ver = sprintf("%s", readfile('/www/luci-static/desktop/version.txt') || '0');
+
+    // cbi.js cache buster (q685): cbi.js belongs to luci-base, so its
+    // content changes on every firmware upgrade — but the desktop theme
+    // ships the <script> tag WITHOUT any version parameter, so the browser
+    // may keep the old/corrupt cached copy forever ("cbi_update_table is
+    // not defined" survived re-login + hard reload for one user). Key the
+    // URL on the file's own mtime: firmware upgrades rewrite it (new URL),
+    // theme redeploys do not touch it (no gratuitous bust).
+    let cbi_ver = sprintf("%s", (stat('/www/luci-static/resources/cbi.js') || {}).mtime || 0);
 
     // send as HTML5
     http.prepare_content("text/html; charset=UTF-8");
@@ -119,7 +169,18 @@
             let entry = { title: striptags(_(item.node.title)), id: item.name };
             let subs = [];
             for (let si in sorted_children(item.node)) {
-                let href = tree_url(cat_name, item.name, si.name);
+                // Firstchild sub-nodes (e.g. Administration): the parent
+                // URL renders a client-side boot page without a tab bar,
+                // so point the menu at the first satisfied child instead
+                // (the page that carries the sibling tabs).
+                let href = null;
+                if ((si.node.action ?? {}).type == "firstchild") {
+                    let first_kids = sorted_children(si.node);
+                    if (length(first_kids) > 0)
+                        href = dispatcher.build_url(cat_name, item.name, si.name, first_kids[0].name);
+                }
+                if (!href)
+                    href = tree_url(cat_name, item.name, si.name);
                 if (href)
                     push(subs, { title: striptags(_(si.node.title)), href: href });
             }
@@ -142,29 +203,75 @@
 
     // ===== Sibling tabs (embedded mode) =====
     function render_sibling_tabs() {
-        if (length(request_path) < 4) return '';
+        if (length(request_path) < 2) return '';
         let tree = dispatcher.menu_json();
-        let parent = tree;
-        for (let i = 0; i < length(request_path) - 1; i++) {
-            if (parent.children && parent.children[request_path[i]])
-                parent = parent.children[request_path[i]];
-            else
+
+        // Longest menu prefix of the request path, with the ancestor chain.
+        // Alias pages are dispatched at their TARGET path and vendor pages may
+        // carry synthetic segments, so resolve as deep as the tree allows.
+        let anc = [];
+        let cur = tree;
+        for (let i = 0; i < length(request_path); i++) {
+            let child = (cur.children ? cur.children[request_path[i]] : null);
+            if (!child) break;
+            push(anc, { name: request_path[i], node: child });
+            cur = child;
+        }
+        if (length(anc) < 2) return '';
+
+        function titled(n) {
+            let out = [];
+            for (let name, ch in (n.children ?? {}))
+                if (ch.satisfied != false && ch.title && ch.title != "")
+                    push(out, { name: name, title: ch.title, order: ch.order ?? 100 });
+            return out;
+        }
+        // A tab GROUP is an app node: alias, or pure firstchild aggregate,
+        // with at least two titled children. Its PARENT does not matter --
+        // firewall lives under the recurse category admin/network and still
+        // owns six tabs (q986).
+        function isGroup(n) {
+            let a = n.action ?? {};
+            let pure = (a.type == 'firstchild' && !a.preferred && !a.recurse) || a.type == 'alias';
+            return pure && length(titled(n)) > 1;
+        }
+
+        let deep = anc[length(anc) - 1];
+        let node = deep.node;
+        let parent = null, segs = [], current = null;
+
+        if (isGroup(node)) {
+            // landing on the group itself: show its children, first one active
+            parent = node;
+            for (let a in anc) push(segs, a.name);
+            for (let t in titled(node))
+                if (!current || t.order < current.order) current = { name: t.name, order: t.order };
+        } else {
+            // page inside an app: climb to the nearest group; alias leaves that
+            // are not groups themselves are transparent (their target is an
+            // implementation detail, the alias is the user-visible tab).
+            let idx = length(anc) - 2;
+            while (idx >= 1) {
+                let cand = anc[idx].node;
+                if (isGroup(cand)) {
+                    parent = cand;
+                    current = { name: anc[idx + 1].name, order: 0 };
+                    break;
+                }
+                let ca = cand.action ?? {};
+                if (ca.type == 'alias') { idx--; continue; }
                 return '';
+            }
+            if (!parent) return '';
+            for (let i = 0; i <= idx; i++) push(segs, anc[i].name);
         }
-        let current = request_path[length(request_path) - 1];
-        let siblings = [];
-        for (let name, child in parent.children ?? {}) {
-            if (child.satisfied != false && child.title && child.title != "")
-                push(siblings, { name: name, title: child.title, order: child.order ?? 100 });
-        }
+
+        let siblings = titled(parent);
         if (length(siblings) <= 1) return '';
         sort(siblings, (a, b) => a.order - b.order);
-        let segs = [];
-        for (let i = 0; i < length(request_path) - 1; i++)
-            push(segs, request_path[i]);
         let parts = ['<ul class="tabs">'];
         for (let sib in siblings) {
-            let active = (sib.name == current) ? ' active' : '';
+            let active = (sib.name == current.name) ? ' active' : '';
             let href = dispatcher.build_url(...segs, sib.name);
             push(parts, sprintf('<li class="tabmenu-item-%s%s"><a href="%s">%s</a></li>',
                 sib.name, active, entityencode(href), striptags(_(sib.title))));
@@ -172,7 +279,6 @@
         push(parts, '</ul>');
         return join('', parts);
     }
-
     // ===== Theme list (switchable LuCI themes, start menu) =====
     function build_theme_list() {
         let themes_cfg = uci.get_all('luci', 'themes') ?? {};
@@ -344,7 +450,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#1a1a2e">
 
-<body class="lang_{{ dispatcher.lang }} shell{% if (ctx.authsession): %} logged-in{% endif %}">
+<body class="lang_{{ dispatcher.lang }} {% if (is_embedded): %}embedded{% else %}shell{% endif %}{% if (ctx.authsession): %} logged-in{% endif %}">
     <!-- Poll status indicator. Old LuCI apps (legacy interface
          overview, ...) bind to $('xhr_poll_status').onclick and xhr.js
          flips it while polling; without the element their inline JS dies
@@ -415,7 +521,7 @@
          before cbi.js; without it every client-side L() call falls back to
          the English msgid (tab titles, buttons, table actions all English). -->
     <script src="{{ dispatcher.build_url('admin/translations', dispatcher.lang) }}"></script>
-    <script src="{{ resource }}/cbi.js"></script>
+    <script src="{{ resource }}/cbi.js?v={{ cbi_ver }}"></script>
     {% endif %}
     <script src="{{ resource }}/xhr.js"></script>
     <script>
@@ -461,7 +567,7 @@
     <div id="desktop-pw-alert" onclick="this.style.display='none'">
         <span>{{ _('No password set!') }}</span>
         {% if (can_admin): %}
-        <a class="pw-alert-btn" href="{{ dispatcher.build_url("admin/system/admin") }}">{{ _('Go to password configuration...') }}</a>
+        <a class="pw-alert-btn" href="{{ pw_url }}">{{ _('Go to password configuration...') }}</a>
         {% endif %}
     </div>
     {% endif %}
@@ -576,6 +682,21 @@
     {% if (embed_dark_css != ''): %}
     <script type="text/plain" id="__desktop-dark-data">{{ embed_dark_css }}</script>
     {% endif %}
+    {%
+        // LuCI era marker (keep in sync with files/templates/header.htm).
+        // Era comes from desktop.settings.tab_era, which deploy-theme.sh
+        // writes ("legacy") on devices whose apps render CBI content tabs
+        // that must stay in the page flow. Unset/any other value =
+        // "modern" = the pre-era behaviour (zero change). A previous
+        // draft probed /www/luci-static/resources/luci.js instead —
+        // unusable in practice: this fork's Lua-track LuCI ships no
+        // luci.js on ANY device, so a file probe cannot tell device
+        // families apart. wm.js and the shell-side chrome hider read
+        // window.__DESKTOP_LUCI_ERA__: on legacy, CONTENT tabs
+        // (ul.cbi-tabmenu) are not mirrored into the window titlebar and
+        // stay visible in the page.
+    %}
+    <script>window.__DESKTOP_LUCI_ERA__ = "{{ era_legacy ? 'legacy' : 'modern' }}";</script>
     <link rel="stylesheet" href="{{ media }}/css/embedded.css?v={{ theme_ver }}">
     <script src="{{ media }}/js/debug.js?v={{ theme_ver }}"></script>
     <script src="{{ media }}/js/color_calc-argon.js?v={{ theme_ver }}"></script>
@@ -718,9 +839,8 @@
         style.textContent = css;
     });
     </script>
-    <script src="{{ resource }}/cbi.js"></script>
+    <script src="{{ resource }}/cbi.js?v={{ cbi_ver }}"></script>
 </head>
-<body class="lang_{{ dispatcher.lang }} embedded{% if (ctx.authsession): %} logged-in{% endif %}">
     <!-- LuCI 26 Unsaved-Changes indicator deliberately NOT mounted here:
          the desktop tray already surfaces unsaved changes via its bell +
          toast, so an in-app top-right indicator would be redundant. ui.js
@@ -732,7 +852,7 @@
         <h4>{{ _('No password set!') }}</h4>
         <p>{{ _('There is no password set on this router. Please configure a root password to protect the web interface.') }}</p>
         {% if (can_admin): %}
-        <div class="right"><a class="btn" href="{{ dispatcher.build_url("admin/system/admin") }}">{{ _('Go to password configuration...') }}</a></div>
+        <div class="right"><a class="btn" href="{{ pw_url }}">{{ _('Go to password configuration...') }}</a></div>
         {% endif %}
     </div>
     {% endif %}

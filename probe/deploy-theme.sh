@@ -116,12 +116,31 @@ case "$PM" in
         echo "!! $HOST 无 opkg/apk"; exit 1 ;;
 esac
 
-# Lua track 模板缓存：postinst 不清理，不清的话 header.htm 渲染旧版（JS 静态文件不受影响）
-# 带 ssh key 的目标 = Lua track（见 .local-env 的 SSH_KEY_2）
-if [ -n "$KEY" ]; then
-    ssh "${OPT[@]}" "root@$HOST" "rm -f /tmp/luci-indexcache*; rm -rf /tmp/luci-modulecache" 2>/dev/null
-    echo "== 已清 Lua 模板缓存 (luci-indexcache/modulecache)"
-fi
+# uci-defaults 执行兜底：opkg 固件行为不一（有的装包即执行并消费文件，有的等开机），
+# apk 流程不自动执行 —— 统一在装后手动跑一次我们的文件（幂等），保证主题激活。
+# 配合 30_luci-theme-desktop 的无条件注册块，升级/重装必定切回 desktop。
+ssh "${OPT[@]}" "root@$HOST" '
+    for f in /etc/uci-defaults/*luci-theme-desktop*; do
+        [ -f "$f" ] && { sh "$f"; echo "uci-defaults ran: $f"; }
+    done
+    true
+' 2>/dev/null
+echo "== uci-defaults 兜底执行 (注册+激活主题, 幂等; 文件已被固件消费时自动跳过)"
+
+# ===== 内容 tab era（2026-11-15）=====
+# 不再由部署脚本写 desktop.settings.tab_era：脚本不可能知道别人的固件属于
+# 哪一代 LuCI（两台的 luci.version 被 OEM 改成同一个假戳，luci.js 两台都没
+# 有，cbi.js 大小一致），按目标名硬编码只会把 1.1/253 绑死。
+# 现在它是设备上的设置项：设置 → 主题 → 兼容性 → 「Tab 优先」：
+#   自动（跟随设备，unset）/ 页面内（老 LuCI 19.07）/ 标题栏（现代）
+# 老 LuCI 设备由用户手动选「页面内」；unset / 自动 = 现代 = 修复前行为。
+echo "== Tab 优先 是设备设置项（设置→主题→兼容性），部署不写入 tab_era"
+
+# Lua track 模板缓存：装包不清的话 header.htm 渲染旧版（JS 静态文件不受影响）。
+# 单包双轨后两台目标都是 Lua track —— 无条件清（2026-11-15: EzOpWrt 换固件后
+# 旧缓存遮蔽新菜单树，原 KEY 条件导致 1.1 目标漏清，故改无条件）
+ssh "${OPT[@]}" "root@$HOST" "rm -f /tmp/luci-indexcache*; rm -rf /tmp/luci-modulecache" 2>/dev/null
+echo "== 已清 Lua 模板缓存 (luci-indexcache/modulecache)"
 
 ssh "${OPT[@]}" "root@$HOST" "echo '-- version.txt:' && cat /www/luci-static/desktop/version.txt" 2>/dev/null
 

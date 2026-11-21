@@ -128,15 +128,41 @@ function detectCookieName(host, tok) {
 
 async function login(sid) {
     if (SSH_HOST) {
-        // No LuCI password needed: forge a ubus session over ssh (the
-        // router's own ubus daemon) and inject it as the session cookie.
-        // PROBE_SSH=<host> PROBE_SSH_KEY=<keyfile> (key defaults to
-        // SSH_KEY_2 from probe/.local-env).
+        // PROBE_SSH is set so root-side helpers (staging probes etc.) can
+        // reach the box — it must NOT downgrade the login: prefer a REAL
+        // login when the box accepts one (empty-password curl). Real login
+        // sessions are the ONLY ones rpcd grants uci writes to (q676: forged
+        // sessions are ACL-denied on both tracks even with acl:"unlimited"
+        // stored). Passwordless boxes (dev1) log in here; password boxes
+        // (dev2: endpoint no_password=false, empty POST re-renders the login
+        // form — q676) fall through to the forge below. q652b note: that run
+        // executed against dev1 (sysauth_http cookie), NOT 253 — 253 has
+        // never accepted an empty-password login.
         const host = SSH_HOST;
+        try {
+            const auth = curlLoginToken(host);
+            console.log(`[lib] login cookie: ${auth.name} (from login response)`);
+            await nav(sid, `http://${host}/cgi-bin/luci/`);
+            await sleep(1500);
+            await wd('POST', `/session/${sid}/cookie`, { cookie: { name: auth.name, value: auth.value, path: '/', httpOnly: true } });
+            await nav(sid, `http://${host}/cgi-bin/luci/`);
+            await sleep(2500);
+            return auth;
+        } catch (e) {
+            console.log('[lib] curl login unavailable (' + String(e.message).split('\n')[0].slice(0, 70) + ') — ssh forge fallback');
+        }
+        // Forge a ubus session over ssh (the router's own ubus daemon) and
+        // inject it as the session cookie. PROBE_SSH=<host>
+        // PROBE_SSH_KEY=<keyfile> (key defaults to SSH_KEY_2 from
+        // probe/.local-env). acl "unlimited" is stored (session get shows
+        // it) but does NOT grant uci writes on either track (q676: dev1
+        // forge control denied too) — forge sessions are for browsing and
+        // read flows; uci staging on password boxes goes through the
+        // root-side CLI route in compat-hot.js (route 'cli').
         const key = SSH_KEY ? `-i ${SSH_KEY}` : '';
         const create = execSync(`ssh ${key} root@${host} "ubus call session create '{\\"timeout\\":900}'"`, { encoding: 'utf8' });
         const tok = JSON.parse(create).ubus_rpc_session;
-        execSync(`ssh ${key} root@${host} "ubus call session set '{\\"ubus_rpc_session\\":\\"${tok}\\",\\"values\\":{\\"token\\":\\"${tok}\\",\\"username\\":\\"root\\"}}'"`);
+        execSync(`ssh ${key} root@${host} "ubus call session set '{\\"ubus_rpc_session\\":\\"${tok}\\",\\"values\\":{\\"token\\":\\"${tok}\\",\\"username\\":\\"root\\",\\"acl\\":\\"unlimited\\"}}'"`);
         // Cookie name comes from the box (runtime-driven), not from a
         // device→track assumption — 1.1 and 253 have both drifted tracks.
         const cookieName = detectCookieName(host, tok);
@@ -198,4 +224,4 @@ async function finish(sid) {
     killStale();
 }
 
-module.exports = { sleep, exec, nav, wd, startGecko, newSession, login, curlLoginToken, theme, assertTheme, finish, ROUTER, SSH_HOST, SSH_KEY };
+module.exports = { sleep, exec, nav, wd, startGecko, newSession, login, curlLoginToken, detectCookieName, theme, assertTheme, finish, ROUTER, SSH_HOST, SSH_KEY };

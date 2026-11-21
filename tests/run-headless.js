@@ -468,6 +468,9 @@ const TPL_TOKENS = [
     '__desktop-primary-override', '__desktop-dark-style', '__desktop-dark-data',
     'render_sibling_tabs', 'String.prototype.format',
     'wp_local_url', 'builtin_disabled',
+    // era marker script tag (embed bucket): both template tracks must publish
+    // the marker that the wm.js mirror / chrome-hider era gate reads.
+    '__DESKTOP_LUCI_ERA__',
 ];
 
 // Frozen current-state divergences (ratchet). side='ut'/'lua' marks the
@@ -930,6 +933,142 @@ function submenuHoverGraceCheck() {
 // failure mode the AGENTS.md rule warns about. The runner now verifies the
 // list against the directory instead of trusting it: extra, missing and
 // duplicated entries all fail with the exact file names to add/remove.
+// ===== cbi.js cache-buster gate (q685) =====
+// The desktop theme shipped <script src=".../cbi.js"> WITHOUT any version
+// parameter. cbi.js belongs to luci-base and its content changes on every
+// firmware upgrade, so the browser kept a stale/corrupt cached copy forever
+// ("cbi_update_table is not defined" survived re-login and hard reloads --
+// the URL never changed; bootstrap-dark masked this because luci-base's own
+// theme bakes ?v= in). Both header templates must:
+//   a) attach ?v= to EVERY cbi.js script URL (shell AND embed branch), and
+//   b) key that version on cbi.js's own mtime -- NOT on theme_ver: theme
+//      redeploys must not gratuitously bust a firmware-owned file.
+function cbiCacheBusterCheck() {
+    const problems = [];
+    const specs = [
+        { f: 'files/templates/header.htm',
+          stat: /nixio\.fs\.stat\('\/www\/luci-static\/resources\/cbi\.js'\)/ },
+        { f: 'files/usr/share/ucode/luci/template/themes/desktop/header.ut',
+          stat: /stat\('\/www\/luci-static\/resources\/cbi\.js'\)/ },
+    ];
+    try {
+        specs.forEach(function(spec) {
+            const t = readFile(spec.f);
+            // (a) every cbi.js script URL carries a version parameter
+            let n = 0;
+            const re = /<script src="([^"]*\/cbi\.js[^"]*)">/g;
+            let m;
+            while ((m = re.exec(t)) !== null) {
+                n++;
+                if (m[1].indexOf('?v=') === -1)
+                    problems.push(spec.f + ': cbi.js script WITHOUT ?v= ("' + m[1] + '")');
+            }
+            if (n < 2)
+                problems.push(spec.f + ': expected >=2 cbi.js script tags (shell + embed), found ' + n);
+            // (b) the version is keyed on cbi.js's own mtime, not theme_ver
+            if (!spec.stat.test(t) || !/\.mtime/.test(t))
+                problems.push(spec.f + ": cbi_ver must be computed from stat('/www/luci-static/resources/cbi.js').mtime (firmware upgrades rewrite it; theme redeploys must not bust it)");
+            if (/cbi\.js\?v=\{\{\s*theme_ver/.test(t) || /cbi\.js\?v=<%=theme_ver%>/.test(t))
+                problems.push(spec.f + ': cbi.js version parameter must NOT be theme_ver');
+        });
+    } catch (e) {
+        problems.push('cbiCacheBusterCheck failed: ' + e.message);
+    }
+    if (problems.length) {
+        console.log('? cbi.js cache-buster gate broken:\n' +
+            problems.map(function(p) { return '  ' + p; }).join('\n') +
+            '\n  \u2192 q685: a bare cbi.js URL means the browser caches a stale copy forever');
+        process.exit(1);
+    }
+    console.log('? cbi.js cache buster: every script URL carries ?v= keyed on the file mtime (both templates)');
+}
+
+// ===== controller index() environment gate (q685) =====
+// luci.dispatcher's process_lua_controller() runs a controller's index() with
+// its function environment REPLACED:
+//
+//   setfenv(idx, setmetatable({}, { __index = luci.dispatcher }))()
+//
+// The replacement table's __index chain is luci.dispatcher -> package.seeall
+// -> _G. Consequences for index() bodies:
+//   * dispatcher helpers (entry/call/firstchild/...) work -- found via __index.
+//   * _G globals (require, package, ...) work -- found via the chain.
+//   * globals DEFINED IN THE CONTROLLER FILE ITSELF are INVISIBLE as bare
+//     names. They only exist in the module table (package.loaded[...]).
+//
+// Regression basis (0.1.0-329): index() called a bare wp_reconcile_storage()
+// -- a helper defined in the same file. It worked in a plain require(), but
+// under the real dispatcher path it raised "attempt to call global
+// 'wp_reconcile_storage' (a nil value)" and took the entire pagetree down
+// with HTTP 500 on every /cgi-bin/luci/* request. This gate forbids bare
+// calls to file-local globals inside index(), so the same shape cannot ship
+// again. Correct forms: package.loaded["luci.controller.<name>"].fn, or a
+// local alias captured outside index().
+function controllerIndexEnvCheck() {
+    const problems = [];
+    try {
+        const file = 'files/controller/desktop.lua';
+        const src = readFile(file);
+        const lines = src.split(/\r?\n/);
+
+        // body of index(): from its "function index()" line up to the next
+        // top-level "function " / "local function " definition.
+        let start = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (/^function\s+index\s*\(/.test(lines[i])) { start = i; break; }
+        }
+        if (start < 0) {
+            problems.push(file + ': no top-level function index() found');
+        } else {
+            let end = lines.length;
+            for (let i = start + 1; i < lines.length; i++) {
+                if (/^(local\s+)?function\s+/.test(lines[i])) { end = i; break; }
+            }
+            const body = lines.slice(start + 1, end).join('\n');
+
+            // every global function defined in this controller file
+            const defined = [];
+            const defRe = /^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/gm;
+            let dm;
+            while ((dm = defRe.exec(src)) !== null) {
+                if (dm[1] !== 'index') defined.push(dm[1]);
+            }
+
+            // strip comments and string literals before scanning for calls
+            const clean = body
+                .replace(/--\[(=*)\[[\s\S]*?\]\1\]/g, ' ')
+                .replace(/--[^\n]*/g, ' ')
+                .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+                .replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+
+            defined.forEach(function(name) {
+                // bare call: preceding char is not \w . : -- and not the
+                // "function " keyword itself (declarations are not calls).
+                const callRe = new RegExp('(^|[^A-Za-z0-9_.:])' + name + '\\s*\\(', 'g');
+                let cm;
+                while ((cm = callRe.exec(clean)) !== null) {
+                    const before = clean.slice(Math.max(0, cm.index - 40), cm.index + cm[0].length);
+                    if (/function\s+$/.test(before)) continue; // declaration, not a call
+                    const lineNo = start + 1 + clean.slice(0, cm.index).split('\n').length;
+                    problems.push(file + ':' + lineNo + ': index() calls file-local global ' +
+                        name + '() by bare name; its env is setfenv-replaced under ' +
+                        'luci.dispatcher -> use package.loaded["luci.controller.desktop"].' +
+                        name + '(...) or a captured local');
+                }
+            });
+        }
+    } catch (e) {
+        problems.push('controllerIndexEnvCheck failed: ' + e.message);
+    }
+    if (problems.length) {
+        console.log('❌ controller index() env gate broken:\n' +
+            problems.map(function(p) { return '  ' + p; }).join('\n') +
+            '\n  → q685: this shape took the whole pagetree down with HTTP 500 on 0.1.0-329');
+        process.exit(1);
+    }
+    console.log('✅ controller index() env: no bare calls to file-local globals (setfenv-safe)');
+}
+
 function debugGateOrderCheck() {
     // Debug-first contract (0.1.0-249): debug.js must be the FIRST theme /js/
     // script in every header template branch. Regression basis: the embed
@@ -974,8 +1113,53 @@ function debugGateOrderCheck() {
     console.log('✅ debug gate order: debug.js precedes every theme js script in both header templates');
 }
 
-function testManifestCheck() {
-    const RUNNER_HTML = 'tests/js/test-runner.html';
+// ===== theme geometry contract (q695) =====
+// Layout regressions (a table wider than its container, one column eating the
+// row, overflow hidden behind a clip) produce no console error and no missing
+// selector, so the static gates above cannot see them. The judgement layer is
+// pure, so it is unit-tested here with real device fixtures; the live probe is
+// tests/theme-geometry.js and probe/compat-scan.js runs the absolute checks
+// per page in L3.
+// ===== theme asset contract (q699) =====
+// Every url() in the theme CSS must resolve to a file this package ships, or to
+// luci-base. A cross-theme reference (/luci-static/argon/...) is a 404 on any
+// firmware without that other theme, and the browser only shows a missing icon.
+function themeAssetCheck() {
+    let r;
+    try {
+        r = require('./theme-assets.js').run();
+    } catch (e) {
+        console.log('❌ theme assets: cannot load tests/theme-assets.js: ' + e.message);
+        process.exit(1);
+    }
+    if (r.problems.length) {
+        console.log('❌ theme assets: ' + r.problems.length + ' unresolved reference(s)\n  ' +
+            r.problems.map(p => p.kind.toUpperCase() + ' ' + p.file + ':' + p.line + ' ' + p.url +
+                '  (' + p.detail + ')').join('\n  '));
+        process.exit(1);
+    }
+    console.log('✅ theme assets: ' + r.refs + ' url() targets resolved (' + r.luciBase + ' from luci-base)');
+}
+
+function geometryContractCheck() {
+    let r;
+    try {
+        r = require('./geom/evaluate.test.js').run();
+    } catch (e) {
+        console.log('❌ theme geometry: cannot load tests/geom/evaluate.test.js: ' + e.message);
+        process.exit(1);
+    }
+    if (r.failures.length) {
+        console.log('❌ theme geometry contract: ' + r.passed + '/' + r.total + '\n  ' +
+            r.failures.join('\n  ') +
+            '\n  → thresholds and judgement live in tests/geom/evaluate.js');
+        process.exit(1);
+    }
+    console.log('✅ theme geometry contract: ' + r.passed + '/' + r.total +
+        ' (container fit / column share / clipped overflow)');
+}
+
+function testManifestCheck() {    const RUNNER_HTML = 'tests/js/test-runner.html';
     const dir = path.join(THEME_DIR, 'tests/js');
     let onDisk = [];
     try {
@@ -1258,32 +1442,59 @@ function secretScanCheck() {
     console.log('✅ secret scan: ' + allFiles.length + ' public files, no device addresses/credentials');
 }
 
-// ===== runtime.lua 双格式规范化单测（tests/lua/test-runtime.lua） =====
-// uci:changes() 的数组/dict 格式规范化是历史最高频 bug 区（0.1.0-84 等），
-// Lua 侧此前零自动化覆盖。本地 lua5.1 可跑（staging hostpkg 或系统 lua5.1）。
-function runLuaRuntimeTests() {
-    const { spawnSync } = require('child_process');
+// ===== Lua 测试（tests/lua/*.lua，本地 lua5.1 可跑）=====
+// 候选解释器：staging hostpkg 或系统 lua5.1；找不到则整组跳过。
+
+function luaBin() {
     const fs = require('fs');
     const candidates = [
         process.env.LEDE_ROOT + '/staging_dir/hostpkg/bin/lua5.1',
         '/usr/bin/lua5.1', '/usr/bin/lua'
     ];
-    let lua = null;
     for (const c of candidates) {
-        if (c && fs.existsSync(c)) { lua = c; break; }
+        if (c && fs.existsSync(c)) return c;
     }
+    return null;
+}
+
+function runLuaScript(script) {
+    const { spawnSync } = require('child_process');
+    const lua = luaBin();
     if (!lua) {
-        console.log('⚠ lua5.1 not found — skipping tests/lua/test-runtime.lua (set LEDE_ROOT to enable)');
+        console.log('⚠ lua5.1 not found — skipping tests/lua/' + script + ' (set LEDE_ROOT to enable)');
         return;
     }
-    const r = spawnSync(lua, ['tests/lua/test-runtime.lua', process.cwd()], { encoding: 'utf8', timeout: 20000 });
+    const r = spawnSync(lua, ['tests/lua/' + script, process.cwd()], { encoding: 'utf8', timeout: 20000 });
     const out = (r.stdout || '') + (r.stderr || '');
     if (r.status === 0) {
         console.log('✅ ' + out.trim().split('\n').pop());
     } else {
-        console.log('❌ tests/lua/test-runtime.lua failed (lua=' + lua + '):\n' + out.slice(0, 800));
+        console.log('❌ tests/lua/' + script + ' failed (lua=' + lua + '):\n' + out.slice(0, 800));
         process.exit(1);
     }
+}
+
+// runtime.lua 双格式规范化单测：uci:changes() 的数组/dict 格式规范化是
+// 历史最高频 bug 区（0.1.0-84 等）。
+function runLuaRuntimeTests() {
+    runLuaScript('test-runtime.lua');
+}
+
+// sibling-tabs 纯聚合判据单测：从 compat.lua 源码提取真实的
+// _render_sibling_tabs_ucode 执行，覆盖几种 tab 方式（聚合自身 URL 首子
+// active / 聚合内 4 段兄弟条 / 分类与普通页无条 / preferred-recurse 边界 /
+// 单子聚合与 unsatisfied 排除），并哨兵校验 ut/compat 两轨判据 token 同步。
+// 设备级 embed 模式矩阵另见 tests/tabs-matrix.js（geckodriver 探针）。
+function runLuaTabsTests() {
+    runLuaScript('test-tabs.lua');
+}
+
+// q685 会话机制单测:cookieName() 的 HTTPS 语义(镜像 dispatcher.uc:963)
+// + sessionValid() 契约(短 sid 不触发 ubus / token 判活)。
+// 根因:主题端点 cookie 名与 dispatcher 脱钩 → https 访问下
+// apply/revert 全部误报 "Session expired"。
+function runLuaSessionTests() {
+    runLuaScript('test-session.lua');
 }
 
 // ===== Run =====
@@ -1298,7 +1509,9 @@ function cleanup() {
 //   node -e "require('./tests/run-headless.js').secretScanCheck()"
 module.exports = { secretScanCheck: secretScanCheck, submenuHoverGraceCheck: submenuHoverGraceCheck,
     intervalOwnerCheck: intervalOwnerCheck,
-    templateSyncCheck: templateSyncCheck };
+    templateSyncCheck: templateSyncCheck, cbiCacheBusterCheck: cbiCacheBusterCheck,
+    controllerIndexEnvCheck: controllerIndexEnvCheck, geometryContractCheck: geometryContractCheck,
+    themeAssetCheck: themeAssetCheck };
 
 if (require.main === module) (async () => {
     try {
@@ -1308,10 +1521,16 @@ if (require.main === module) (async () => {
         widgetStyleContractCheck();
         intervalOwnerCheck();
         templateSyncCheck();
+        cbiCacheBusterCheck();
+        controllerIndexEnvCheck();
         submenuHoverGraceCheck();
         debugGateOrderCheck();
         testManifestCheck();
+        geometryContractCheck();
+        themeAssetCheck();
         runLuaRuntimeTests();
+        runLuaSessionTests();
+        runLuaTabsTests();
         killAll();
         await new Promise(res => server.listen(HPORT, '127.0.0.1', res));
         console.log('verdict sink on http://127.0.0.1:' + HPORT);
@@ -1339,7 +1558,11 @@ if (require.main === module) (async () => {
         let lastNavAt = 0;
         let navigations = 0;
         while (Date.now() < deadline && !results) {
-            if (navigations === 0 || Date.now() - lastNavAt > 12000) {
+            /* Re-navigation grace: 60s (was 12s). Async fixture tests
+               legitimately take seconds; a blind reload every 12s restarts
+               the suite forever and livelocks until the deadline. 60s still
+               bounds a truly hung page to 3 retries inside 180s. */
+            if (navigations === 0 || Date.now() - lastNavAt > 60000) {
                 lastNavAt = Date.now();
                 navigations++;
                 try {

@@ -342,6 +342,9 @@
         if (scrollEl && !scrollEl.__parallaxBound) {
             scrollEl.addEventListener('scroll', onScroll, { passive: true });
             scrollEl.__parallaxBound = true;
+            if (window.LuCIDesktop && LuCIDesktop.suppressClickAfterDrag) {
+                LuCIDesktop.suppressClickAfterDrag(scrollEl, 'switcher');
+            }
         }
     };
 

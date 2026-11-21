@@ -3,11 +3,14 @@
 CONFIG_VERSION=4
 
 # Register theme (always safe to re-apply)
-uci -q get luci.themes.Desktop >/dev/null 2>&1 || {
-	uci set luci.themes.Desktop=/luci-static/desktop
-	uci set luci.main.mediaurlbase=/luci-static/desktop
-	uci commit luci
-}
+# NOTE: this block MUST stay unconditional. A guard ("skip if already
+# registered") breaks upgrades on firmware that bundles an older copy of
+# this theme: luci.themes.Desktop exists but mediaurlbase points at the
+# bundled default, so the upgraded package never activated (observed on
+# EzOpWrt 24.10.5 with bundled 0.1.0-235, 2026-11-15).
+uci set luci.themes.Desktop=/luci-static/desktop
+uci set luci.main.mediaurlbase=/luci-static/desktop
+uci commit luci
 
 # Config: only seed if version missing or outdated
 CUR_VER=$(uci -q get desktop.settings.config_version 2>/dev/null)

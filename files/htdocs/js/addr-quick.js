@@ -260,11 +260,30 @@
         return isNaN(v) ? 0 : v;
     }
 
+    // Drag guard: scrolling the pop and releasing must not launch the row
+    // under the finger. touchend launches directly (below), so the check has
+    // to happen there before launch() and in the click handler as a fallback.
+    var _tx = 0, _ty = 0, _moved = false, _dragUntil = 0;
+    document.addEventListener('touchstart', function(e) {
+        if (!e.target || !e.target.closest || !e.target.closest('.addr-quick-pop')) return;
+        if (e.touches && e.touches.length === 1) {
+            _tx = e.touches[0].clientX; _ty = e.touches[0].clientY; _moved = false;
+        }
+    }, { passive: true, capture: true });
+    document.addEventListener('touchmove', function(e) {
+        if (!e.touches || e.touches.length !== 1) return;
+        if (Math.abs(e.touches[0].clientX - _tx) > 8 ||
+            Math.abs(e.touches[0].clientY - _ty) > 8) {
+            if (!_moved) { _moved = true; _dragUntil = Date.now() + 600; }
+        }
+    }, { passive: true, capture: true });
+
     document.addEventListener('click', function(e) {
         var t = e.target;
         if (!t || !t.closest) return;
         if (t.closest('.addr-quick-input')) return;
         if (t.closest('.addr-quick-pop')) {
+            if (Date.now() < _dragUntil) { e.preventDefault(); return; }
             if (input) launch(idxOf(t.closest('.addr-quick-row')));
             return;
         }
@@ -283,6 +302,7 @@
         var t = e.target;
         if (!t || !t.closest) return;
         if (t.closest('.addr-quick-pop')) {
+            if (_moved || Date.now() < _dragUntil) { e.preventDefault(); return; }
             if (input && t.closest('.addr-quick-row')) {
                 e.preventDefault();
                 launch(idxOf(t.closest('.addr-quick-row')));

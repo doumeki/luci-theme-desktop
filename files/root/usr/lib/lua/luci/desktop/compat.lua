@@ -167,6 +167,24 @@ local function render_ucode(category)
                         end
                     end
                     if #sub_parts > 0 then
+                        -- Firstchild groups (e.g. Administration): the
+                        -- parent URL is a tabless client-side boot page;
+                        -- expose the first child as the group's own href.
+                        local self_href
+                        if (child_node.action or {}).type == "firstchild" then
+                            local fk = sorted_children(child_node)
+                            if #fk > 0 then
+                                self_href = disp.build_url(cat, parent_name, child_name, fk[1].name)
+                            end
+                        end
+                        if self_href then
+                            return string.format(
+                                '{"title":"%s","id":"%s","href":"%s","subs":[%s]}',
+                                json_escape(tr(child_node.title)),
+                                json_escape(child_name),
+                                json_escape(self_href),
+                                table.concat(sub_parts, ","))
+                        end
                         return string.format(
                             '{"title":"%s","id":"%s","subs":[%s]}',
                             json_escape(tr(child_node.title)),
@@ -224,36 +242,76 @@ end
 -- ===== Sibling tabs (embedded mode) =====
 
 local function _render_sibling_tabs_ucode(request, pcdata_fn)
+    if #request < 2 then return "" end
     local tree = disp.menu_json()
-    local parent = tree
 
-    -- Walk to the parent of the current page
-    for i = 1, #request - 1 do
-        if parent.children and parent.children[request[i]] then
-            parent = parent.children[request[i]]
-        else
-            return ""
+    -- Longest menu prefix + ancestor chain (alias targets / synthetic segments).
+    local anc = {}
+    local cur = tree
+    for i = 1, #request do
+        local child = cur.children and cur.children[request[i]]
+        if not child then break end
+        anc[#anc + 1] = { name = request[i], node = child }
+        cur = child
+    end
+    if #anc < 2 then return "" end
+
+    local function titled(n)
+        local out = {}
+        for name, ch in pairs(n.children or {}) do
+            if ch.satisfied ~= false and ch.title and ch.title ~= "" then
+                out[#out + 1] = { name = name, title = ch.title, order = ch.order or 100 }
+            end
         end
+        return out
+    end
+    -- group = app node (alias or pure firstchild) with >=2 titled children;
+    -- its parent does not matter (firewall under the recurse category network).
+    local function is_group(n)
+        local a = n.action or {}
+        local pure = (a.type == "firstchild" and not a.preferred and not a.recurse)
+                  or a.type == "alias"
+        return pure and #titled(n) > 1
     end
 
-    local current = request[#request]
-    local siblings = {}
-    for name, child in pairs(parent.children or {}) do
-        if child.satisfied ~= false and child.title and child.title ~= "" then
-            siblings[#siblings + 1] = {name = name, title = child.title, order = child.order or 100}
+    local deep = anc[#anc]
+    local node = deep.node
+    local parent, segs, current
+
+    if is_group(node) then
+        parent = node
+        segs = {}
+        for _, a in ipairs(anc) do segs[#segs + 1] = a.name end
+        for _, t in ipairs(titled(node)) do
+            if not current or t.order < current.order then current = { name = t.name, order = t.order } end
         end
+    else
+        local idx = #anc - 1
+        while idx >= 2 do
+            local cand = anc[idx].node
+            if is_group(cand) then
+                parent = cand
+                current = { name = anc[idx + 1].name, order = 0 }
+                break
+            end
+            local ca = cand.action or {}
+            if ca.type == "alias" then idx = idx - 1 else return "" end
+        end
+        if not parent then return "" end
+        segs = {}
+        for i = 1, idx do segs[#segs + 1] = anc[i].name end
     end
+
+    local siblings = titled(parent)
     if #siblings <= 1 then return "" end
-
     table.sort(siblings, function(a, b) return a.order < b.order end)
-
-    local segs = {}
-    for i = 1, #request - 1 do segs[#segs + 1] = request[i] end
 
     local parts = {'<ul class="tabs">'}
     for _, sib in ipairs(siblings) do
-        local active = (sib.name == current) and ' active' or ''
-        local href = disp.build_url(unpack(segs), sib.name)
+        local active = (sib.name == current.name) and ' active' or ''
+        local href_args = {unpack(segs)}
+        href_args[#href_args + 1] = sib.name
+        local href = disp.build_url(unpack(href_args))
         parts[#parts + 1] = string.format(
             '<li class="tabmenu-item-%s%s"><a href="%s">%s</a></li>',
             sib.name, active,
@@ -300,10 +358,17 @@ end
 -- Public dispatcher for sibling tabs. Detects LuCI version automatically.
 -- Returns HTML string or "".
 function render_sibling_tabs(request, write_fn, pcdata_fn)
-    if not request or #request < 4 then return "" end
+    if not request or #request < 1 then return "" end
     if disp.menu_json then
+        -- ucode dispatcher: firstchild parent pages (3 segments and up,
+        -- e.g. /admin/system/admin) carry tabs too; the stock dispatcher
+        -- renders them as tabless client-side boot pages.
+        if #request < 3 then return "" end
         return _render_sibling_tabs_ucode(request, pcdata_fn)
     else
+        -- Old lua dispatcher: firstchild redirects to the first child
+        -- before any page renders, so only real child pages (4+) arrive.
+        if #request < 4 then return "" end
         return _render_sibling_tabs_lua(request, write_fn, pcdata_fn)
     end
 end

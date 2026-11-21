@@ -83,6 +83,11 @@ rowsEq(runtime.getChanges(mkCursor({ arrcfg = { { 'set', 's', 'o', 'v' } }, dict
 -- set_session_id 时清除 session。本测试用真机 cursor 写/读/清理，验证写盘
 -- 链路可用（需在路由器上跑）。
 do
+    -- luci.model.uci 只在真机/完整 LuCI 树存在：本机(CI、无设备树)跳过写
+    -- 自检，前面的格式规范化检查照常跑(run-headless.js 本地可选语义)。
+    if not pcall(require, 'luci.model.uci') then
+        print('SKIP: newCursor write check needs a router (luci.model.uci unavailable)')
+    else
     local c = runtime.newCursor()
     local name = 'smoketest_' .. tostring(os.time())
     local val = 'v' .. tostring(os.time())
@@ -100,6 +105,7 @@ do
     end
     c:delete('desktop', name)
     c:commit('desktop')
+end
 end
 
 print(('test-runtime.lua: %d passed, %d failed'):format(pass, fail))

@@ -1,4 +1,4 @@
-# LuCI Desktop Theme
+﻿# LuCI Desktop Theme
 # Copyright 2026 DMKLIGHT
 #
 # Licensed under the Apache License v2.0
@@ -12,7 +12,7 @@ THEME_TITLE:=Desktop
 PKG_NAME:=luci-theme-$(THEME_NAME)
 PKG_VERSION:=0.1.0
 # 125 = merged branch (Lua track + ucode track unified, 2026-08-15)
-PKG_RELEASE:=316
+PKG_RELEASE:=371
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -26,10 +26,10 @@ define Package/luci-theme-$(THEME_NAME)
   CATEGORY:=LuCI
   SUBMENU:=4. Themes
   # luci-base: templates/controller run inside LuCI (stock official
-  # OpenWrt firmware ships NO LuCI — pull the core in).
-  # luci-lua-runtime: the theme controller (desktop.lua) is Lua — on
+  # OpenWrt firmware ships NO LuCI 鈥?pull the core in).
+  # luci-lua-runtime: the theme controller (desktop.lua) is Lua 鈥?on
   # ucode-only LuCI (official OpenWrt 25.x) it is NOT loaded without the
-  # Lua compat layer (changes/* 403/HTML → smoke FAIL). Present in both
+  # Lua compat layer (changes/* 403/HTML 鈫?smoke FAIL). Present in both
   # 24.10 (opkg) and 25.12 (apk) feeds; ImmortalWrt carries it too.
   DEPENDS:=+libc +curl +luci-base +luci-lua-runtime
   TITLE:=Desktop Theme - iframe shell
@@ -37,7 +37,7 @@ define Package/luci-theme-$(THEME_NAME)
   PKGARCH:=all
 endef
 
-# stickysync.json holds user sticky-note data — never overwrite on
+# stickysync.json holds user sticky-note data 鈥?never overwrite on
 # upgrade (opkg keeps the existing file when a conffile changed).
 define Package/luci-theme-$(THEME_NAME)/conffiles
 /etc/luci-theme-desktop/stickysync.json
@@ -63,12 +63,12 @@ define Package/luci-theme-$(THEME_NAME)/install
 	$(INSTALL_DIR) $(1)/www/luci-static/$(THEME_NAME)
 	$(CP) -a ./files/htdocs/* $(1)/www/luci-static/$(THEME_NAME)/ 2>/dev/null || true
 	# version.txt is part of the package DATA (not postinst) so it also
-	# exists in images with the theme baked in — image builds run postinst
+	# exists in images with the theme baked in 鈥?image builds run postinst
 	# with IPKG_INSTROOT set and the write would be skipped, leaving the
 	# start menu's version fetch with a 404 ("Not found").
 	# No trailing newline: ucode has no string trim(), templates read the
 	# version via sprintf() and a newline would corrupt the ?v= URLs
-	# (the Lua track's template copes either way — one write serves both).
+	# (the Lua track's template copes either way 鈥?one write serves both).
 	printf "0.1.0-$(PKG_RELEASE)" > $(1)/www/luci-static/$(THEME_NAME)/version.txt
 	$(INSTALL_DIR) $(1)/usr/share/ucode/luci/template/themes/$(THEME_NAME)
 	$(CP) -a ./files/usr/share/ucode/luci/template/themes/$(THEME_NAME)/* $(1)/usr/share/ucode/luci/template/themes/$(THEME_NAME)/ 2>/dev/null || true
@@ -87,7 +87,7 @@ define Package/luci-theme-$(THEME_NAME)/install
 	# Shared sticky-note store: a plain JSON file (NOT UCI). Sticky notes
 	# write on every keystroke; UCI would rewrite the whole desktop config
 	# and fight quoting. File writes are atomic (tmp+rename) and cheap.
-	# NOTE: no INSTALL_DATA here — the file is created by the controller on
+	# NOTE: no INSTALL_DATA here 鈥?the file is created by the controller on
 	# first write. Installing an empty file would clobber user data on
 	# every upgrade (opkg keeps conffiles, but only once the package's own
 	# installed md5 is known; a data file owned by the runtime is safer).
@@ -97,7 +97,7 @@ endef
 define Package/luci-theme-$(THEME_NAME)/postinst
 #!/bin/sh
 if [ -z "$${IPKG_INSTROOT}" ]; then
-	# version.txt is shipped as package data (see install rule) — the
+	# version.txt is shipped as package data (see install rule) 鈥?the
 	# postinst must not write it: image builds run postinst with
 	# IPKG_INSTROOT set and the guard below would skip the write, leaving
 	# baked-in installs without the file (start menu shows "Not found").
@@ -107,7 +107,7 @@ if [ -z "$${IPKG_INSTROOT}" ]; then
 	fi
 	rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
 	# Lua templates are cached in the uhttpd process (luci.template
-	# memory cache) — restart to pick up updated theme templates.
+	# memory cache) 鈥?restart to pick up updated theme templates.
 	/etc/init.d/uhttpd restart 2>/dev/null || true
 fi
 exit 0

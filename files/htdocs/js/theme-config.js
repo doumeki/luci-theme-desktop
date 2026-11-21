@@ -58,6 +58,18 @@
         {id:'bg_angle',  label:_('Angle'), type:'range', min:'0', max:'359', step:'1', def:'135', unit:'deg'},
         // Misc
         {id:'menu_hover_mode', label:_('Menu Hover'), type:'checkbox', def:true},
+        // Compatibility: where LuCI content tabs (ul.cbi-tabmenu) live and
+        // whether the shell-mode XHR.poll stub is skipped. Old 19.07-era
+        // Lua LuCI renders real content tabs in the page and its hidden
+        // shell copy doubles as the visible fallback — "page" keeps both
+        // behaviours; auto/titlebar = modern (unchanged default).
+        // Per-device setting on purpose: a deploy script cannot know which
+        // LuCI era someone else's firmware carries.
+        {id:'tab_era', label:_('Tab Priority'), type:'select', def:'', opts:[
+            {v:'',       l:_('Auto (titlebar)')},
+            {v:'legacy', l:_('In page (old LuCI 19.07)')},
+            {v:'modern', l:_('In titlebar (modern)')}
+        ]},
         // Mobile start menu: how many px of drag = one category page
         {id:'swipe_step', label:_('Swipe Step'), type:'range', min:'24', max:'96', step:'8', def:'48', unit:'px'},
         {id:'picsum_auto_refresh', label:_('Picsum Auto Refresh'), type:'hidden', def:'0'}
@@ -74,6 +86,7 @@
             {label:_('App'),  fields:['app_dark_mode','app_primary_color','app_primary_color_dark']},
             {label:_('Icons'), fields:['icon_opacity','icon_bg']},
             {label:_('Menu'), fields:['menu_hover_mode','swipe_step']},
+            {label:_('Compatibility'), fields:['tab_era']},
             {label:_('Login'), fields:['login_wallpaper']}
         ],
         fonts: [

@@ -1,0 +1,16 @@
+{
+ "label": "dev2",
+ "fw": "LEDE",
+ "theme": "0.1.0-330",
+ "cookieName": "sysauth",
+ "resources": {
+  "xhr.js": "caa41d00:4510",
+  "cbi.js": "2ffda6f5:31808",
+  "ui.js": "unavailable(http 404)",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "3bd47e12",
+ "pages": 57,
+ "captured": "2026-11-18T14:44:51.331Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

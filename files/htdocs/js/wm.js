@@ -24,6 +24,12 @@
                                  // stay above every normal window
     var pinSeq = 0;
 
+    // Focus recency (MRU) stack: ids ordered oldest → newest focus. focus()
+    // is the single activation choke point and moves the id to the top;
+    // close()/minimize() hand focus to the topmost surviving non-minimized
+    // entry when the active window leaves the screen ("last clicked wins").
+    var mru = [];
+
     // Cascade slot for a NEW window, derived from how many windows are
     // currently on screen — closing windows naturally moves the next
     // opening back toward the start (no ever-growing counter, so a window
@@ -292,7 +298,7 @@
                 try { doc = iframe.contentDocument; } catch (e) { doc = null; }
                 var ul = null;
                 if (doc && doc.body) {
-                    try { ul = doc.querySelector('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs'); } catch (e2) { ul = null; }
+                    try { ul = doc.querySelector(eraTabSel(doc)); } catch (e2) { ul = null; }
                 }
                 if (!ul || !ul.parentNode) ul = null;
                 if (ul) {
@@ -333,7 +339,7 @@
                                         if (docL && docL.body) {
                                             var ulL = null;
                                             try {
-                                                ulL = docL.querySelector('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs');
+                                                ulL = docL.querySelector(eraTabSel(docL));
                                             } catch (eL1) { ulL = null; }
                                             if (ulL && ulL.parentNode) {
                                                 var lisL = ulL.querySelectorAll(':scope > li');
@@ -385,6 +391,18 @@
                         /* Window identity: static title in row 1 leaves,
                          * the tools-row address bar takes over. */
                         win.classList.add('has-tabs');
+                        /* Completeness before elegance: if the strip is too
+                         * narrow for every tab, compact it (smaller padding/
+                         * font) and re-measure. Only if it STILL overflows do
+                         * we keep horizontal scrolling and add a fade so the
+                         * hidden tail is announced instead of silently cut
+                         * (q977: DHCP page clipped PXE/TFTP at every width). */
+                        tabStrip.classList.remove('tb-compact', 'tb-scroll');
+                        if (tabStrip.scrollWidth > tabStrip.clientWidth + 1) {
+                            tabStrip.classList.add('tb-compact');
+                            if (tabStrip.scrollWidth > tabStrip.clientWidth + 1)
+                                tabStrip.classList.add('tb-scroll');
+                        }
                         alignTabStrip();
                         tabStrip.classList.remove('tb-fade');
                         void tabStrip.offsetWidth;
@@ -552,10 +570,19 @@
                 if (w.el && w.el.parentNode) {
                     w.el.parentNode.removeChild(w.el);
                 }
-                if (DESKTOP.activeWindowId === id) {
-                    DESKTOP.activeWindowId = null;
-                }
                 delete DESKTOP.windows[id];
+                var wasActive = DESKTOP.activeWindowId === id;
+                var mi = mru.indexOf(id);
+                if (mi >= 0) mru.splice(mi, 1);
+                if (wasActive) {
+                    DESKTOP.activeWindowId = null;
+                    // The closed window was focused: hand focus to the most
+                    // recently clicked surviving window (MRU order,
+                    // minimized skipped). If the user focused another window
+                    // while the close animation ran, wasActive is false and
+                    // that choice stands untouched.
+                    WM.handoffFocus();
+                }
                 if (DESKTOP.emit) DESKTOP.emit('window-closed', {id: id});
             };
             // Mobile (or already-hidden windows): close instantly — the
@@ -587,6 +614,28 @@
             DESKTOP.activeWindowId = id;
 
             if (DESKTOP.emit) DESKTOP.emit('window-focused', {id: id});
+
+            // Focus recency: every activation moves the window to the top of
+            // the MRU stack; close()/minimize() hand focus to the entry
+            // below when the current window leaves the screen.
+            var mi = mru.indexOf(id);
+            if (mi >= 0) mru.splice(mi, 1);
+            mru.push(id);
+        },
+
+        // Hand focus to the most recently focused surviving window (MRU
+        // order, minimized skipped). Used when the active window closes or
+        // minimizes; with no candidate the screen stays unfocused (the
+        // previous behavior).
+        handoffFocus: function() {
+            for (var i = mru.length - 1; i >= 0; i--) {
+                var hid = mru[i];
+                var hw = DESKTOP.windows[hid];
+                if (!hw || !hw.el || hw.el.style.display === 'none') continue;
+                this.focus(hid);
+                return true;
+            }
+            return false;
         },
 
         // Pin / unpin a window: it stays on top of every other window and
@@ -618,7 +667,13 @@
                 // app switcher restores the window)
                 w.el.style.display = 'none';
                 w.minimized = true;
-                if (DESKTOP.activeWindowId === id) DESKTOP.activeWindowId = null;
+                if (DESKTOP.activeWindowId === id) {
+                    DESKTOP.activeWindowId = null;
+                    // Background windows are all display:none on mobile, so
+                    // the handoff finds no candidate and focus is simply
+                    // cleared (previous behavior).
+                    WM.handoffFocus();
+                }
                 DESKTOP.emit('window-minimized', {id: id});
                 return;
             }
@@ -631,6 +686,11 @@
                 w.minimized = true;
                 if (DESKTOP.activeWindowId === id) {
                     DESKTOP.activeWindowId = null;
+                    // Hand focus to the most recently clicked surviving
+                    // window (the minimized one itself is display:none and
+                    // skipped); the taskbar/app switcher re-focuses on
+                    // restore.
+                    WM.handoffFocus();
                 }
                 if (DESKTOP.emit) DESKTOP.emit('window-minimized', {id: id});
             }, {once: true});
@@ -820,7 +880,28 @@
         return div.innerHTML;
     }
 
+    /* Era-aware tab selector (see the era marker the embed header templates
+     * publish, from desktop.settings.tab_era): on legacy (tab_era=legacy)
+     * devices ul.tabs is the dispatcher's own page tab bar while
+     * ul.cbi-tabmenu is a CONTENT tab inside CBI forms (e.g. DiskMan's disk
+     * switcher) — content tabs must stay in the page flow, not be mirrored
+     * into the window titlebar. The embed template publishes the era as
+     * window.__DESKTOP_LUCI_ERA__; an absent marker means "modern"
+     * (current behaviour, zero change). Exposed as WM.eraTabSel for tests. */
+    function eraTabSel(doc) {
+        try {
+            if (doc.defaultView &&
+                doc.defaultView.__DESKTOP_LUCI_ERA__ === 'legacy') {
+                return 'ul.tabs';
+            }
+        } catch (e0) {}
+        return 'ul.cbi-tabmenu, ul.tabs, ul.nav-tabs';
+    }
+
     // Register as subsystem and expose as global WM
     DESKTOP.register('wm', WM);
+    // Era-aware tab selector — exposed for unit tests (wm.test.js); the
+    // mirror wiring itself stays private.
+    WM.eraTabSel = eraTabSel;
     window.WM = WM;
 })();

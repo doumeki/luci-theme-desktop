@@ -1,0 +1,16 @@
+{
+ "label": "immortal2512-1",
+ "fw": "ImmortalWrt 25.12.1 r37978-cd0a06bfd3fd",
+ "theme": "0.1.0-366",
+ "cookieName": "sysauth_http",
+ "resources": {
+  "xhr.js": "unavailable(http 200)",
+  "cbi.js": "3c463f03:14351",
+  "ui.js": "6063e368:85410",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "d9a6294c",
+ "pages": 22,
+ "captured": "2026-11-21T06:08:30.482Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

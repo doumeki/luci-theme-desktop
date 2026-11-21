@@ -92,6 +92,16 @@ msgstr "内存"
 msgid "Load failed"
 msgstr "加载失败"
 
+# session expiry (changes window + shell toast, 2026-11-17)
+msgid "Session expired. Please log in again."
+msgstr "会话已过期，请重新登录。"
+
+msgid "Login session has expired."
+msgstr "登录会话已过期。"
+
+msgid "Log in again"
+msgstr "重新登录"
+
 # theme-config.js
 msgid "Titlebar (active)"
 msgstr "标题栏（活动）"
@@ -221,6 +231,21 @@ msgstr "菜单悬停切换"
 
 msgid "Swipe Step"
 msgstr "滑动灵敏度"
+
+msgid "Tab Priority"
+msgstr "Tab 优先"
+
+msgid "Compatibility"
+msgstr "兼容性"
+
+msgid "Auto (titlebar)"
+msgstr "自动（标题栏）"
+
+msgid "In page (old LuCI 19.07)"
+msgstr "页面内（老 LuCI 19.07）"
+
+msgid "In titlebar (modern)"
+msgstr "标题栏（现代）"
 
 msgid "Auto Refresh"
 msgstr "自动刷新"
@@ -421,6 +446,27 @@ msgid "?\n\nThis cannot be undone."
 msgstr " 中的所有内容？\n\n此操作不可撤销。"
 
 # wallpaper-settings.js
+msgid "Storage path"
+msgstr "存储路径"
+
+msgid "Change path"
+msgstr "更改路径"
+
+msgid "Restore default"
+msgstr "恢复默认"
+
+msgid "(default)"
+msgstr "（默认）"
+
+msgid "Move existing images to the new path?"
+msgstr "将现有图片迁移到新路径？"
+
+msgid "Move images back to the default path?"
+msgstr "将图片迁回默认路径？"
+
+msgid "Moved %d image(s), skipped %d"
+msgstr "已迁移 %d 张图片，跳过 %d 张"
+
 msgid "Wallpapers"
 msgstr "壁纸管理"
 

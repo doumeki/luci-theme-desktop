@@ -182,7 +182,7 @@
 /* Pin-to-top control: active pin is highlighted; a pinned window's
    titlebar gets an accent so it is recognizable on top of everything. */
 .window.pinned .window-titlebar {
-    box-shadow: inset 0 2px 0 var(--win-titlebar-accent, #ffd866);
+    box-shadow: inset 0 2px 0 var(--accent-color, #ffd866);
 }
 .window.pinned .window-title::before {
     content: '\1F4CC ';
@@ -358,6 +358,18 @@
 }
 .tb-tab:hover {
     background: rgba(255, 255, 255, 0.12);
+}
+.titlebar-tabs.tb-compact .tb-tab {
+    padding: 0 6px;
+    font-size: 11px;
+    height: 22px;
+    max-width: 130px;
+}
+.titlebar-tabs.tb-scroll {
+    /* still too many after compacting: keep the strip scrollable and show a
+       right-edge fade so hidden tabs are visibly announced (no silent clip) */
+    mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
 }
 .tb-tab.tb-active {
     background: rgba(255, 255, 255, 0.16);

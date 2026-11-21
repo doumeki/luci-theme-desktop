@@ -895,10 +895,27 @@
         DBG('[close] AFTER revert: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                     ' wp_bg=' + oldWp.substring(0, 60));
         p.remove();    }
+    // Tab 优先 is rendered at template time (poll stub / tab mirroring), so a
+    // change only takes effect after a reload — do it automatically.
+    // Compare against the SAVED value in the `settings` section (theme-config
+    // stores tab_era there, not in `theme`); missing config/field counts as ''
+    // so test environments (no UCI) never trigger a reload loop.
+    function _currentEra() {
+        try {
+            var s = LuCIDesktop.getSection('settings') || {};
+            return typeof s.tab_era === 'string' ? s.tab_era : '';
+        } catch (e) { return ''; }
+    }
+    function _reloadIfTabEraChanged(before, after) {
+        if (typeof after !== 'string') return;
+        if ((before || '') === after) return;
+        setTimeout(function() { location.reload(); }, 700);
+    }
     function _doApply(p, bgTab) {
         var r = document.documentElement.style;
         DBG('[apply] BEFORE: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                     ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim());
+        var prevEra = _currentEra();
         var v = C.readFromDOM();
         C.saveToConfig(v);
         C.applyCss(v);
@@ -908,10 +925,14 @@
         DBG('[apply] AFTER: --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                     ' --win-titlebar-bg=' + r.getPropertyValue('--win-titlebar-bg').trim() +
                     ' select_mode=' + m + ' preview_url=' + u);
-        bgTab.applyWallpaper(m, u, markClean, 'apply');    }
+        bgTab.applyWallpaper(m, u, markClean, 'apply');
+        _reloadIfTabEraChanged(prevEra, v.tab_era);
+    }
     function _doOk(p, bgTab) {
+        var prevEra = _currentEra();
+        var v = null;
         if (dirty) {
-            var v = C.readFromDOM();
+            v = C.readFromDOM();
             C.saveToConfig(v);
             C.applyCss(v);
         }
@@ -921,7 +942,9 @@
         var r = document.documentElement.style;
         DBG('[ok] --taskbar-bg=' + r.getPropertyValue('--taskbar-bg').trim() +
                     ' select_mode=' + m + ' preview_url=' + u);
-        bgTab.applyWallpaper(m, u, function() { p.remove(); }, 'ok');    }
+        bgTab.applyWallpaper(m, u, function() { p.remove(); }, 'ok');
+        if (v) _reloadIfTabEraChanged(prevEra, v.tab_era);
+    }
     function _doDiag(p, btn) {
         btn.disabled = true;
         var done = function(text) {

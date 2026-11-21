@@ -1,7 +1,7 @@
 # AGENTS.md — AI 开发指引
 
-> 给使用 AI 编程工具（Cursor / Claude Code / Copilot 等）的贡献者。
-> 目标：改代码前 5 分钟理解架构与铁律，避免重复踩坑。
+> 本文档给使用 AI 编程工具（Cursor / Claude Code / Copilot 等）的开发者。
+> 目标是让 AI 在改代码前 5 分钟内理解架构与铁律，避免重复踩坑。
 
 ## 项目一句话
 
@@ -12,8 +12,25 @@ OpenWrt LuCI 的**桌面操作系统风格主题**：持久桌面外壳（任务
 ## 快速验证
 
 ```sh
-node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，CI 每次 push/PR 自动跑）
+node tests/run-headless.js          # L1 单元测试（Node + Firefox + geckodriver，CI 每次 push/PR 自动跑）
+bash probe/deploy-theme.sh 1.1      # 部署到测试路由器（设备地址在 probe/.local-env，模板 .local-env.example）
 ```
+
+## 主开发机（2026-10-18 起）
+
+- **Windows（`J:\proj\luci-theme-desktop`）已冻结**：只读快照，终点 `767ec99`，
+  不再在 Windows 侧提交/编译/跑测试。
+- **唯一工作副本** = 构建机 Kubuntu VM `<build-vm-ip>` 的
+  `<lede-root>/package/custom/luci-theme-desktop`
+  （本目录的独立 git，分支 `merge-plan`）。
+- **同步锚点 = <gitea-host>**（内网 gitea，VM 侧已有凭据）；公开面（GitHub）照旧
+  只等用户发起。
+- **Windows→211 通路**：`ssh cry@<build-vm-ip>`（免密），Windows 侧为**非持久**
+  `/32` 路由（重启即还原，只精确放行 1.211、不碰光猫 1.1 的路径）——诊断/重建/
+  撤销见全局 skill `vm-bridge`、HANDOVER §9.15-8。
+- **编译/部署只在 VM 内跑**（`make package/custom/luci-theme-desktop/…`、
+  `bash probe/deploy-theme.sh …`）；ipk 是 Lean 的 tar.gz 型
+  （`ar`/`dpkg` 读不动，python `tarfile` 嵌套解）。
 
 ## 架构要点（改代码前必读）
 
@@ -23,17 +40,17 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
    （footer/header/sysauth 三对）。
 2. **controller 是 Lua**（`files/controller/desktop.lua`），平台差异全部收敛在
    `luci.desktop.runtime`（runtime.lua）：`isUcode() / cookieName() / sessionValid()
-   / getChanges() / apply() / revert()`。**必须函数内 require**（modulecache
+   / getChanges() / apply() / revert()`。**必须函数内 require**（253 modulecache
    字节码缓存会把模块级 local 变 nil —— 经典坑）。
-   **cookie 名随 runtime，不随设备**——`cookieName()` 是唯一权威（Lua→`sysauth`，
-   ucode→`sysauth_http`）。不要把"设备"当"track"的代理：设备重刷/换固件会让
-   track 漂移，任何"某设备 = 某 track/某 cookie 名"的硬编码都是过期认知。探针要
-   读登录响应实际 `Set-Cookie` 的名字（`probe/lib.js`），不要猜。
+   **铁律：cookie 名随 runtime，不随设备**——`cookieName()` 是唯一权威
+   （Lua→`sysauth`，ucode→`sysauth_http`）。不要把"设备"当"track"的代理：
+   设备重刷/换固件会让 track 漂移，任何"某设备=某 track/某 cookie 名"的硬编码
+   都是过期认知。探针要读登录响应实际 `Set-Cookie` 的名字（`probe/lib.js`），不要猜。
 3. **前端**：`window.LuCIDesktop` 命名空间。模块划分（`files/htdocs/js/`）：
    - `shell.js` — boot 流程、开始菜单、通知
    - `wm.js` — 窗口管理器（open/close/focus/拖拽/标题）
    - `taskbar.js` — 任务栏、auto-refresh 开关（会话级）
-   - `desktop.js` — 桌面门面（facade）：转发 `window.Desktop` 公共 API + 组合
+   - `desktop.js` — 桌面门面（facade）：转发 window.Desktop 公共 API + 组合
      init；保留默认快捷方式目录、可用性探测、ttyd 安装
    - `desktop-state.js` — 共享状态 `pinnedItems`/`hiddenIcons`/`iconLayout` +
      load/save/normalize/迁移，经 `LuCIDesktop.desktopState` 读写
@@ -47,7 +64,7 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 4. **配置存储**：UCI `desktop` 配置（settings/widgets/pins/hidden/mobile_*）；
    便笺存 JSON 文件 `/etc/luci-theme-desktop/stickysync.json`（原子写，非 UCI）。
    种子默认配置在 `files/30_luci-theme-desktop`（`CONFIG_VERSION` 控制是否重写，
-   不要随意 bump——会覆盖已装设备的用户配置）。
+   **不要随意 bump**——会覆盖已装设备的用户配置）。
 5. **`__LUCI_RUNTIME__`**：footer 双模板注入（'ucode'/'lua'），前端按 runtime
    选路径（如终端快捷方式）。注入时机在 desktop.js 注册**之后**——依赖它的
    逻辑必须延迟解析/由 shell.js boot 触发。
@@ -65,12 +82,38 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 - 改界面文案 = **只改 dict**（`files/htdocs/js/i18n.js` 的 `zh_cn` 块）+ 跑
   `node tools/gen-i18n.js` 生成 pot/po（dict 是唯一来源；run-headless 有防漂移
   检查，dict 改了没重生成会 fail）。不要再手改 pot/po。
-- 改模板/controller 后：部署 + smoke（`probe/deploy-theme.sh` 自带冒烟：主题身份/
+- 改模板/controller 后：部署 + smoke（`deploy-theme.sh` 自带冒烟：主题身份/
   changes JSON）。
 - 版本号：`Makefile` 的 `PKG_RELEASE` +1，提交信息注明版本。
-- 提交信息用英文。
+- git：只在主题仓库操作、不 `git add -A`（外层是大构建树）、**提交信息用英文**、
+  开发在 `merge-plan` 分支。
+- **不要主动 push（2026-09-01 用户要求）**：改动在本地 `merge-plan` 提交累积，
+  **等用户明确说 push 时**才推 gitea / GitHub Release。部署到设备不算 push，
+  照常做。
+- **发布与本地差异**：`github-release` 分支（公开仓库）**不含任何单应用适配**
+  （如特定第三方应用的 CSS/JS 补丁）——`merge-plan` 保留这些供本地设备使用。
+  通用改动从 `merge-plan` 挑选同步（2026-11-08 定规：**一批 = 一个 squash
+  提交，消息不带任何版本号**；逐条粒度只留在 merge-plan / tea）：以
+  `origin/main` 为基 `git checkout -B github-release origin/main`，
+  `git cherry-pick -n <批首>^..merge-plan`（cherry-pick **没有** `--squash`
+  选项，`-n` 收 index 不提交）后单 `git commit -F`，再**纯快进 push**
+  （`git push origin github-release:main`，不 force）。
+  **注意所在分支**：改代码前先 `git branch --show-current` 确认在 `merge-plan`
+  （踩过：推完 GitHub 停在 `github-release` 上继续开发，功能提交落错分支）。
+  **同步时不要带内部内容**（2026-09-01 用户要求）：`github-release` 的 `AGENTS.md`
+  只写**开发相关**的东西（架构、铁律、踩坑、测试分层）——推送流程、分支策略、
+  gitea/token、设备地址、`HANDOVER.md` 引用这些**都属内部**，公开仓库没有意义。
+  纯内部文档提交（改 `HANDOVER.md` / 改本文件的内部段落）**直接跳过**，不要
+  cherry-pick 过去。
+- gitea（`<gitea-host>`）本机 DNS 不解析：用
+  `git -c http.extraHeader="Host: <gitea-host>" push http://root:<token>@<gitea-ip>/...`
+  （token 在本地 git 凭据文件的 `<gitea-host>` 条目，**与 GitHub token 不是同一个**）。
+  显式 URL 推送**不会更新 `tea/*` 跟踪引用**，需要时手动校准。
 
 ## 敏感信息与个人测试信息（红线）
+
+**公开面只有一个：GitHub（`github-release` → `origin/main`）**。
+`<gitea-host>` 是内网自建的私有 git 服务，**不是公开面**——设备地址、内部文档、探针脚本等都可以放，**不需要脱敏**。下面所有约束只针对**会被公开的文件**（判断标准 = 是否出现在 `github-release` 的树里）。
 
 本仓库会发布到公开远端，**推送不可撤销**，而 CI 只跑 L1 测试、**没有任何**
 密钥扫描兜底。所以：
@@ -147,10 +190,24 @@ node tests/run-headless.js   # L1 单元测试（Node + Firefox + geckodriver，
 
 - **L1**：`node tests/run-headless.js` — 浏览器单元测试（无需路由器，CI 跑）
 - **L2**：`tests/lua/test-runtime.lua` — runtime 抽象层，需 OpenWrt 设备
-- **L3**：`probe/` — 部署/冒烟/真机探针，需 OpenWrt 设备
+- **L3**：`probe/` — 部署/冒烟/真机探针（`probe/.local-env` 配置设备，机器相关）
 
 详见 `tests/README.md`。
 
 ## 更多文档
 
 - `tests/README.md` — 测试手册（三级别、CI）
+- `HANDOVER.md` — 项目内部交接文档（完整踩坑史与架构演进；公开仓库已移除，
+  本机开发仓库有完整版）
+
+## 分支差异备忘的位置（2026-11-10）
+
+- 两分支差异与上线流程的本地备忘 **`BRANCH-DIFF.md`** 已迁出本仓库，
+  现住**上一级**：`../BRANCH-DIFF.md`（即 `package/custom/BRANCH-DIFF.md`）。
+- 为什么不在仓库内：仓库内只能靠 `merge-plan` 的 `.gitignore:28` 隐身，
+  但公网 `.gitignore` 没有这行——切到 `github-release` 工作树时它会以
+  `??` 显形，曾被误删一次（2026-11-10）。住仓库外则与任何分支行为无关。
+- 仓库内 `.gitignore:28` 的排除行保留为**防复发闸**：同名文件若再进树
+  会被 git 静默忽略、点名 `git add` 会被拒绝。
+- 它是本地件，永不上 tea / 公网；在 `github-release` 工作树里**不要
+  `git add -A`**（上一级的其他 untracked 本地件同理）。

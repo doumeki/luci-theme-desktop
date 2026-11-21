@@ -34,9 +34,20 @@ function isUcode()
 end
 
 -- Lua track 的会话 cookie 名是 sysauth；ucode track 是 sysauth_http
--- （阶段 0 矩阵：lib.js/deploy-smoke 双路径实锤）。
+-- （阶段 0 矩阵：lib.js/deploy-smoke 双路径实锤）。ucode dispatcher 在
+-- HTTPS 下改用 sysauth_https（dispatcher.uc:963：getenv('HTTPS')=='on'），
+-- 主题端点必须镜像同一规则，否则 https 访问下 apply/revert/ttyd_status/
+-- uci_changes 的会话查询全部读空（q685：1.1 用户 https 必现
+-- "Session expired. Please log in again."，重新登录只刷新 sysauth_https、
+-- 永不自愈；curl 已复现）。
 function cookieName()
-    return isUcode() and "sysauth_http" or "sysauth"
+    if not isUcode() then return "sysauth" end
+    local https = false
+    pcall(function()
+        local v = luci.http and luci.http.getenv and luci.http.getenv("HTTPS")
+        https = (v == "on")
+    end)
+    return https and "sysauth_https" or "sysauth_http"
 end
 
 -- ucode track 的 uci apply 支持 90s rollback 窗口；Lua track（老 uci 包）
@@ -148,7 +159,14 @@ function apply(sid)
         uci:unload(cfg)
     end
     if #reload > 0 then
-        os.execute("/sbin/luci-reload " .. table.concat(reload, " ") .. " >/dev/null 2>&1")
+        -- 0.1.0-325: NEVER run luci-reload synchronously inside the request.
+        -- A service restart (netifd / firewall / dnsmasq) can drop or stall
+        -- the pending HTTP response, which is exactly the "stuck on
+        -- Applying…" symptom on 19.07-era Lua LuCI. The commit is already
+        -- durable, so hand the reload to a detached shell that sleeps one
+        -- second (enough for uhttpd to flush this JSON) and then reloads.
+        os.execute("nohup sh -c 'sleep 1; /sbin/luci-reload "
+            .. table.concat(reload, " ") .. " >/dev/null 2>&1' >/dev/null 2>&1 &")
     end
     return { ok = true }
 end

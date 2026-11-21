@@ -210,6 +210,10 @@
             var self = this;
             var menuEl = document.getElementById('start-menu');
             if (!menuEl) return;
+            /* Scrolling the app list must not launch the app under the finger. */
+            if (window.LuCIDesktop && LuCIDesktop.suppressClickAfterDrag) {
+                LuCIDesktop.suppressClickAfterDrag(menuEl, 'menu');
+            }
 
             // Hover to switch category (KDE-style) — checks setting dynamically
             menuEl.addEventListener('mouseover', function(e) {
@@ -330,9 +334,16 @@
             }
         },
 
-        show: function() {
+        show: function(source) {
             var menuEl = document.getElementById('start-menu');
             if (!menuEl) return;
+            // q719: the swipe gesture gets its own horizontal slide-in. The class
+            // must be set before display flips so the animation starts with it.
+            menuEl.classList.remove('menu-in-swipe');
+            if (source === 'swipe') menuEl.classList.add('menu-in-swipe');
+            // A drag-open leaves animation:none inline; clear it so the
+            // keyframe animation can run again.
+            menuEl.style.animation = '';
             menuEl.style.display = '';
             visible = true;
             // Keep the panel inside the viewport whatever the taskbar
@@ -496,4 +507,120 @@
 
     DESKTOP.register('startmenu', StartMenu);
     window.StartMenu = StartMenu;
+
+    // ===== Edge swipe: open the start menu (touch devices) =====
+    // The menu follows the finger: a right swipe reveals it progressively from
+    // the left edge, exactly as far as the finger has travelled (user request:
+    // "slide a little, show a little"). There is a 28px dead zone first so a
+    // tiny touch cannot reveal a sliver by accident; releasing past 35% of the
+    // panel width snaps it open, otherwise it animates back. A fast full swipe
+    // still opens it with the .menu-in-swipe animation.
+    (function bindEdgeSwipe() {
+        var sx = 0, sy = 0, st = 0, dx = 0, tracking = false, dragging = false;
+        var menuEl = null, menuW = 0;
+        var lastX = 0, lastT = 0, vx = 0;
+        /* Phone-like page swipe: the panel follows almost immediately (12px is
+           only a direction/anti-jitter guard) and the release snaps by either
+           distance (30%) or flick velocity, like a home-screen page turn. */
+        var MIN_DX = 90, MAX_DY = 45, MAX_MS = 800, DEAD = 12;
+
+        function onDesktopSurface(el) {
+            if (!el || !el.closest) return true;
+            return !el.closest('.window, #start-menu, #app-switcher, #taskbar, #widget-layer');
+        }
+
+        function applyX(px) {
+            if (!menuEl) return;
+            menuEl.style.animation = 'none';
+            menuEl.style.transition = 'none';
+            menuEl.style.transform = 'translateX(' + px + 'px)';
+            var p = Math.max(0, Math.min(1, (menuW + px) / menuW));
+            menuEl.style.opacity = String(0.35 + 0.65 * p);
+        }
+
+        function settle(open) {
+            if (!menuEl) return;
+            /* .menu-drag carries `transition: none !important`, which beats an
+               inline transition - drop the class (keeping animation:none so the
+               base menu-in keyframe does not restart) and force a reflow so the
+               transition starts from the current dragged position. */
+            menuEl.classList.remove('menu-drag');
+            menuEl.style.animation = 'none';
+            menuEl.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.28s ease-out';
+            void menuEl.offsetWidth;
+            menuEl.style.transform = open ? 'translateX(0)' : 'translateX(-' + menuW + 'px)';
+            menuEl.style.opacity = open ? '1' : '0';
+            setTimeout(function() {
+                if (!menuEl) return;
+                menuEl.style.transition = '';
+                /* Keep animation disabled: removing .menu-drag would otherwise
+                   restart the base `menu-in` keyframes and the panel flashes
+                   once right after it has fully opened. show() re-enables it. */
+                menuEl.style.animation = 'none';
+                menuEl.style.transform = '';
+                menuEl.style.opacity = '';
+                menuEl.classList.remove('menu-drag');
+                if (!open) StartMenu.hide();
+            }, 330);
+        }
+
+        document.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1 || !onDesktopSurface(e.target)) { tracking = false; return; }
+            var t = e.touches[0];
+            sx = t.clientX; sy = t.clientY; st = Date.now(); dx = 0;
+            lastX = sx; lastT = st; vx = 0;
+            tracking = true; dragging = false;
+            menuEl = document.getElementById('start-menu');
+            menuW = menuEl ? menuEl.offsetWidth : 0;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', function(e) {
+            if (!tracking || !e.touches || e.touches.length !== 1 || !menuEl) return;
+            var t = e.touches[0];
+            dx = t.clientX - sx;
+            var dy = t.clientY - sy;
+            var now = Date.now();
+            /* velocity only over a real frame interval, so a synthetic or
+               coalesced pair of events cannot produce a bogus flick. */
+            if (now - lastT >= 8) {
+                vx = (t.clientX - lastX) / (now - lastT);
+                lastX = t.clientX; lastT = now;
+            }
+            if (Math.abs(dy) > MAX_DY) return;
+            if (!dragging && dx > DEAD && menuEl.style.display === 'none') {
+                /* class first, then display: otherwise the base menu-in
+                   keyframe runs for one frame before .menu-drag lands. */
+                menuEl.classList.add('menu-drag');
+                menuEl.style.animation = 'none';
+                menuEl.style.display = '';
+                menuW = menuEl.offsetWidth || menuW;
+                dragging = true;
+            }
+            if (dragging) applyX(-menuW + Math.min(menuW, Math.max(0, dx - DEAD)));
+        }, { passive: true });
+
+        document.addEventListener('touchend', function(e) {
+            if (!tracking) return;
+            tracking = false;
+            var t = e.changedTouches && e.changedTouches[0];
+            if (!t) return;
+            var ddx = t.clientX - sx, ddy = t.clientY - sy;
+
+            if (dragging) {
+                dragging = false;
+                var progress = Math.min(menuW, Math.max(0, ddx - DEAD));
+                /* page-turn feel: distance OR flick velocity snaps it open */
+                var open = progress > menuW * 0.3 || vx > 0.45;
+                if (open) StartMenu.show();   /* sets visible=true, keeps our transform */
+                settle(open);
+                return;
+            }
+            if (Date.now() - st > MAX_MS) return;
+            if (ddx < MIN_DX) return;
+            if (Math.abs(ddy) > MAX_DY || Math.abs(ddy) > ddx * 0.5) return;
+            StartMenu.show('swipe');
+        }, { passive: true });
+
+        document.addEventListener('touchcancel', function() { tracking = false; }, { passive: true });
+    })();
 })();
