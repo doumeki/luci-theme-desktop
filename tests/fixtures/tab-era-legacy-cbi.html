@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>diskman-like legacy fixture (content tabs only)</title>
+<!-- Simulates what the embed template injects on a device configured with
+     desktop.settings.tab_era='legacy' (deploy-theme.sh writes the key):
+     the template then publishes window.__DESKTOP_LUCI_ERA__ = 'legacy'. -->
+<script>window.__DESKTOP_LUCI_ERA__ = 'legacy';</script>
+</head>
+<body>
+<ul class="cbi-tabmenu">
+  <li class="cbi-tab"><a href="#diska">Disk A</a></li>
+  <li><a href="#diskb">Disk B</a></li>
+</ul>
+</body>
+</html>

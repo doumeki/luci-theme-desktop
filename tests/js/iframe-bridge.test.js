@@ -637,4 +637,56 @@ describe('IframeBridge.isBlockedInFrame', function() {
         assert.equal(IframeBridge.isBlockedInFrame('/cgi-bin/luci/admin/status', SHELL, 'https:'), '');
     });
 });
+
+// ===== Chrome-hider era gate (legacy keeps CBI content tabs in the page) =====
+// window.__DESKTOP_LUCI_ERA__ is published by the embed header templates
+// from desktop.settings.tab_era (deploy-time, per device). On legacy
+// devices only the dispatcher tab bar (ul.tabs) is chrome; the proxy doc's
+// defaultView is the test window, so the marker is toggled on window and
+// restored in afterEach.
+describe('IframeBridge chrome-hider era gate (legacy vs modern)', function() {
+    var prevEra;
+
+    beforeEach(setupContainer);
+    afterEach(function() {
+        cleanupContainer();
+        if (prevEra === undefined) delete window.__DESKTOP_LUCI_ERA__;
+        else window.__DESKTOP_LUCI_ERA__ = prevEra;
+        prevEra = undefined;
+    });
+    function setEra(v) {
+        if (prevEra === undefined) prevEra = window.__DESKTOP_LUCI_ERA__;
+        if (v === undefined) delete window.__DESKTOP_LUCI_ERA__;
+        else window.__DESKTOP_LUCI_ERA__ = v;
+    }
+
+    it('legacy: cbi-tabmenu not hidden, not de-sticked; only ul.tabs sticky', function() {
+        setEra('legacy');
+        var proxy = createProxyDoc();
+        IframeBridge.injectChromeHider(proxy);
+        var st = proxy.querySelector('style#__desktop-chrome-hider');
+        assert.ok(st, 'style injected');
+        assert.notContains(st.textContent, 'body ul.cbi-tabmenu {',
+            'no cbi-tabmenu sticky/backplate on legacy');
+        assert.contains(st.textContent, 'body ul.tabs {', 'ul.tabs sticky on legacy');
+        assert.equal(proxy.querySelector('ul.cbi-tabmenu').style.display, '',
+            'cbi-tabmenu NOT hidden on legacy');
+        assert.equal(proxy.querySelector('ul.cbi-tabmenu').style.getPropertyValue('position'), '',
+            'cbi-tabmenu not de-sticked inline on legacy');
+        assert.equal(proxy.querySelector('ul.tabs').style.display, 'none',
+            'first ul.tabs hidden (mirrored by wm.js)');
+        assert.equal(proxy.querySelector('ul.tabs').style.getPropertyValue('position'), '',
+            'first ul.tabs keeps sticky');
+    });
+
+    it('explicit modern marker keeps the current behaviour', function() {
+        setEra('modern');
+        var proxy = createProxyDoc();
+        IframeBridge.injectChromeHider(proxy);
+        var st = proxy.querySelector('style#__desktop-chrome-hider');
+        assert.contains(st.textContent, 'body ul.cbi-tabmenu {', 'modern rule set');
+        assert.equal(proxy.querySelectorAll('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs')[0]
+            .style.display, 'none', 'first tab bar hidden on modern');
+    });
+});
 })();

@@ -376,10 +376,9 @@
             // the card until the user re-picked it. Widgets with an empty
             // default ('' = intentionally unset) still fall back to CSS.
             if (def.options.bg) {
-                // Background color as a CSS variable: widget.css consumes
-                // it in the color-mix chain alongside --widget-bg-alpha,
-                // so the opacity slider fades a custom background too.
-                // Set on the root; nested card shells inherit and consume it.
+                // Background colour: the card tint layer paints it (see
+                // widget.css) and deriveWidgetColors uses it for text/border/
+                // text-shadow. Set on the root so nested shells inherit it.
                 if (data.bg) el.style.setProperty('--widget-bg-color', data.bg);
                 else if (def.options.bg.default) el.style.setProperty('--widget-bg-color', def.options.bg.default);
                 else el.style.removeProperty('--widget-bg-color');
@@ -413,6 +412,10 @@
             // touched: it is the CARD drop shadow (box-shadow), not text.
             var bgHex = data.bg || (def.options.bg && def.options.bg.default) || '';
             var fgOwned = !!(def.options.fg && (data.fg || def.options.fg.default));
+            // Accent is "owned" only when the USER picked one; the schema
+            // default (#ffffff) must not block the light-bg derivation, or a
+            // pale card keeps white values (q1083: cards looked blank).
+            var accentOwned = !!data.accent;
             var derived = deriveWidgetColors(bgHex);
             if (derived) {
                 // Re-derive on EVERY render: a value that lingers on the
@@ -421,6 +424,9 @@
                 // the card). The old guard checked the inline style instead.
                 if (!fgOwned) {
                     el.style.setProperty('--widget-fg', derived.fg);
+                }
+                if (!accentOwned && def.options.accent) {
+                    el.style.setProperty('--widget-accent', derived.fg);
                 }
                 el.style.setProperty('--widget-border', derived.border);
                 // Text shadow follows the BACKGROUND (dark card → dark
@@ -526,8 +532,9 @@
             // NaN gets the default.
             var v = parseFloat(value);
             inst.opacity = Math.max(0, Math.min(1.0, isNaN(v) ? 0.7 : v));
-            // Background alpha only — the widget's TEXT stays fully
-            // opaque (see widget.css background: color-mix chain).
+            // Background alpha only — the widget's TEXT stays fully opaque.
+            // This is the card tint: 0 = pure frost, 1 = solid. The analog
+            // clock canvas fades with it too (its chip has no tint layer).
             inst.el.style.setProperty('--widget-bg-alpha', inst.opacity);
             // Mirror onto data-opacity so CSS can hide a fully
             // transparent widget when the "hide at 0%" preference is on.
@@ -804,6 +811,8 @@
                             '" style="display:flex;align-items:center;gap:8px;padding:4px 8px 4px 26px;font-size:11px;color:var(--theme-panel-muted);">' +
                             '<input type="range" class="widget-opacity-all" min="0" max="1" step="0.05" ' +
                             'value="' + sharedOpacity + '" style="width:80px;" title="' + _('Opacity') + '">' +
+                            '<span class="widget-opacity-val" style="font-size:10px;min-width:30px;">' +
+                            Math.round(sharedOpacity * 100) + '%</span>' +
                             '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;">' +
                             '<input type="checkbox" class="widget-ct-all"' + (sharedCT ? ' checked' : '') + '>' + _('Click-through') + '</label>' +
                             '</div>';
@@ -831,6 +840,8 @@
                     if (enabled) {
                         html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px 26px;font-size:11px;color:var(--theme-panel-muted);">' +
                             '<input type="range" class="widget-opacity" min="0" max="1" step="0.05" value="' + opacity + '" style="width:80px;" title="' + _('Opacity') + '">' +
+                            '<span class="widget-opacity-val" style="font-size:10px;min-width:30px;">' +
+                            Math.round(opacity * 100) + '%</span>' +
                             '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;">' +
                             '<input type="checkbox" class="widget-ct"' + (ct ? ' checked' : '') + '>' + _('Click-through') + '</label>';
                         if (def.modes) {
@@ -980,14 +991,27 @@
                         html += '</select></label>';
                         break;
                     case 'color':
-                        html += '<label style="display:flex;align-items:center;gap:6px;"><span style="flex:1;">' + label + '</span>' +
-                            '<input type="color" data-option-key="' + key + '" value="' + (val || opt.default || '#000000') + '"></label>';
+                        // opt.disabled (boolean or fn of instance data): a colour
+                        // option that cannot affect the current mode (e.g. the
+                        // clock's fg/bg on the analog face) renders greyed out.
+                        var cdis = typeof opt.disabled === 'function'
+                            ? opt.disabled(inst.data) : !!opt.disabled;
+                        html += '<label style="display:flex;align-items:center;gap:6px;' +
+                            (cdis ? 'opacity:0.5;cursor:not-allowed;' : '') + '"><span style="flex:1;">' + label + '</span>' +
+                            '<input type="color" data-option-key="' + key + '" value="' + (val || opt.default || '#000000') + '"' +
+                            (cdis ? ' disabled' : '') + '></label>';
                         break;
                     default: // text
                         html += '<label style="display:flex;align-items:center;gap:6px;"><span style="flex:1;">' + label + '</span>' +
                             '<input type="text" data-option-key="' + key + '" value="' +
                             (val === undefined || val === null ? '' : String(val).replace(/"/g, '&quot;')) +
                             '" style="width:120px;"></label>';
+                }
+                // Optional per-option note (e.g. the net-traffic IP row
+                // switches family on click): shown under its own control.
+                if (opt.hint) {
+                    html += '<div class="widget-opt-hint" style="margin-left:22px;font-size:10px;line-height:1.4;opacity:0.75;">' +
+                        _(opt.hint) + '</div>';
                 }
             });
             html += '</div>';
@@ -1080,6 +1104,8 @@
                 slider.addEventListener('input', function() {
                     var typeId = slider.closest('.widget-shared-controls').getAttribute('data-type');
                     var val = parseFloat(slider.value);
+                    var out = slider.parentNode.querySelector('.widget-opacity-val');
+                    if (out) out.textContent = Math.round(val * 100) + '%';
                     self._instancesOf(typeId).forEach(function(iid) { self.setOpacity(iid, val); });
                 });
             });
@@ -1097,7 +1123,10 @@
                 slider.addEventListener('input', function() {
                     var row = slider.closest('.widget-instance-row') || slider.closest('.widget-settings-item');
                     var iid = row.getAttribute('data-instance');
-                    if (iid) self.setOpacity(iid, parseFloat(slider.value));
+                    var val = parseFloat(slider.value);
+                    var out = slider.parentNode.querySelector('.widget-opacity-val');
+                    if (out) out.textContent = Math.round(val * 100) + '%';
+                    if (iid) self.setOpacity(iid, val);
                 });
             });
 
@@ -1186,6 +1215,7 @@
                 if (dragging) {
                     dragging = false;
                     el.classList.remove('widget-dragging');
+                    el.__draggedAt = Date.now();
                     WidgetManager.saveConfig();
                     inst = null;
                 }
@@ -1334,18 +1364,20 @@
         var iid = widgetEl.getAttribute('data-widget-id');
         var inst = WidgetManager.instances[iid];
         if (!inst) return;
-        dragState = { id: iid, startX: e.clientX, startY: e.clientY, origX: inst.x, origY: inst.y };
+        dragState = { id: iid, startX: e.clientX, startY: e.clientY, origX: inst.x, origY: inst.y, moved: false };
         widgetEl.style.pointerEvents = 'auto';
     });
     document.addEventListener('mousemove', function(e) {
         if (!dragState) return;
         var dx = e.clientX - dragState.startX, dy = e.clientY - dragState.startY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragState.moved = true;
         WidgetManager.setPosition(dragState.id, dragState.origX + dx, dragState.origY + dy);
     });
     document.addEventListener('mouseup', function() {
         if (!dragState) return;
         var inst = WidgetManager.instances[dragState.id];
         if (inst && inst.clickThrough) inst.el.style.pointerEvents = 'none';
+        if (dragState.moved && inst && inst.el) inst.el.__draggedAt = Date.now();
         dragState = null;
         WidgetManager.saveConfig();
     });

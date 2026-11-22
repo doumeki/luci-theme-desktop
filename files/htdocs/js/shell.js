@@ -76,6 +76,32 @@ window.LuCIDesktop = (function() {
               !window.matchMedia('(pointer: fine)').matches));
     };
 
+    // Scrolling a touch list and releasing must not also activate the element
+    // under the finger. Used by the app switcher (horizontal cards) and the
+    // start menu (vertical app list): after a drag of more than 8px the next
+    // click is swallowed once.
+    self.suppressClickAfterDrag = function(el, label) {
+        if (!el || el.__dragClickGuard) return;
+        el.__dragClickGuard = true;
+        var sx = 0, sy = 0, moved = false;
+        el.addEventListener('touchstart', function(e) {
+            if (e.touches && e.touches.length === 1) {
+                sx = e.touches[0].clientX; sy = e.touches[0].clientY; moved = false;
+            }
+        }, { passive: true, capture: true });
+        el.addEventListener('touchmove', function(e) {
+            if (!e.touches || e.touches.length !== 1) return;
+            if (Math.abs(e.touches[0].clientX - sx) > 8 ||
+                Math.abs(e.touches[0].clientY - sy) > 8) moved = true;
+        }, { passive: true, capture: true });
+        el.addEventListener('click', function(e) {
+            if (!moved) return;
+            moved = false;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }, true);
+    };
+
     // Fire-and-forget server log (controller action_log → /var/log/desktop-ui.log).
     // Used for boot platform diagnostics — silent if no backend (file:// dev).
     self.log = function(msg) {
@@ -328,6 +354,7 @@ window.LuCIDesktop = (function() {
         var _changesNotified = false;   // notify once per uncommitted batch
         var _pwNotified = false;        // notify once per session
         var _lastSubmitType = null;     // 'save' | 'apply' | 'revert' (from app-save msg)
+        var _authNotified = false;      // dead-login-session toast (q685), deduped
 
         // The "View" action opens a dedicated changes window — the official
         // uci-changes modal can only open inside a live LuCI page, which is
@@ -368,7 +395,7 @@ window.LuCIDesktop = (function() {
                     { title: _('Security'), icon: '⚠️', type: 'error',
                       key: 'password', force: force,  // no duration: stays until dismissed
                       action: { label: _('Set password'), onClick: function() {
-                          WM.open('/cgi-bin/luci/admin/system/admin', _('Password'));
+                          WM.open('/cgi-bin/luci/admin/system/admin/password', _('Password'));
                       } } });
             }
         };
@@ -451,6 +478,26 @@ window.LuCIDesktop = (function() {
                     _count = r.count || 0;
                     _noPw = !!r.no_password;
 
+                    // Dead login session (q685): the endpoint now carries the
+                    // session state it validated server-side. Pop the
+                    // re-login toast the moment the poll sees it — instead
+                    // of the user discovering a dead session on the next
+                    // Apply/Revert click. Reset (and retract the toast) when
+                    // a fresh login revives the session.
+                    if (r.session === false && !_authNotified) {
+                        _authNotified = true;
+                        if (window.TrayManager) {
+                            TrayManager.notify(_('Login session has expired.'), {
+                                title: _('Configuration'), icon: '🔒', type: 'warn',
+                                key: 'auth-expired', duration: 0,
+                                action: { label: _('Log in again'), onClick: function() { location.reload(); } }
+                            });
+                        }
+                    } else if (r.session === true && _authNotified) {
+                        _authNotified = false;
+                        if (window.TrayManager) TrayManager.dismiss('auth-expired');
+                    }
+
                     // Active notifications on state transitions
                     if (_count > 0 && _prevCount === 0 && !_changesNotified) {
                         _changesNotified = true;
@@ -504,6 +551,19 @@ window.LuCIDesktop = (function() {
                     if (cw.el && cw.url && cw.url.indexOf('/desktop/changes') !== -1) {
                         WM.close(cid);
                     }
+                }
+                return;
+            }
+
+            // A window's XHR hit a dead login session (401 "auth"): the
+            // window already says so — offer the re-login here.
+            if (e.data.type === 'desktop-app-auth-expired') {
+                if (window.TrayManager) {
+                    TrayManager.notify(_('Login session has expired.'), {
+                        title: _('Configuration'), icon: '🔒', type: 'warn',
+                        key: 'auth-expired', duration: 0,
+                        action: { label: _('Log in again'), onClick: function() { location.reload(); } }
+                    });
                 }
                 return;
             }

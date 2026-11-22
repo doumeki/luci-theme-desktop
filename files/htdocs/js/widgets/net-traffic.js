@@ -5,7 +5,7 @@
  * Data source — the theme controller, no nlbwmon required:
  *   GET /cgi-bin/luci/admin/desktop/bandwidth
  *       → { iface: { rx: <cumulative rx bytes>, tx: <cumulative tx bytes>,
- *                    phy: <physical NIC or not> }, ... }
+ *                    phy: <physical NIC or not>, ip, ip6, uptime }, ... }
  *     (controller reads /proc/net/dev + /sys/class/net/<n>/device;
  *     sysauth=false like /interfaces so widget requests work regardless
  *     of cookie partitioning)
@@ -108,14 +108,75 @@
         if (txEl) txEl.textContent = fmtRate(rate ? rate.tx : null);
     }
 
-    // IP + interface uptime for the currently selected port. The controller
-    // obtains these from ubus network.interface (l3_device/device mapping);
-    // older controller versions omit the fields, so show '--' then.
-    function renderIfaceMeta(el, cur) {
+    // Middle-elide a value that does not fit its row: keep head and tail,
+    // replace the middle with an ellipsis. IPv6 drops whole ':' groups;
+    // anything else falls back to characters. The full text is measured
+    // first, so a wide card always shows the complete address.
+    function fitMiddle(el, full) {
+        if (!full || full === '--' || !el.clientWidth) return;
+        el.textContent = full;
+        if (el.scrollWidth <= el.clientWidth) return;
+        var out, i, keep, head, tail;
+        if (full.indexOf(':') !== -1) {
+            var g = full.split(':');
+            for (keep = g.length - 1; keep >= 3; keep--) {
+                head = Math.ceil(keep * 0.6);
+                tail = keep - head;
+                out = g.slice(0, head).join(':') + ':…:' + g.slice(g.length - tail).join(':');
+                el.textContent = out;
+                if (el.scrollWidth <= el.clientWidth) return;
+            }
+        }
+        var chars = full.split('');
+        for (i = chars.length - 1; i > 5; i--) {
+            head = Math.ceil(i / 2);
+            tail = i - head;
+            el.textContent = chars.slice(0, head).join('') + '…' +
+                chars.slice(chars.length - tail).join('');
+            if (el.scrollWidth <= el.clientWidth) return;
+        }
+    }
+
+    // IP row + interface uptime. One address per row: clicking the row
+    // switches IPv4/IPv6 (the chosen family is saved in data.ipMode). The
+    // controller supplies both (ip/ip6, link-local filtered); if the chosen
+    // family is missing, show the one that exists.
+    function renderIfaceMeta(el, cur, data) {
+        el._ntCur = cur || null;
+        var row = el.querySelector('.nt-ip-row');
+        var lblEl = el.querySelector('.nt-ip-label');
         var ipEl = el.querySelector('.nt-ip');
         var upEl = el.querySelector('.nt-uptime');
-        if (ipEl) ipEl.textContent = (cur && cur.ip) ? cur.ip : '--';
         if (upEl) upEl.textContent = (cur && cur.uptime != null) ? fmtUptime(cur.uptime) : '--';
+        if (!ipEl) return;
+        var v4 = (cur && cur.ip) ? cur.ip : '';
+        var v6 = (cur && cur.ip6) ? cur.ip6 : '';
+        var mode = (data && data.ipMode === 'v6') ? 'v6' : 'v4';
+        if (mode === 'v6' && !v6) mode = 'v4';
+        if (mode === 'v4' && !v4 && v6) mode = 'v6';
+        var text = mode === 'v6' ? v6 : v4;
+        if (lblEl) lblEl.textContent = mode === 'v6' ? 'IPv6' : _('IP');
+        // Touch has no hover, so the full address must stay readable: wrap it
+        // at the colons instead of middle-eliding it. On desktop the address
+        // keeps one line and the hover title carries the full value.
+        var mobile = !!(window.LuCIDesktop && LuCIDesktop.isMobile && LuCIDesktop.isMobile());
+        if (mobile) {
+            ipEl.classList.add('nt-ip-wrap');
+            if (text && text.indexOf(':') !== -1) {
+                var safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                              .replace(/>/g, '&gt;');
+                ipEl.innerHTML = safe.split(':').join(':<wbr>');
+            } else {
+                ipEl.textContent = text || '--';
+            }
+        } else {
+            ipEl.classList.remove('nt-ip-wrap');
+            ipEl.textContent = text || '--';
+            fitMiddle(ipEl, text || '--');
+        }
+        var switchable = !!(v4 && v6);
+        if (row) row.style.cursor = switchable ? 'pointer' : '';
+        ipEl.title = text || '';
     }
 
     // Picker options, sorted by the SAME rule as auto-adopt (ifaceScore:
@@ -161,17 +222,24 @@
             clickThrough: false,
             scale: 1.0
         },
+        // View state (not an options-panel field): which address family the
+        // IP row shows. Clicking the row flips it; the choice is saved.
+        data: { ipMode: 'v4' },
         // Interface picker: static options render immediately; loadOptions
         // replaces them with the live net.devices list once the panel opens.
         // accent colors the text (title + rates via --widget-accent); bg
-        // colors the card (--widget-bg-color, alpha from the opacity
-        // slider). Both ride WM._applyOptionStyles. Order matches
+        // feeds the derived text/border colours (the card fill is the fixed
+        // frost). Both ride WM._applyOptionStyles. Order matches
         // system-info (accent before bg).
         options: {
             accent:       { type: 'color', label: _('Accent color'), default: '#ffffff' },
             bg:           { type: 'color', label: _('Card background'), default: '#0a0e14' },
             hideBgAtZero: { type: 'checkbox', label: _('Hide background at 0% opacity'), default: false },
-            showIfaceInfo:{ type: 'checkbox', label: _('Interface info'), default: true },
+            showIfaceInfo:{
+                type: 'checkbox', label: _('Interface info'), default: true,
+                // The row this checkbox enables is clickable.
+                hint: _('Click the IP row to switch IPv4 / IPv6')
+            },
             iface: {
                 type: 'select',
                 label: _('Interface'),
@@ -196,7 +264,7 @@
             var infoHtml = '';
             if (data.showIfaceInfo !== false) {
                 infoHtml =
-                    '<div class="widget-card-row"><span class="label nt-ip-label">' +
+                    '<div class="widget-card-row nt-ip-row"><span class="label nt-ip-label">' +
                         _('IP') + '</span><span class="value nt-ip">--</span></div>' +
                     '<div class="widget-card-row"><span class="label nt-uptime-label">' +
                         _('Uptime') + '</span><span class="value nt-uptime">--</span></div>';
@@ -211,6 +279,19 @@
                         _('Upload') + '</span><span class="value nt-tx">--</span></div>' +
                     infoHtml +
                 '</div>';
+            // Click the IP row to flip IPv4 <-> IPv6 (only when both exist).
+            var ipRow = el.querySelector('.nt-ip-row');
+            if (ipRow) {
+                ipRow.addEventListener('click', function() {
+                    // A drag that ends on the row must not also toggle it.
+                    if (el.__draggedAt && Date.now() - el.__draggedAt < 400) return;
+                    var cur = el._ntCur;
+                    if (!cur || !cur.ip || !cur.ip6) return;
+                    data.ipMode = (data.ipMode === 'v6') ? 'v4' : 'v6';
+                    renderIfaceMeta(el, cur, data);
+                    WidgetManager.saveConfig();
+                });
+            }
         },
         // Async update: return the fetch Promise. WM prevents overlapping
         // ticks and swallows rejections — the catch is the offline fallback.
@@ -236,13 +317,13 @@
                         if (api && api.saveConfig) api.saveConfig();
                         cur = all[data.iface];
                     }
-                    if (!cur) { renderRate(el, null); renderIfaceMeta(el, null); return; }
+                    if (!cur) { renderRate(el, null); renderIfaceMeta(el, null, data); return; }
                     renderRate(el, selfDiff(data, cur));
-                    renderIfaceMeta(el, cur);
+                    renderIfaceMeta(el, cur, data);
                 })
                 .catch(function() {
                     renderRate(el, null);
-                    renderIfaceMeta(el, null);
+                    renderIfaceMeta(el, null, data);
                 });
         }
     });

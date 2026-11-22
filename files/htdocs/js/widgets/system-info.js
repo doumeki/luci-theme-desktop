@@ -28,8 +28,8 @@
         // clearable defaults to false (no user content) — nothing to declare.
         // accent colors the title only (--widget-accent); the CPU / Mem /
         // Up / Temp VALUES are fixed light blue in widget.css so they stay
-        // readable whatever accent is picked. bg colors the card
-        // (--widget-bg-color, alpha from the opacity slider). Both ride
+        // readable whatever accent is picked. bg feeds the derived text and
+        // border colours (the card fill is the fixed frost). Both ride
         // WM._applyOptionStyles — widgets never write the application code
         // themselves.
         options: {

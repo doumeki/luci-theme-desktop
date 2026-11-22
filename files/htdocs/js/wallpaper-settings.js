@@ -8,6 +8,7 @@
     var panel;
     var disabled = {};      // current working set
     var snapshot = {};      // snapshot at open time (for revert)
+    var dirInfo = null;     // effective storage dir {dir, custom, default} (0.1.0-320)
 
     function cloneSet(src) {
         var d = {};
@@ -126,6 +127,10 @@
                 '</div>' +
                 '<div class="widget-settings-body" style="padding:12px;min-height:260px;display:flex;flex-direction:column;' +
                 'color:var(--theme-panel-fg);background:var(--theme-panel-bg);">' +
+                '<div id="wps-dir-row" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;flex-shrink:0;min-width:0;">' +
+                '<span style="color:var(--theme-panel-muted, #888);flex-shrink:0;">' + _('Storage path') + ': ' + _('Loading...') + '</span>' +
+                '</div>' +
+                '<div id="wps-dir-status" style="font-size:11px;color:var(--theme-panel-muted, #888);margin-bottom:8px;flex-shrink:0;min-height:14px;"></div>' +
                 '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--theme-panel-border);padding-bottom:8px;flex-shrink:0;">' +
                 '<button class="wps-tab active" data-tab="browse" style="padding:4px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;' +
                 'background:var(--theme-panel-tab-active-bg);color:var(--theme-panel-tab-active-fg);">' + _('Browse') + '</button>' +
@@ -155,6 +160,8 @@
             PanelHelper.fadeIn(panel);
 
             var self = this;
+
+            this._loadDir();
 
             // X (top-right) = same as Cancel
             panel.querySelector('#wps-close').addEventListener('click', function() {
@@ -231,6 +238,96 @@
             });
 
             this._loadFiles();
+        },
+
+        _loadDir: function() {
+            var row = document.getElementById('wps-dir-row');
+            if (!row) return;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/cgi-bin/luci/admin/desktop/wallpaper_dir', true);
+            xhr.onload = function() {
+                var info = null;
+                try { info = JSON.parse(xhr.responseText); } catch (e) {}
+                dirInfo = info;
+                var dirTxt = info ? info.dir : '';
+                var safe = dirTxt.replace(/"/g, '&quot;');
+                row.innerHTML =
+                    '<span style="color:var(--theme-panel-muted, #888);flex-shrink:0;">' + _('Storage path') + ':</span>' +
+                    '<span id="wps-dir" title="' + safe + '" style="color:var(--theme-panel-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + dirTxt +
+                    (info && !info.custom ? ' ' + _('(default)') : '') + '</span>';
+                var btnCss = 'padding:3px 10px;background:transparent;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:11px;flex-shrink:0;';
+                if (info && info.custom) {
+                    var rb = document.createElement('button');
+                    rb.id = 'wps-dir-reset';
+                    rb.textContent = _('Restore default');
+                    rb.style.cssText = btnCss;
+                    rb.addEventListener('click', function() {
+                        if (confirm(_('Move images back to the default path?'))) {
+                            WallpaperManager._saveDir(info.default);
+                        }
+                    });
+                    row.appendChild(rb);
+                }
+                var ed = document.createElement('button');
+                ed.id = 'wps-dir-edit';
+                ed.textContent = _('Change path');
+                ed.style.cssText = btnCss;
+                ed.addEventListener('click', function() { WallpaperManager._editDir(); });
+                row.appendChild(ed);
+            };
+            xhr.send();
+        },
+
+        _editDir: function() {
+            var row = document.getElementById('wps-dir-row');
+            if (!row) return;
+            var cur = dirInfo ? dirInfo.dir : '';
+            row.innerHTML =
+                '<input type="text" id="wps-dir-input" style="flex:1;min-width:0;font-size:11px;padding:3px 6px;background:transparent;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;" value="' + cur.replace(/"/g, '&quot;') + '">' +
+                '<button id="wps-dir-save" style="padding:3px 10px;background:#2dce89;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;flex-shrink:0;">' + _('Save') + '</button>' +
+                '<button id="wps-dir-cancel" style="padding:3px 10px;background:transparent;color:var(--theme-panel-fg);border:1px solid var(--theme-panel-border);border-radius:4px;cursor:pointer;font-size:11px;flex-shrink:0;">' + _('Cancel') + '</button>';
+            document.getElementById('wps-dir-cancel').addEventListener('click', function() { WallpaperManager._loadDir(); });
+            var self = WallpaperManager;
+            document.getElementById('wps-dir-save').addEventListener('click', function() {
+                var v = document.getElementById('wps-dir-input').value;
+                if (dirInfo && v.replace(/\/+$/, '') === dirInfo.dir.replace(/\/+$/, '')) {
+                    self._loadDir();
+                    return;
+                }
+                if (confirm(_('Move existing images to the new path?'))) {
+                    self._saveDir(v);
+                } else {
+                    self._loadDir();
+                }
+            });
+            var ip = document.getElementById('wps-dir-input');
+            ip.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { var b = document.getElementById('wps-dir-save'); if (b) b.click(); }
+                if (e.key === 'Escape') { WallpaperManager._loadDir(); }
+            });
+            try { ip.focus(); } catch (e) {}
+        },
+
+        _saveDir: function(dirv) {
+            var st = document.getElementById('wps-dir-status');
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/cgi-bin/luci/admin/desktop/set_wallpaper_dir', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onload = function() {
+                var r = null;
+                try { r = JSON.parse(xhr.responseText); } catch (e) {}
+                if (r && r.ok) {
+                    if (st) {
+                        st.textContent = ((r.msg || '') + (r.moved !== undefined ?
+                            '  ' + _f('Moved %d image(s), skipped %d', r.moved, r.skipped || 0) : '')).trim();
+                    }
+                    WallpaperManager._loadDir();
+                    WallpaperManager._loadFiles();
+                } else if (st) {
+                    st.textContent = (r && r.msg) ? r.msg : _('Failed');
+                }
+            };
+            xhr.send('dir=' + encodeURIComponent(dirv));
         },
 
         _loadFiles: function() {

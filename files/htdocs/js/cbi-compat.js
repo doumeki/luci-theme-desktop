@@ -69,6 +69,35 @@ function submitWithApply(form, btn, applyValue) {
  *      merely mention cbi.apply are never hijacked
  * cbi Button options (cert download, diagnostics…) match neither case's
  * markers and keep submitting natively. */
+/* Old-LuCI apply watchdog (0.1.0-325): the 19.07 server reloads services
+   inside the POST request, which can drop the response so the button stays
+   on "Applying…". Pending-change count is the source of truth — when it
+   hits zero the commit is durable, so reload the page ourselves. */
+var applyWatch = null;
+function watchApplyPending() {
+    if (applyWatch) return;
+    var tries = 0;
+    applyWatch = setInterval(function() {
+        if (++tries > 30) { clearInterval(applyWatch); applyWatch = null; return; }
+        var x = new XMLHttpRequest();
+        x.open('GET', '/cgi-bin/luci/admin/desktop/uci_changes', true);
+        x.onload = function() {
+            try {
+                var j = JSON.parse(x.responseText);
+                if (j && j.list && j.list.length === 0) {
+                    clearInterval(applyWatch); applyWatch = null;
+                    try { sessionStorage.removeItem('desktop-apply-pending'); } catch (err) {}
+                    try {
+                        window.parent.postMessage({ type: 'desktop-app-save', submitType: 'apply' }, location.origin);
+                    } catch (err) {}
+                    location.reload();
+                }
+            } catch (err) {}
+        };
+        x.send();
+    }, 1000);
+}
+
 function findApplyButton(target) {
     if (!target || !target.closest) return null;
     var byClass = target.closest('.cbi-button-apply');
@@ -98,6 +127,13 @@ document.addEventListener('click', function(e) {
            luci-loaded listener reliably misses the event on
            fast-boot embed pages (see runApplyPending below). */
         try { sessionStorage.setItem('desktop-apply-pending', '1'); } catch (err) {}
+        /* Old-LuCI (19.07) reloads services inside the POST request; a
+           restart can drop the response and leave this button stuck on
+           "Applying…" forever. Watch the server's pending-change count
+           instead: once it reaches zero the commit landed, so reload the
+           page ourselves. Dies with the document when the response does
+           arrive normally. */
+        watchApplyPending();
     }
     var applyValue = btn.value; /* capture BEFORE disableApplyBtn mutates it */
     disableApplyBtn(btn.form, btn);

@@ -17,20 +17,19 @@
 }
 
 /* 0% opacity policy (per-widget option "Hide background at 0%"):
- * opacity 0 means the card background alpha is 0 — the shell (background/
- * border/shadow) fades with --widget-bg-alpha. The backdrop blur is NOT
- * alpha-faded, so by default a 0% card leaves a frosted-glass chip.
- * With the option on, the widget's render sets data-hide-bg="1" on its
- * instance element and a 0% background also kills the blur: nothing but
- * text remains. It is per-widget — system-info and net-traffic have
- * their own toggle; pure-color widgets (sticky-note, clock face) have
- * no backdrop-filter and are unaffected. data-opacity is mirrored by
- * WM.setOpacity alongside --widget-bg-alpha. */
+ * The opacity slider is the card TINT alpha (0 = pure frost, 1 = solid); the
+ * backdrop blur is automatic. At 0% opacity the tint is already gone; with
+ * this option on, the frost, border and shadow go too: nothing but text
+ * remains. It is per-widget — system-info and net-traffic have their own
+ * toggle; the clock offers it for its digital face only (analog has no card).
+ * data-opacity is mirrored by WM.setOpacity. */
 .widget-instance[data-opacity="0"][data-hide-bg="1"] .widget-sysinfo,
 .widget-instance[data-opacity="0"][data-hide-bg="1"] .widget-card,
 .widget-instance[data-opacity="0"][data-hide-bg="1"] .widget-clock-face {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    border-color: transparent;
+    box-shadow: none;
 }
 
 /* ===== Sticky note: title bar drags, the text area edits =====
@@ -144,11 +143,10 @@
 
 /* ===== Desktop Clock widget =====
  * Digits follow the theme's default foreground (--widget-fg; the `fg`
- * option overrides it per-instance). The optional `bg` widget option
- * supplies ONE card background for the whole digital face — time and
- * date rows share the same chip (.widget-clock-face) — via the same
- * color-mix chain as .widget-card (--widget-bg-color), so the opacity
- * slider fades it too, never the digits. The face is inline-block so
+ * option overrides it per-instance). Time and date share ONE chip
+ * (.widget-clock-face) — same tint layer + automatic backdrop blur as the
+ * info cards (analog mode fades the canvas instead); `bg` also feeds the
+ * derived text/border colours. The face is inline-block so
  * the chip is exactly as wide as the digits; the widget box itself
  * stays transparent. Analog mode renders a canvas with no face, so
  * bg/fg only affect digital mode. */
@@ -167,21 +165,11 @@
 }
 .widget-clock-face {
     display: inline-block;
-    /* First line is the no-color-mix fallback for browsers that don't
-       support it (older mobile WebViews): solid custom/theme background,
-       no alpha fade — the color still applies. */
-    background: var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)));
-    background: color-mix(in srgb,
-        var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)))
-        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
-    /* Frosted-glass like the info cards: survives a 0% background unless
-       the widget's hideBgAtZero option is set (rule below). Digital mode
-       only — analog draws a canvas with its own palette. */
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    /* Frosted chip: transparent fill, the wallpaper behind is blurred (see
+       the shared frost rule below). */
+    position: relative;
+    background: transparent;
     border: 1px solid var(--widget-border);
-    border-color: color-mix(in srgb, var(--widget-border)
-        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
     border-radius: 14px;
     padding: 6px 16px;
 }
@@ -201,48 +189,67 @@
  * on-desktop look is identical; System Info keeps the historical
  * .widget-sysinfo alias.
  *
- * Background chain: --widget-bg-color (set by the `bg` widget option,
- * removed when cleared) falls back to the theme's --widget-bg-rgb; the
- * opacity slider writes --widget-bg-alpha, so it fades the CARD
- * BACKGROUND only — text color (--widget-fg) is never affected. The
- * first line is the no-color-mix fallback for browsers that don't
- * support it (older mobile WebViews): solid custom/theme background,
- * no alpha fade — the color still applies. */
+ * Fill: --widget-bg-color painted at --widget-bg-alpha (per-widget colour +
+ * opacity slider) on the layer below; the backdrop blur is automatic (no
+ * setting). At opacity 0 the fill is transparent — the pure Maxthon 7
+ * (Chromium 109) frost. `bg` also feeds the derived text/border colours
+ * (deriveWidgetColors). */
 .widget-sysinfo,
 .widget-card {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
     color: var(--widget-fg);
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-    background: var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)));
-    background: color-mix(in srgb,
-        var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)))
-        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
-    /* Border + shadow fade with the background alpha too — at 0 the
-       whole card shell vanishes, leaving only the text. */
+    position: relative;
+    background: transparent;
+    /* Plain border/shadow — exactly the values Chromium 109 fell back to,
+     * so every browser renders the same card (381). */
     border: 1px solid var(--widget-border);
-    border-color: color-mix(in srgb, var(--widget-border)
-        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
     border-radius: 10px;
     padding: 10px 14px;
     min-width: 140px;
     box-shadow: var(--widget-shadow);
-    box-shadow: var(--widget-shadow-pos) color-mix(in srgb,
-        var(--widget-shadow-color) calc(var(--widget-bg-alpha, 0.55) * 100%),
-        transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* Card tint — painted on its own layer so the opacity slider fades ONLY the
+ * fill and the automatic backdrop blur stays visible underneath. opacity 0 is
+ * the pure Maxthon 7 frost (transparent + blurred wallpaper); 1 is a solid
+ * card. The digital clock chip uses the same layer; analog has no chip and
+ * fades its canvas instead. */
+.widget-clock-face::before,
+.widget-sysinfo::before,
+.widget-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--widget-bg-color, rgb(var(--widget-bg-rgb, 10, 14, 20)));
+    opacity: var(--widget-bg-alpha, 0);
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Frost is automatic — fixed 6px, no setting. The tint layer sits on top,
+ * so lowering the opacity reveals the blurred wallpaper (the Maxthon look). */
+.widget-clock-face,
+.widget-sysinfo,
+.widget-card {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+/* Analog clock: the dial is canvas CONTENT (there is no face card), so the
+ * opacity slider must fade the canvas itself — otherwise it does nothing in
+ * analog mode (q1092). Digital has no canvas: its chip gets the same tint
+ * layer as the info cards, so the slider fades the chip fill instead. */
+.widget-instance[data-mode="analog"] .analog-clock-canvas {
+    opacity: var(--widget-bg-alpha, 1);
 }
 .widget-sysinfo:hover,
 .widget-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--widget-shadow-hover);
-    box-shadow: var(--widget-shadow-hover-pos) color-mix(in srgb,
-        var(--widget-shadow-hover-color) calc(var(--widget-bg-alpha, 0.55) * 100%),
-        transparent);
-    border-color: color-mix(in srgb, rgba(128, 160, 255, 0.35)
-        calc(var(--widget-bg-alpha, 0.55) * 100%), transparent);
 }
 /* Accentable text — title and values follow the --widget-accent CSS
  * variable (set by WM._applyOptionStyles from the `accent` widget
@@ -306,6 +313,24 @@
     font-size: 10px;
     text-transform: none;
     letter-spacing: 0;
+}
+/* IP row: click switches IPv4/IPv6. The value can shrink (flex:1,min-width:0)
+   so net-traffic.js can middle-elide a long IPv6 address in place — the card
+   keeps its width instead of growing, and both ends of the address stay
+   visible (plain text-overflow would cut the tail only). */
+.nt-ip-row { cursor: default; }
+.widget-card-row .nt-ip {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+}
+/* Touch: no hover for the title, so the full address wraps instead of being
+   middle-elided (net-traffic.js adds the class and the <wbr> breaks). */
+.widget-card-row .nt-ip.nt-ip-wrap {
+    white-space: normal;
+    overflow: visible;
 }
 /* Non-resizable Network Traffic keeps the historical fixed 190px card
  * width. A resizable instance gets its px size from the user's drag

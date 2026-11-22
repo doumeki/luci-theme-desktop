@@ -44,6 +44,7 @@ describe('net-traffic widget', function() {
         assert.ok(d.options.showIfaceInfo, 'interface-info toggle declared');
         assert.equal(d.options.showIfaceInfo.type, 'checkbox');
         assert.equal(d.options.showIfaceInfo.default, true, 'shown by default');
+        assert.equal(d.data.ipMode, 'v4', 'IP row starts on IPv4');
     });
 
     it('render builds the skeleton with placeholders', function() {
@@ -53,6 +54,7 @@ describe('net-traffic widget', function() {
         assert.equal(el.querySelector('.nt-rx').textContent, '--', 'rx placeholder');
         assert.equal(el.querySelector('.nt-tx').textContent, '--', 'tx placeholder');
         assert.equal(el.querySelector('.nt-ip').textContent, '--', 'IP placeholder');
+        assert.ok(el.querySelector('.nt-ip-row'), 'IP row exists');
         assert.equal(el.querySelector('.nt-uptime').textContent, '--', 'uptime placeholder');
         assert.equal(el.querySelector('.nt-iface').textContent, 'wan', 'default iface shown');
     });

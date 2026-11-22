@@ -55,11 +55,12 @@
     --theme-panel-tab-inactive-fg: #888;
     --theme-panel-section-label: #888;
 
-    /* Widget content. The background is split into an rgb triple +
-       alpha: the widget opacity slider writes --widget-bg-alpha, so it
-       controls the CARD BACKGROUND's opacity only (never the text —
-       text stays fully readable). --widget-bg stays as a plain fallback
-       for browsers without color-mix(). */
+    /* Widget content. The card background is painted SOLID from
+       --widget-bg-rgb (widget.css builds the layer with plain background +
+       opacity), identical on every engine. --widget-bg-alpha is still
+       written by the opacity slider, but only the analog clock canvas
+       consumes it; text is never faded. --widget-bg is the legacy flat
+       fallback. */
     --widget-fg: rgba(255, 255, 255, 0.9);
     --widget-bg-rgb: 10, 14, 20;
     --widget-bg-alpha: 0.55;
@@ -67,10 +68,8 @@
     --widget-border: rgba(255, 255, 255, 0.08);
     --widget-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
     --widget-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.55);
-    /* Shadows split into position + color: widget.css re-composes them
-       with color-mix so the border/shadow fade together with the card
-       background (--widget-bg-alpha) — at alpha 0 nothing of the card
-       shell remains, only the text. */
+    /* Legacy split shadow vars (kept for custom skins). widget.css uses the
+       solid --widget-shadow / --widget-shadow-hover above. */
     --widget-shadow-pos: 0 2px 10px;
     --widget-shadow-color: rgba(0, 0, 0, 0.45);
     --widget-shadow-hover-pos: 0 8px 24px;

@@ -309,6 +309,8 @@ describe('Quantum icons: drag engine', function() {
         // (left/top glide) that is cleared shortly after
         assert.ok(iconB.style.transition.indexOf('left') !== -1, 'occupant transition active for the glide');
         assert.ok(iconB.style.transition.indexOf('cubic-bezier') !== -1, 'quantum bounce easing');
+        // the glide is DELAYED 0.1s after the drop (transition-delay)
+        assert.ok(iconB.style.transition.indexOf('0.1s') !== -1, 'glide waits 0.1s after drop');
     });
 
     it('drag suppresses the trailing click on the container', function() {

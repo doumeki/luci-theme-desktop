@@ -1,5 +1,7 @@
 # Tests
 
+> 端到端操作(换盘/启动/安装/跑测试)见 `docs/runbook.md`。
+
 Three levels, from zero-setup to full device verification.
 
 ## Level 1 — JS unit tests (any machine, runs in CI)
@@ -40,11 +42,26 @@ prints its own verdict line and exits non-zero on failure:
   single side only anchor fails with a human-readable diff; known
   divergences are ratcheted in `TPL_SYNC_KNOWN` with a reason each.
   `TPL_DEBUG=1` prints every ratcheted row and per-pair anchor counts.
+- `cbiCacheBusterCheck` — cbi.js cache-buster (q685): every `<script src=
+  ".../cbi.js">` in both header templates must carry a `?v=` parameter, and
+  that parameter must be keyed on cbi.js's own file mtime (not `theme_ver`).
+  Regression basis: a bare cbi.js URL is cached by the browser forever while
+  luci-base rewrites the file on every firmware upgrade — a stale copy then
+  breaks every form page ("cbi_update_table is not defined") until the user
+  hand-clears the cache.
+- `controllerIndexEnvCheck` — controller `index()` environment safety (q685):
+  no bare call to a function defined in the same `files/controller/*.lua`
+  inside `index()`. Regression basis: `luci.dispatcher` runs `index()` under
+  `setfenv(idx, setmetatable({}, {__index = luci.dispatcher}))()`, so
+  controller-module globals are invisible by bare name — a bare
+  `wp_reconcile_storage()` call took the whole pagetree down with HTTP 500 on
+  0.1.0-329. Use `package.loaded["luci.controller.<name>"].fn(...)` or a
+  captured local instead.
 
 Each gate is a normal function and can run standalone:
 `node -e "require('./tests/run-headless.js').templateSyncCheck()"`.
 
-Optional: with a local OpenWrt build tree, the Lua runtime tests run too:
+Optional: with a local OpenWrt build tree, the Lua tests run too (runtime change normalization + the q685 session-mechanism unit tests (`cookieName()` HTTPS semantics, `sessionValid()` contract) + the sibling-tabs policy spec):
 
 ```sh
 LEDE_ROOT=/path/to/openwrt-sdk node tests/run-headless.js
@@ -62,7 +79,7 @@ ssh root@<router> 'lua5.1 /tmp/test-runtime.lua /'
 
 Pass the theme root as argv (defaults to `.`):
 `ssh root@<router> 'lua5.1 /tmp/test-runtime.lua /usr/lib/lua/luci'`
-Expected: 7/7 checks pass.
+Expected: 8/8 checks pass (7 normalization + the on-device newCursor write check; on a plain host the write check prints SKIP).
 
 ## Level 3 — device probes (optional, your own routers)
 
@@ -76,6 +93,26 @@ bash probe/deploy-theme.sh 1.1    # build + deploy + smoke (package manager auto
 bash probe/deploy-theme.sh 253
 bash probe/theme-ctl.sh desktop|argon [1.1|253]
 ```
+
+Device-level tab policy matrix (the sibling-tabs "modes" on a live page,
+embed-mode bars): `node tests/tabs-matrix.js` — logs in through
+`probe/lib.js` and asserts each mode: a pure firstchild aggregate's own URL
+shows its children with the first child active, pages inside an aggregate
+show sibling bars with themselves active, and category/plain pages plus
+full-shell (non-embed) visits show no bar at all.
+
+Device-level session-expiry mechanism (q685): `bash
+tests/session-expiry-device.sh [1.1|253]` — logs in (real form POST), then
+destroys the probe session out-of-band via ubus and asserts the theme
+endpoints report the dead session: `uci_changes` flips `"session":false`
+and the changes apply endpoint returns 401 auth; a fresh login revives it.
+Zero config mutation (GETs + one guaranteed-401 POST only). Requires the
+theme carrying the q685 `session` bit (>= 0.1.0-329) on the target. The
+out-of-band ubus destroy goes over ssh: dev1 is keyless, dev2 (253) uses
+`SSH_KEY_2` (or `PROBE_SSH_KEY`). Login is the real form POST; when a target
+has a web password we do not hold (`LUCI_WEB_PW` unset) the script falls back
+to an ssh-forged, probe-owned session (created and destroyed via ubus), so
+the mechanism stays testable on both tracks.
 
 Browser probes (firefox headless via geckodriver) take the router from
 `PROBE_ROUTER` / `PROBE_SSH` environment variables.

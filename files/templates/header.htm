@@ -57,6 +57,7 @@
     local embed_primary_light = ''
     local embed_primary_dark = ''
     local embed_dark_css = ''     -- dark.css content (like argon)
+    local era_legacy = false      -- content-tab era (see marker below)
     if is_embedded then
         pcall(function()
             local f = io.popen("uci show desktop.settings 2>/dev/null")
@@ -69,6 +70,8 @@
                             embed_dark_attr = ' data-theme="dark"'
                             local dark_f = io.open('/www/luci-static/desktop/css/dark.css')
                             if dark_f then embed_dark_css = dark_f:read('*a'); dark_f:close() end
+                        elseif k == "tab_era" and v == "legacy" then
+                            era_legacy = true
                         elseif k == "app_primary_color" then
                             embed_primary_light = v
                         elseif k == "app_primary_color_dark" then
@@ -77,6 +80,23 @@
                     end
                 end
                 f:close()
+            end
+        end)
+    else
+        -- Plain (shell) renders need the era too: the XHR.poll stub in the
+        -- head below must stay alive on 19.07-era devices, where the hidden
+        -- shell copy doubles as the visible fallback when the shell does
+        -- not take over (boot failure, bounce race). deploy-theme.sh
+        -- writes tab_era=legacy on those targets and leaves it unset on
+        -- modern/master-family ones (unset = "modern" = zero change).
+        pcall(function()
+            local f = io.popen("uci -q get desktop.settings.tab_era 2>/dev/null")
+            if f then
+                local v = f:read('*l')
+                f:close()
+                if v and v:match("^%s*legacy%s*$") then
+                    era_legacy = true
+                end
             end
         end)
     end
@@ -105,6 +125,23 @@
     if not lang or lang == "" then
         lang = luci.sys.exec("uci -q get luci.main.lang 2>/dev/null"):match("[^\n]+") or "en"
     end
+
+    -- cbi.js cache buster (q685): key the URL on the file's own mtime
+    -- (luci-base rewrites cbi.js on every firmware upgrade; theme
+    -- redeploys must not bust it). The desktop theme previously shipped
+    -- cbi.js WITHOUT any version parameter, so a stale/corrupt cached
+    -- copy survived forever -> "cbi_update_table is not defined".
+    -- Computed at TOP LEVEL (before the is_embedded branch) exactly like
+    -- header.ut does: both embed and shell branches use it.
+    local cbi_ver = '0'
+    pcall(function()
+        local st
+        local okn, nixio = pcall(require, 'nixio')
+        if okn and nixio and nixio.fs and nixio.fs.stat then
+            st = nixio.fs.stat('/www/luci-static/resources/cbi.js')
+        end
+        if st and st.mtime then cbi_ver = tostring(st.mtime) end
+    end)
 -%>
 <!DOCTYPE html>
 <html lang="<%=lang%>"<%=embed_dark_attr%>>
@@ -181,15 +218,33 @@
     if(!String.format)String.format=function(f){var a=[].slice.call(arguments,1);return f.replace(/%[sd%]/g,function(m){if(m==='%%')return'%';return a.length?a.shift():m;});};
     </script>
     <% if luci.dispatcher.menu_json then %>
-    <script src="<%=resource%>/cbi.js"></script>
+    <script src="<%=resource%>/cbi.js?v=<%=cbi_ver%>"></script>
     <% end %>
     <script src="<%=resource%>/xhr.js"></script>
+    <% if not era_legacy then %>
     <script>
-        // Shell mode: prevent controller JS from XHR polling (content is hidden)
+        // Shell mode: the controller content is hidden (display:none below)
+        // and the desktop shows apps in embed iframes, so its polling is
+        // waste. The footer's XHR.halt() already stops the interval right
+        // after first paint, so the cost without a stub is a single request,
+        // not a stream.
+        //
+        // 19.07-era guard (template-level): deploy-theme.sh writes
+        // desktop.settings.tab_era=legacy on 19.07-era Lua devices, where
+        // this hidden copy doubles as the visible fallback whenever the
+        // shell does not take over (boot failure, app-iframe bounce race).
+        // A blanket stub left the interface block at its SSR placeholders
+        // ("Fetching...", "?") forever in those views (2026-11-15), so the
+        // whole block is skipped there. Modern and master-family devices
+        // leave tab_era unset (= "modern") and keep the blanket stub -
+        // zero change. Head-time JS cannot tell the families apart (same
+        // xhr.js statics, no L on the Lua track on either), which made the
+        // previous window.L/XHR.post gate flip FALSE on modern devices too.
         if (typeof XHR !== 'undefined') XHR.poll = function() {};
     </script>
+    <% end %>
 </head>
-<body class="lang_<%=luci.i18n.context.lang%> shell <% if luci.dispatcher.context.authsession then %>logged-in<% end %>">
+<body class="lang_<%=luci.i18n.context.lang%> <% if is_embedded then %>embedded<% else %>shell<% end %><% if luci.dispatcher.context.authsession then %> logged-in<% end %>">
     <!-- Poll status indicator. Old LuCI apps (the legacy
          interface overview, ...) bind to $('xhr_poll_status').onclick and
          xhr.js flips it while polling; without the element their inline JS
@@ -431,7 +486,9 @@
     <% if no_pw then %>
     <!-- No-password security banner (argon master convention).
          Session-level dismiss via click; re-appears after reload
-         until a root password is set. -->
+         until a root password is set. Lua-track trees keep the password
+         form on the administration page itself (q687: iStoreOS 24.10.5
+         registers no separate password subroute). -->
     <div id="desktop-pw-alert" onclick="this.style.display='none'">
         <span><%:No password set!%></span>
         <a class="pw-alert-btn" href="<%=luci.dispatcher.build_url("admin/system/admin")%>"><%:Go to password configuration...%></a>
@@ -551,6 +608,21 @@
             write('<script type="text/plain" id="__desktop-dark-data">' .. embed_dark_css .. '</script>')
         end
     %>
+    <%
+        -- LuCI era marker (keep in sync with header.ut). Era comes from
+        -- desktop.settings.tab_era, which deploy-theme.sh writes ("legacy")
+        -- on devices whose apps render CBI content tabs that must stay in
+        -- the page flow. Unset/any other value = "modern" = the pre-era
+        -- behaviour (zero change). A previous draft probed
+        -- /www/luci-static/resources/luci.js instead — unusable in
+        -- practice: this fork's Lua-track LuCI ships no luci.js on ANY
+        -- device, so a file probe cannot tell device families apart.
+        -- wm.js and the shell-side chrome hider read
+        -- window.__DESKTOP_LUCI_ERA__: on legacy, CONTENT tabs
+        -- (ul.cbi-tabmenu) are not mirrored into the window titlebar and
+        -- stay visible in the page.
+    %>
+    <script>window.__DESKTOP_LUCI_ERA__ = "<%= era_legacy and "legacy" or "modern" %>";</script>
     <link rel="stylesheet" href="<%=media%>/css/embedded.css?v=<%=theme_ver%>">
     <script src="<%=media%>/js/debug.js?v=<%=theme_ver%>"></script>
     <script src="<%=media%>/js/color_calc-argon.js?v=<%=theme_ver%>"></script>
@@ -671,22 +743,7 @@
         style.textContent = css;
     });
     </script>
-    <script src="<%=resource%>/cbi.js"></script>
-</head>
-<body class="lang_<%=luci.i18n.context.lang%> embedded <% if luci.dispatcher.context.authsession then %>logged-in<% end %>">
+    <script src="<%=resource%>/cbi.js?v=<%=cbi_ver%>"></script>
     <div class="main"><div class="main-left"></div><div class="main-right"><div id="maincontent"><div class="container">
-    <!-- Poll status indicator. Old LuCI apps bind to
-         $('xhr_poll_status').onclick and xhr.js reveals/flips it while
-         polling; without the element their inline JS dies at
-         `$('xhr_poll_status').onclick` (TypeError on null) and polling
-         never starts. All stock themes ship this — keep it in sync.
-         The element stays for compat but is visually hidden by
-         embedded.css (#xhr_poll_status { display:none !important }):
-         the on/off switch here is redundant with the taskbar toggle. -->
-    <span id="xhr_poll_status" style="display:none"
-        onclick="XHR.running() ? XHR.halt() : XHR.run()">
-        <span class="label success" id="xhr_poll_status_on"><span class="mobile-hide"><%:Auto Refresh%></span> <%:on%></span>
-        <span class="label" id="xhr_poll_status_off" style="display:none"><span class="mobile-hide"><%:Auto Refresh%></span> <%:off%></span>
-    </span>
     <% write(compat.render_sibling_tabs(request, write, pcdata)) %>
 <% end -- not is_embedded %>

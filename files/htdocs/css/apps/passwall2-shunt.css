@@ -1,0 +1,30 @@
+/* passwall2 — shunt rule list table (desktop shell fix).
+ *
+ * The app's own inline <style> (shunt_rule_list.htm) flips the rule table
+ * to flex cards below 1152px and hides the header row; inside the desktop
+ * shell that renders broken (row content not centered, header missing,
+ * action cell loses its top border and vertical centering).
+ *
+ * Injected dynamically by iframe-bridge.js (APP_CSS) AFTER page load, so
+ * these rules win the cascade over the app's inline styles. The `body`
+ * prefix raises specificity above the app's bare selectors (needed to
+ * beat its !important declarations).
+ *
+ * Deleting this file is safe: the page simply falls back to the app's own
+ * styles (no errors).
+ */
+@media screen and (max-width: 1152px) {
+	body .cbi-section-table-row {
+		display: table-row !important;
+	}
+
+	body .cbi-section-table-titles {
+		display: table-row !important;
+	}
+
+	body .td-actions {
+		padding-top: 0.8rem !important;
+		border-top-width: 1px !important;
+		border-top-style: solid !important;
+	}
+}

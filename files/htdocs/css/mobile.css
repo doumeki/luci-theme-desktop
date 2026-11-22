@@ -34,10 +34,9 @@
         height: auto;
         flex-shrink: 0;
     }
-    /* Hide button (minimize) stays — it hides the window; the app
-       switcher restores it. Maximize and pin-to-top are meaningless on
-       fullscreen (single window, nothing to pin above). */
-    .btn-minimize { display: block !important; }
+    /* Mobile is a single fullscreen window; minimizing just hides it and
+       the only way back is the switcher. Keep close only (2026-11-20). */
+    .btn-minimize { display: none !important; }
     .btn-maximize { display: none !important; }
     .btn-pin { display: none !important; }
 

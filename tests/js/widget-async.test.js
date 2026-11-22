@@ -169,6 +169,33 @@ describe('Widget API: async update runtime', function() {
         });
     });
 
+    it('net-traffic IP row switches IPv4/IPv6 on click', function() {
+        var origFetch = window.fetch;
+        var sample = { rx: 1, tx: 2, phy: true, ip: '192.0.2.10',
+                       ip6: '2001:db8::1', uptime: 60 };
+        window.fetch = function() {
+            return Promise.resolve({ json: function() { return Promise.resolve({ eth0: sample }); } });
+        };
+        WidgetManager.enable('net-traffic', { data: { iface: 'eth0' } });
+        var inst = WidgetManager.instances['net-traffic-1'];
+        clearInterval(inst._timer);
+        var d = WidgetManager.registry['net-traffic'];
+        var row = inst.el.querySelector('.nt-ip-row');
+        var ip = inst.el.querySelector('.nt-ip');
+        return d.update.call(d, inst.el, inst.data, inst._api).then(function() {
+            assert.equal(ip.textContent, '192.0.2.10', 'IPv4 by default');
+            row.click();
+            assert.equal(ip.textContent, '2001:db8::1', 'click shows IPv6');
+            row.click();
+            assert.equal(ip.textContent, '192.0.2.10', 'click back to IPv4');
+        }).then(function() {
+            window.fetch = origFetch;
+        }, function(e) {
+            window.fetch = origFetch;
+            throw e;
+        });
+    });
+
     it('net-traffic update shows -- on empty samples', function() {
         var origFetch = window.fetch;
         window.fetch = function() {

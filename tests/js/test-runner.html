@@ -335,15 +335,22 @@ document.addEventListener('click', function(e) {
 <script src="../../files/htdocs/js/theme-config.js"></script>
 <script src="../../files/htdocs/js/panel-helper.js"></script>
 <script src="../../files/htdocs/js/themesettings.js"></script>
+<script src="../../files/htdocs/js/wallpaper-settings.js"></script>
 <script src="../../files/htdocs/js/tray.js"></script>
 
-<!-- Test safety: stub WM.open to use about:blank, prevent network requests -->
+<!-- Test safety: stub WM.open to use about:blank, prevent network requests.
+     Exception: /tests/fixtures/* URLs load for real — the tab-mirror era
+     tests need actual same-origin fixture documents (served by the local
+     static server only, never an external host). -->
 <script>
 (function() {
     var _origOpen = WM.open;
     WM.open = function(url, title, icon) {
-        // Use about:blank so no real network requests happen during tests
-        var id = _origOpen.call(WM, 'about:blank', title, icon);
+        // Use about:blank so no real network requests happen during tests;
+        // local test fixtures are the one deliberate exception.
+        var real = (typeof url === 'string' &&
+                    url.indexOf('/tests/fixtures/') === 0) ? url : 'about:blank';
+        var id = _origOpen.call(WM, real, title, icon);
         // Store the intended URL for assertions
         if (LuCIDesktop.windows[id]) {
             LuCIDesktop.windows[id].url = url;
@@ -373,6 +380,7 @@ document.addEventListener('click', function(e) {
 <script src="tray.test.js"></script>
 <script src="theme-settings.test.js"></script>
 <script src="wallpaper-preview.test.js"></script>
+<script src="wallpaper-dir.test.js"></script>
 <script src="features.test.js"></script>
 <script src="desktop.test.js"></script>
 <script src="desktop-menu-placement.test.js"></script>
@@ -382,6 +390,7 @@ document.addEventListener('click', function(e) {
 <script src="mobile.test.js"></script>
 <script src="mobile-drag.test.js"></script>
 <script src="shell-app.test.js"></script>
+<script src="wrtbwmon-compat.test.js"></script>
 
 <!-- Run tests after all scripts loaded -->
 <script>

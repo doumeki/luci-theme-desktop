@@ -1,4 +1,4 @@
-/* Desktop Theme - Iframe Bridge
+﻿/* Desktop Theme - Iframe Bridge
  *
  * Connects the desktop shell to iframe content:
  *   - CSS injection to hide iframe-internal chrome
@@ -14,31 +14,31 @@
     // Third-party app user lists: the app force-cards the list below 768px
     // (.view-toggle hidden, #tableViewWrapper display:none !important) so
     // its own switchView() can't win either. On small screens take over the
-    // toggle: drive body[data-list-view] (cascade.css has matching
+    // toggle: drive body[data-appfilter-view] (cascade.css has matching
     // higher-specificity rules). Runs BEFORE the LuCIDesktop check — the
     // embedded page copy of this file loads without shell.js, so it must
     // not depend on the namespace. Buttons render late (arcombine), so
     // retry until they exist. Desktop (>768px) is untouched.
-    function initListView(attempts) {
+    function initAppfilterView(attempts) {
         if (window.innerWidth > 768) return;
         if (document.body && document.body.className.indexOf('embedded') === -1) return;
         var btnTable = document.getElementById('btnTableView');
         var btnCard = document.getElementById('btnCardView');
         if (!btnTable || !btnCard) {
-            if ((attempts || 0) < 40) setTimeout(function() { initListView((attempts || 0) + 1); }, 500);
+            if ((attempts || 0) < 40) setTimeout(function() { initAppfilterView((attempts || 0) + 1); }, 500);
             return;
         }
         var setView = function(v) {
-            document.body.setAttribute('data-list-view', v);
+            document.body.setAttribute('data-appfilter-view', v);
         };
         btnTable.addEventListener('click', function() { setView('table'); });
         btnCard.addEventListener('click', function() { setView('card'); });
         setView('card');   // app's mobile default
     }
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() { initListView(0); });
+        document.addEventListener('DOMContentLoaded', function() { initAppfilterView(0); });
     } else {
-        initListView(0);
+        initAppfilterView(0);
     }
 
     var DESKTOP = window.LuCIDesktop;
@@ -63,25 +63,80 @@
 
     // Per-app CSS fixes for third-party apps rendered inside the shell.
     // Apps ship their own inline <style> blocks that can break inside the
-    // desktop (e.g. a table flips to flex cards and hides its header row
-    // below a breakpoint). These files are injected AFTER the page loads,
-    // so they win the cascade over the app's inline styles (later
-    // document order + the `body` prefix raises specificity above the
-    // app's bare selectors — needed to beat its !important).
+    // desktop (e.g. passwall2's shunt-rule table flips to flex cards
+    // below 1152px and hides the header row). These files are injected
+    // AFTER the page loads, so they win the cascade over the app's inline
+    // styles (later document order + the `body` prefix raises specificity
+    // above the app's bare selectors — needed to beat its !important).
     // Convention: one file per app under files/htdocs/css/apps/; register
     // it here with a URL substring to match. See AGENTS.md.
-    // Per-app CSS fixes live on the local (merge-plan) branch only —
-    // the public release ships the injection mechanism with an empty
-    // table (injectAppCss loops over APP_CSS, no entries = no-op).
-    var APP_CSS = [];
+    var APP_CSS = [
+        {
+            match: '/passwall2',
+            file: '/luci-static/desktop/css/apps/passwall2-shunt.css',
+            id: '__desktop-app-css-passwall2'
+        },
+        {
+            // "运行日志" page: fill the window, no outer scroll (q1059).
+            // The body class is applied below only when #log_textarea exists.
+            match: '/passwall2',
+            file: '/luci-static/desktop/css/apps/passwall2-log.css',
+            id: '__desktop-app-css-passwall2-log'
+        }
+    ];
+
+    // log page marker: flex layout needs a body class (no :has() dependency)
+    var PSW_LOG_CLASS = 'desktop-psw-log';
+    function applyPasswallLogFit(doc) {
+        if (!doc || !doc.body) return;
+        try {
+            if (doc.getElementById('log_textarea'))
+                doc.body.classList.add(PSW_LOG_CLASS);
+            else
+                doc.body.classList.remove(PSW_LOG_CLASS);
+        } catch (e) {}
+    }
+
+    // passwall2 hides its table header below 1152px with
+    //   #cbi-passwall2-acl .cbi-section-table-titles { display:none !important }
+    // (view/passwall2/cbi/sortable.htm). An id + !important cannot be beaten by
+    // an injected stylesheet, so in a desktop-shell window (~1100px) the ACL /
+    // node tables lose their header row. Set the inline style instead - the
+    // only thing that outranks it - and keep it applied while the app
+    // re-renders rows.
+    var PASSWALL_TABLE_SEL = '.cbi-section-table-titles,.cbi-section-table-row';
+
+    function forcePasswallTables(doc) {
+        if (!doc || !doc.defaultView) return;
+        try {
+            if (doc.defaultView.innerWidth > 1152) return;
+            var rows = doc.querySelectorAll(PASSWALL_TABLE_SEL);
+            for (var i = 0; i < rows.length; i++) {
+                if (rows[i].style.getPropertyValue('display') !== 'table-row') {
+                    rows[i].style.setProperty('display', 'table-row', 'important');
+                }
+            }
+        } catch (e) {}
+    }
+
+    function watchPasswallTables(doc) {
+        forcePasswallTables(doc);
+        try {
+            var mo = new MutationObserver(function() { forcePasswallTables(doc); });
+            mo.observe(doc.body || doc, { childList: true, subtree: true });
+        } catch (e) {}
+        try {
+            doc.defaultView.addEventListener('resize', function() { forcePasswallTables(doc); });
+        } catch (e) {}
+    }
 
     // Universal top-tab-bar rule injected into EVERY iframe (no per-app
     // adaptation): LuCI apps render their top tabs as ul.nav-tabs (old
-    // CBI), ul.cbi-tabmenu (new CBI) or ul.tabs (custom apps) — pin them
-    // so they stay visible while the page scrolls in a short shell
-    // window. Each bar keeps its OWN background (custom apps usually
-    // have one; CBI tabmenus carry theirs), so scrolled content does
-    // not show through.
+    // CBI), ul.cbi-tabmenu (new CBI) or ul.tabs (custom apps like
+    // AdGuardHome) — pin them so they stay visible while the page
+    // scrolls in a short shell window. Each bar keeps its OWN background
+    // (AdGuardHome's ul.tabs is white; CBI tabmenus carry theirs), so
+    // scrolled content does not show through.
     var TOP_TAB_CSS = [
         'body ul.nav-tabs,',
         'body ul.cbi-tabmenu,',
@@ -95,6 +150,21 @@
         '   scrolled content never shows through while stuck */',
         'body ul.cbi-tabmenu {',
         '    background-color: var(--background-color, #f4f5f7) !important;',
+        '}'
+    ].join('\n');
+
+    // Legacy (19.07-series) variant, selected by the era marker the embed
+    // template publishes (window.__DESKTOP_LUCI_ERA__, see header.htm /
+    // header.ut): on legacy LuCI ul.tabs is the dispatcher's page tab bar
+    // (mirrored into the titlebar by wm.js) while ul.cbi-tabmenu is a
+    // CONTENT tab inside CBI forms — content tabs must stay in the page
+    // flow, so no sticky pinning and no background backplate for them.
+    // An absent marker keeps TOP_TAB_CSS (modern behaviour, zero change).
+    var TOP_TAB_CSS_LEGACY = [
+        'body ul.tabs {',
+        '    position: sticky !important;',
+        '    top: 0 !important;',
+        '    z-index: 60 !important;',
         '}'
     ].join('\n');
 
@@ -128,10 +198,27 @@
             // Prevent duplicate injection
             if (doc.querySelector('style#__desktop-chrome-hider')) return;
 
+            // Era gate (marker published by the embed template; absent →
+            // modern): on legacy 19.07-series LuCI only the dispatcher page
+            // tab bar (ul.tabs) counts as chrome; CBI content tabmenus
+            // (ul.cbi-tabmenu) stay in the page flow — no sticky pinning,
+            // no first-bar hiding (wm.js skips them on legacy too).
+            var eraLegacy = false;
+            try {
+                /* defaultView for real documents; ownerDocument.defaultView
+                   for the Element proxies the unit tests inject with. */
+                var dv = doc.defaultView ||
+                    (doc.ownerDocument && doc.ownerDocument.defaultView) || null;
+                eraLegacy = !!(dv && dv.__DESKTOP_LUCI_ERA__ === 'legacy');
+            } catch (eE) { eraLegacy = false; }
+            var tabSel = eraLegacy ? 'ul.tabs'
+                : 'ul.cbi-tabmenu, ul.tabs, ul.nav-tabs';
+
             // Use document.createElement (works for both Document and Element proxies)
             var style = document.createElement('style');
             style.id = '__desktop-chrome-hider';
-            style.textContent = CHROME_HIDER_CSS + '\n\n' + TOP_TAB_CSS;
+            style.textContent = CHROME_HIDER_CSS + '\n\n' +
+                (eraLegacy ? TOP_TAB_CSS_LEGACY : TOP_TAB_CSS);
 
             // doc.head works for Document; doc.querySelector('head') for Element proxies
             var head = doc.head || doc.querySelector('head');
@@ -147,7 +234,7 @@
             // inside forms — sticking all of them piles them on top of
             // each other at top:0 (2026-08-29: cbi-tabmenu appeared over
             // the main tabs). De-stick every later match.
-            var cands = doc.querySelectorAll('ul.cbi-tabmenu, ul.tabs, ul.nav-tabs');
+            var cands = doc.querySelectorAll(tabSel);
             /* multi-tab chrome: the page's own top bar moves into the
                window titlebar (wm.js mirrors it), so hide the first
                bar here. Later matches stay (they are form sub-tabs).
@@ -172,11 +259,13 @@
         injectAppCss: function(doc) {
             var href = '';
             try { href = doc.location ? doc.location.href : ''; } catch (e) {}
+            var matchedPsw = false;
             for (var i = 0; i < APP_CSS.length; i++) {
                 var entry = APP_CSS[i];
-                // case-insensitive: app urls may use mixed case
+                // case-insensitive: urls like /AdGuardHome must match
                 if (!entry || href.toLowerCase().indexOf(entry.match.toLowerCase()) === -1) continue;
-                if (doc.getElementById(entry.id)) return;
+                if (entry.match.toLowerCase() === '/passwall2') { watchPasswallTables(doc); matchedPsw = true; }
+                if (doc.getElementById(entry.id)) continue;
                 fetch(entry.file).then(function(r) {
                     return r.ok ? r.text() : null;
                 }).then(function(css) {
@@ -187,8 +276,9 @@
                     var head = doc.head || doc.querySelector('head');
                     if (head) head.appendChild(style);
                 }).catch(function() {});
-                return;
+                // keep going: several files may target the same app
             }
+            if (matchedPsw) applyPasswallLogFit(doc);
         },
 
         // Inject click interceptor into iframe document

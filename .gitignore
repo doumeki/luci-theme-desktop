@@ -23,3 +23,12 @@ probe/bell-badge.js
 # Local dev preview pages (kept on disk, not published)
 dev.html
 mobile-demo.html
+
+# 本地分支差异记录（勿提交，见 BRANCH-DIFF.md）
+BRANCH-DIFF.md
+
+# Case-note evidence screenshots: kept on the build VM, not published.
+docs/case-notes/shots/
+
+# Generated geometry samples/baselines (device-specific, not published).
+tests/fixtures/geometry/

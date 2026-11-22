@@ -25,13 +25,19 @@
         // the options schema, applied after every render — never hand-rolled
         // in the widget code): fg overrides the digits' font color
         // (--widget-fg; '' = theme default foreground), bg supplies ONE card
-        // background for the whole digital face via the same color-mix chain
-        // as .widget-card (opacity slider fades it; '' = theme default).
+        // background for the whole digital face via the same solid layer as
+        // .widget-card ('' = theme default).
         // Analog mode draws a canvas with its own fixed palette, so both
         // options only affect digital mode.
         options: {
-            fg: { type: 'color', label: _('Font color'), default: '#ffffff' },
-            bg: { type: 'color', label: _('Card background'), default: '#0a0e14' },
+            fg: {
+                type: 'color', label: _('Font color'), default: '#ffffff',
+                disabled: function(data) { return !data.mode || data.mode === 'analog'; }
+            },
+            bg: {
+                type: 'color', label: _('Card background'), default: '#0a0e14',
+                disabled: function(data) { return !data.mode || data.mode === 'analog'; }
+            },
             // Same 0% policy as the card widgets, but only the digital
             // face has a background — disabled (greyed) in analog mode.
             hideBgAtZero: {

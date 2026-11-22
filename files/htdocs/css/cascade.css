@@ -966,6 +966,59 @@ footer a {
   opacity: 0.6;
   box-shadow: none;
 }
+/* LuCI core marks the element that runs an async handler with .spinning
+   (ui.js createHandlerFn) and disables it: Startup -> Restart/Reload,
+   package-manager actions, ... The class is applied by luci-base, so one
+   rule covers every stock app — nothing is adapted per view.
+
+   Implemented the way luci-theme-argon does it (the look this shell
+   mirrors): a 32px icon column plus luci-base's 12-spoke loading.svg.
+   A hand-rolled CSS ring (q689) was wrong in practice: at 14px with a 2px
+   stroke and the button's 60% disabled opacity it reads as a flicker
+   rather than as "working" (q690). */
+.spinning {
+  position: relative;
+  padding-left: 32px !important;
+}
+.spinning::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.2em;
+  width: 32px;
+  content: "";
+  background: url(/luci-static/resources/icons/loading.svg) no-repeat center;
+  background-size: 16px;
+}
+/* View-level loading state: luci-base renders <div class="spinning"> inside
+   #view while a view loads. Argon floats that as a card in the middle of the
+   page; with no rule it is an invisible empty div, so a slow page just looks
+   stuck. */
+#view > .spinning,
+#maincontent > .spinning {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-50%);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 0 1rem 0 rgba(136, 152, 170, 0.15);
+}
+/* Alerts can be several lines tall: keep the icon next to the first line
+   instead of stretching it down the whole box. */
+.alert-message.spinning,
+.modal.alert-message.spinning {
+  position: relative;
+}
+.alert-message.spinning::before,
+.modal.alert-message.spinning::before {
+  top: 2rem;
+  bottom: auto;
+  left: 0.5rem;
+  height: 16px;
+  width: 16px;
+}
 .cbi-button-check {
   margin-top: 0.25rem !important;
 }
@@ -1043,34 +1096,9 @@ form.inline + form.inline,
   display: inline-block;
   align-items: center;
 }
-/* Replace LuCI's default file and folder type icons */
-img[src="/luci-static/resources/cbi/reload.gif"] {
-  content: url("/luci-static/argon/img/reload.webp");
-}
-img[src="/luci-static/resources/cbi/file.gif"] {
-  content: url("/luci-static/argon/img/file.webp");
-}
-img[src="/luci-static/resources/cbi/add.gif"] {
-  content: url("/luci-static/argon/img/add.webp");
-}
-img[src="/luci-static/resources/cbi/remove.gif"] {
-  content: url("/luci-static/argon/img/remove.webp");
-}
-img[src="/luci-static/resources/cbi/edit.gif"] {
-  content: url("/luci-static/argon/img/edit.webp");
-}
-img[src="/luci-static/resources/cbi/fieldadd.gif"] {
-  content: url("/luci-static/argon/img/fieldadd.webp");
-}
-img[src="/luci-static/resources/cbi/link.gif"] {
-  content: url("/luci-static/argon/img/link.webp");
-}
-img[src="/luci-static/resources/cbi/find.gif"] {
-  content: url("/luci-static/argon/img/find.webp");
-}
-img[src="/luci-static/resources/cbi/folder.gif"] {
-  content: url("/luci-static/argon/img/folder.webp");
-}
+/* q699: the nine /luci-static/argon/img/*.webp replacements were removed.
+   That package does not ship these files, so every rule was a 404; the stock
+   resources/cbi/*.gif icons are used instead. */
 /* input */
 .cbi-value input[type="password"],
 .cbi-value input[type="text"] {
@@ -1782,13 +1810,74 @@ body.lang_pl.node-main-login .cbi-value-title {
 .tfoot {
   display: table-footer-group;
 }
+/* q696: cell padding follows the reference metrics (bootstrap 10px/9px). The
+   old 1rem made every row 73px tall once the action buttons (40px) are added;
+   0.5rem/0.75rem brings the row to ~57px without shrinking the controls. */
 .td,
 .th {
   vertical-align: middle;
   text-align: center;
   display: table-cell;
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+/* q694: nowrap belongs to headers, not data cells. The old rule applied it to
+   every cell, so a table's min-content became the sum of its longest lines
+   (Processes: 3216px inside a 1180px container). Keep headers on one line, let
+   data cells wrap, and break long unbreakable tokens so a single path cannot
+   push a column past the container. Both renderings are covered: the ucode
+   track uses .td/.th classes, the Lua track emits bare td/th. */
+/* q718: the interface status cell is a list of <br> lines (runtime, MAC,
+   rx/tx, IPv4, IPv6). At phone width the column is ~200px, so values like
+   "(43432360 数据包)" and the IPv6 address wrapped mid-line. Keep each line
+   intact and let the table scroll horizontally (the 330 look). Scoped to the
+   network page so other tables keep wrapping. */
+#cbi-network .cbi-section-table td.cbi-value-field,
+[id^="cbi-network"] .cbi-section-table td.cbi-value-field {
   white-space: nowrap;
+}
+/* q752: on narrow screens the network badge and the status text sat almost
+   flush against each other. Give the first cell a column gap. */
+#cbi-network .cbi-section-table td.cbi-value-field:first-child,
+[id^="cbi-network"] .cbi-section-table td.cbi-value-field:first-child {
+  padding-right: 1.4rem !important;
+}
+/* q716: break-word, NOT anywhere. `anywhere` also drops a cell's
+   min-content to one character, so in a narrow (mobile) window the auto
+   layout collapses the column and splits MAC/IP values mid-token
+   (00:15:5D:0 / 2:F0:02). break-word only breaks a word that would
+   overflow its line; the column still sizes to its longest token. */
+.td,
+table td {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.th,
+table th {
+  white-space: nowrap;
+}
+/* actions and explicit .nowrap stay on one line */
+.td.cbi-section-actions,
+td.cbi-section-actions,
+.nowrap {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+/* q697: inside a data cell, .nowrap is legacy markup (argon treats it the
+   same way). Neutralise it there, or a single tagged cell can push its column
+   wide again. Action cells keep their nowrap from the rule above. */
+.td.nowrap:not(.cbi-section-actions),
+td.nowrap:not(.cbi-section-actions),
+.td:not(.cbi-section-actions) .nowrap,
+td:not(.cbi-section-actions) .nowrap {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+/* q697: package/file listings carry version strings and byte sizes that have
+   no break opportunities; allow them to wrap inside their cell. */
+.td.version,
+.td.size {
+  white-space: normal !important;
+  word-break: break-word;
 }
 .th {
   font-weight: bold;
@@ -1921,6 +2010,8 @@ select[multiple="multiple"] {
 }
 code {
   color: #0099CC;
+  /* q697: long command lines, hashes and paths have no break opportunities */
+  overflow-wrap: break-word;
 }
 abbr {
   color: #005470;
@@ -2099,6 +2190,16 @@ div > .table > .tbody > .tr:nth-of-type(2n) {
   border-radius: 0.25rem;
   background-color: #FFF;
   box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.16), 0 0 2px 0 rgba(0, 0, 0, 0.12);
+}
+/* stock ui.js notifications: Dismiss only adds the .fade-out class and
+   relies on a transition to fire `transitionend`, which then removes the
+   node. Without this rule the class has no effect and Dismiss does
+   nothing at all (2026-11-17 q652b: banner stayed fully visible). */
+.alert-message {
+  transition: opacity 0.25s ease;
+}
+.alert-message.fade-out {
+  opacity: 0;
 }
 /* argon look: error alerts get the warning-orange fill, white bold text
    (the bare `.error` color rule must not win over the fill) */
@@ -2491,8 +2592,14 @@ div::-webkit-scrollbar {
   max-width: none;
   min-width: 100%;
   width: auto;
-  max-height: 200px !important;
+  /* q721: 200px showed ~5 rows on a phone and the list had no explicit
+     touch scrolling; give it most of the viewport and pan-y. */
+  max-height: 60vh !important;
+  max-height: min(60vh, 420px) !important;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
   border: 0 solid #918e8c;
   box-shadow: 0 0 4px #918e8c;
   border-radius: 0.25rem;
@@ -3490,17 +3597,17 @@ div.commandbox {
 /* Third-party app user lists (table/card toggle): the app hides its
    .view-toggle below 768px and force-cards the list with !important.
    Restore the toggle and let the theme's JS switch views via
-   body[data-list-view]: the attribute-selector rule
+   body[data-appfilter-view]: the attribute-selector rule
    out-specifies the app's bare #id rules, and the initial/absent
    state keeps the app's card default. */
 @media (max-width: 768px) {
   .view-toggle {
     display: flex !important;
   }
-  body[data-list-view="table"] #tableViewWrapper {
+  body[data-appfilter-view="table"] #tableViewWrapper {
     display: block !important;
   }
-  body[data-list-view="table"] #cardViewWrapper {
+  body[data-appfilter-view="table"] #cardViewWrapper {
     display: none !important;
   }
 }

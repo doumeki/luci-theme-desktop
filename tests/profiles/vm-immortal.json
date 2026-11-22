@@ -1,0 +1,16 @@
+{
+ "label": "vm-immortal",
+ "fw": "2607242016_sta_Len_yu",
+ "theme": "0.1.0-330",
+ "cookieName": "sysauth_http",
+ "resources": {
+  "xhr.js": "unavailable(http 200)",
+  "cbi.js": "3c463f03:14351",
+  "ui.js": "6063e368:85410",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "2d10bcf1",
+ "pages": 30,
+ "captured": "2026-11-19T00:55:37.198Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

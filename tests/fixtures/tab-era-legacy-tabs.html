@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>legacy fixture (dispatcher tabs + content tabs)</title>
+<!-- 19.07-era page that carries BOTH the dispatcher page tab bar (ul.tabs,
+     mirrored into the titlebar) and a CBI content tab bar (ul.cbi-tabmenu,
+     which must stay in the page flow on legacy). -->
+<script>window.__DESKTOP_LUCI_ERA__ = 'legacy';</script>
+</head>
+<body>
+<ul class="tabs">
+  <li class="active"><a href="#general">General</a></li>
+  <li><a href="#logging">Logging</a></li>
+</ul>
+<ul class="cbi-tabmenu">
+  <li class="cbi-tab"><a href="#diska">Disk A</a></li>
+  <li><a href="#diskb">Disk B</a></li>
+</ul>
+</body>
+</html>

@@ -1,3 +1,11 @@
+/* q701: color_calc-argon.js sets this at runtime, but only after that
+   script runs. Before it does (login page, early paint, JS error) the var is
+   absent, so `color: var(...)` computes to `unset` -> inherit and links
+   render in the body text colour. Keep a CSS fallback: light blue on the
+   #1e1e1e surface (contrast ~8:1). The runtime value still wins. */
+:root {
+  --dark_webkit-any-link: #8ab4f8;
+}
 body {
   background: #1e1e1e;
   color: #cccccc;
@@ -847,4 +855,16 @@ fieldset[id^="cbi-apply-"] {
     background-color: #1e1e1e;
     box-shadow: 0 0 .5rem 0 rgba(0,0,0,0.35);
   }
+}
+/* q690: invert the stock loading.svg spinner (black spokes) on dark
+   surfaces, and give the view-level loading card a dark surface —
+   same treatment as argon's dark.css. */
+.spinning::before {
+  filter: invert(1);
+}
+
+#view > .spinning,
+#maincontent > .spinning {
+  background: #333333 !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.03) !important;
 }

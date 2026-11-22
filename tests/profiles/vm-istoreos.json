@@ -1,0 +1,16 @@
+{
+ "label": "vm-istoreos",
+ "fw": "LEDE",
+ "theme": "0.1.0-330",
+ "cookieName": "sysauth",
+ "resources": {
+  "xhr.js": "caa41d00:4510",
+  "cbi.js": "2ffda6f5:31808",
+  "ui.js": "unavailable(http 404)",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "87636d0e",
+ "pages": 49,
+ "captured": "2026-11-19T01:22:12.829Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

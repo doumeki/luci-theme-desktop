@@ -92,6 +92,16 @@ msgstr ""
 msgid "Load failed"
 msgstr ""
 
+# session expiry (changes window + shell toast, 2026-11-17)
+msgid "Session expired. Please log in again."
+msgstr ""
+
+msgid "Login session has expired."
+msgstr ""
+
+msgid "Log in again"
+msgstr ""
+
 # theme-config.js
 msgid "Titlebar (active)"
 msgstr ""
@@ -220,6 +230,21 @@ msgid "Menu Hover"
 msgstr ""
 
 msgid "Swipe Step"
+msgstr ""
+
+msgid "Tab Priority"
+msgstr ""
+
+msgid "Compatibility"
+msgstr ""
+
+msgid "Auto (titlebar)"
+msgstr ""
+
+msgid "In page (old LuCI 19.07)"
+msgstr ""
+
+msgid "In titlebar (modern)"
 msgstr ""
 
 msgid "Auto Refresh"
@@ -421,6 +446,27 @@ msgid "?\n\nThis cannot be undone."
 msgstr ""
 
 # wallpaper-settings.js
+msgid "Storage path"
+msgstr ""
+
+msgid "Change path"
+msgstr ""
+
+msgid "Restore default"
+msgstr ""
+
+msgid "(default)"
+msgstr ""
+
+msgid "Move existing images to the new path?"
+msgstr ""
+
+msgid "Move images back to the default path?"
+msgstr ""
+
+msgid "Moved %d image(s), skipped %d"
+msgstr ""
+
 msgid "Wallpapers"
 msgstr ""
 

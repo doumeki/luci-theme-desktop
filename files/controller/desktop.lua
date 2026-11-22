@@ -16,6 +16,70 @@ module("luci.controller.desktop", package.seeall)
 -- tmp file + rename, so a crash never leaves a half-written JSON.
 local STICKYSYNC_FILE = "/etc/luci-theme-desktop/stickysync.json"
 
+-- Wallpaper storage directory (0.1.0-319): where saved/uploaded images
+-- live. Default keeps the stock static path; a custom path is stored in
+-- uci (desktop.settings.wallpaper_dir) and the static docroot child
+-- becomes a symlink, so the served URLs and all existing endpoints
+-- (list/upload/delete/save/confirm) keep working unchanged.
+local WALLPAPER_BG_DIR = "/www/luci-static/desktop/background/"
+
+local function wp_sq(s)
+    return "'" .. s:gsub("'", "'\\''") .. "'"
+end
+
+-- Sanitize a form-provided mode token before it can reach a shell command or a
+-- path. Only [A-Za-z0-9_-] survive; anything else is dropped (q1023 scan:
+-- mode= was interpolated into os.execute/io.popen unquoted).
+local function wp_mode(s, default)
+    s = tostring(s or ""):gsub("[^%w_%-]", "")
+    if s == "" then return default or "" end
+    return s
+end
+
+-- md5 of a file via busybox md5sum, or nil if unavailable (used only to
+-- drop byte-identical stock leftovers during reconciler migration).
+local function wp_md5(path)
+    local p = io.popen("md5sum " .. wp_sq(path) .. " 2>/dev/null")
+    if not p then return nil end
+    local out = (p:read("*l") or "")
+    p:close()
+    return out:match("^(%x+)") or nil
+end
+
+local function wp_custom_dir()
+    local ok, v = pcall(function()
+        return require("luci.desktop.runtime").newCursor():get("desktop", "settings", "wallpaper_dir")
+    end)
+    -- normalize trailing slashes: configs retained across upgrades may hold
+    -- the raw value the user typed, and the symlink-target comparison below
+    -- must not false-mismatch on a cosmetic slash
+    if ok and v and v ~= "" then return (tostring(v):gsub("/+$", "")) end
+    return nil
+end
+
+-- Accept absolute paths only; reject traversal, control bytes, and overlong
+-- values. Returns the normalized value (no trailing slashes); for the stock
+-- path it returns nil with a "default" marker so the caller restores instead.
+local function wp_validate_dir(raw)
+    if type(raw) ~= "string" then return nil end
+    local dir = raw:gsub("^%s+", ""):gsub("%s+$", "")
+    if dir == "" or dir:sub(1, 1) ~= "/" then return nil end
+    if dir:find("%.%.") then return nil end
+    if dir:match("[%c]") then return nil end
+    if #dir > 200 then return nil end
+    dir = dir:gsub("/+$", "")
+    if dir == "" or dir == "/" then return nil end
+    if dir == WALLPAPER_BG_DIR:gsub("/+$", "") then return nil, "default" end
+    return dir
+end
+
+-- JSON-safe escape for a path value.
+local function wp_json_str(p)
+    local s = tostring(p):gsub("\\", "\\\\"):gsub('"', '\\"')
+    return s
+end
+
+
 local function stickysync_write(data)
     local ok = pcall(function()
         local tmp = STICKYSYNC_FILE .. ".tmp"
@@ -29,6 +93,23 @@ local function stickysync_write(data)
 end
 
 function index()
+    -- Re-establish the wallpaper storage invariant after theme-upgrade drift
+    -- (uci wallpaper_dir retained while the docroot child was restored to a
+    -- real stock directory). Passive when no custom dir is configured.
+    --
+    -- NOTE (q685): index() runs with its function ENV REPLACED
+    -- (luci.dispatcher process_lua_controller does
+    --  setfenv(idx, {__index = luci.dispatcher})()), so controller-module
+    -- globals are invisible by bare name: a plain wp_reconcile_storage()
+    -- here crashed the whole pagetree on first device deploy ("attempt to
+    -- call global 'wp_reconcile_storage' (a nil value)"). Only _G (and
+    -- package, via package.seeall) is reachable — go through the module
+    -- table explicitly, and never let this maintenance hook take the
+    -- pagetree down with it.
+    local selfmod = package.loaded["luci.controller.desktop"]
+    if selfmod and type(selfmod.wp_reconcile_storage) == "function" then
+        pcall(selfmod.wp_reconcile_storage)
+    end
     local Runtime = require "luci.desktop.runtime"
     local page = entry({"admin", "desktop"}, firstchild(), "Desktop", 99)
     page.hidden = true
@@ -66,6 +147,14 @@ function index()
     local wp_confirm = entry({"admin", "desktop", "confirm_wallpaper"}, call("action_confirm_wallpaper"))
     wp_confirm.leaf = true
     wp_confirm.sysauth = false
+
+    local wp_gdir = entry({"admin", "desktop", "wallpaper_dir"}, call("action_get_wallpaper_dir"))
+    wp_gdir.leaf = true
+    wp_gdir.sysauth = false
+
+    local wp_sdir = entry({"admin", "desktop", "set_wallpaper_dir"}, call("action_set_wallpaper_dir"))
+    wp_sdir.leaf = true
+    wp_sdir.sysauth = false
 
     local log_api = entry({"admin", "desktop", "log"}, call("action_log"))
     log_api.leaf = true
@@ -194,6 +283,17 @@ function action_uci_changes()
         end
     end)
 
+    -- Session state bit (q685): lets the shell tray detect a dead login
+    -- session the moment the poll sees it, instead of the user discovering
+    -- it on the next Apply/Revert click ("Session expired" surprise).
+    -- sessionValid touches the rpcd session, doubling as the tray's
+    -- keepalive — same renewal semantics the poll already had via the
+    -- session-scoped changes query.
+    local session_ok = false
+    if sid ~= "" then
+        session_ok = Runtime.sessionValid(sid)
+    end
+
     luci.http.prepare_content("application/json")
     local parts = {}
     for _, e in ipairs(rows) do
@@ -202,6 +302,7 @@ function action_uci_changes()
             .. '","type":"' .. json_escape(e.type) .. '"}'
     end
     luci.http.write('{"count":' .. count .. ',"no_password":' .. (no_password and "true" or "false")
+        .. ',"session":' .. (session_ok and "true" or "false")
         .. ',"list":[' .. table.concat(parts, ",") .. ']}')
 end
 
@@ -356,9 +457,10 @@ end
 -- Interface metadata for the net-traffic widget: IPv4 address + uptime
 -- for the selected netdev. /proc/net/dev lists physical/device names, while
 -- ubus network.interface returns logical-interface records with
--- ipv4-address, uptime, l3_device and device. Map both l3_device and the
--- underlying device so selecting eth3 (WAN physical port) still shows the
--- WAN IP/uptime from the pppoe-wan logical record.
+-- ipv4-address, ipv6-address (and ipv6-prefix-assignment on the LAN),
+-- uptime, l3_device and device. Map both l3_device and the underlying
+-- device so selecting eth3 (WAN physical port) still shows the WAN
+-- IP/uptime from the pppoe-wan logical record.
 local function iface_meta_map()
     local map = {}
     local raw = ""
@@ -378,9 +480,44 @@ local function iface_meta_map()
             if type(addrs) == "table" and type(addrs[1]) == "table" then
                 ip = addrs[1].address
             end
-            local info = { ip = ip, uptime = tonumber(rec.uptime) }
+            -- IPv6: prefer a global address from ipv6-address; the LAN has
+            -- no ipv6-address of its own, only a delegated prefix whose
+            -- local-address is the router's address in that prefix.
+            -- Link-local (fe80::/10) is phone-book noise -- skip it.
+            local ip6 = nil
+            local v6 = rec["ipv6-address"]
+            if type(v6) == "table" then
+                for _, a in ipairs(v6) do
+                    local addr = type(a) == "table" and a.address or nil
+                    if type(addr) == "string" and not addr:lower():match("^fe80:") then
+                        ip6 = addr
+                        break
+                    end
+                end
+            end
+            if not ip6 then
+                local pa = rec["ipv6-prefix-assignment"]
+                if type(pa) == "table" and type(pa[1]) == "table" then
+                    local la = pa[1]["local-address"]
+                    if type(la) == "table" and type(la.address) == "string" then
+                        ip6 = la.address
+                    end
+                end
+            end
+            local info = { ip = ip, ip6 = ip6, uptime = tonumber(rec.uptime) }
             local function put(name)
-                if name and name ~= "" and not map[name] then map[name] = info end
+                if not name or name == "" then return end
+                local cur = map[name]
+                if not cur then
+                    map[name] = info
+                else
+                    -- Another logical record maps to the same netdev
+                    -- (wan + wan_6 on pppoe-wan/eth3). Keep the first
+                    -- record's IPv4/uptime, but let a later one fill a
+                    -- missing IPv6: `wan` only carries the link-local
+                    -- address we filtered, `wan_6` the global one.
+                    if not cur.ip6 and info.ip6 then cur.ip6 = info.ip6 end
+                end
             end
             put(rec.l3_device)
             put(rec.device)
@@ -418,6 +555,7 @@ function action_bandwidth()
                 out[name] = {
                     rx = nums[1], tx = nums[9], phy = phy,
                     ip = m and m.ip or nil,
+                    ip6 = m and m.ip6 or nil,
                     uptime = m and m.uptime or nil
                 }
             end
@@ -629,8 +767,122 @@ local function server_log(msg)
     end)
 end
 
+-- Move regular files (any extension; the wallpaper dir is a flat image
+-- store) without ever clobbering same names in the target. Shared by
+-- action_set_wallpaper_dir and the post-upgrade reconciler below.
+function wp_move_all(from_dir, to_dir)
+    local fs = require "nixio.fs"
+    local moved_n, skipped_n = 0, 0
+    if from_dir == to_dir then return 0, 0 end
+    local entries = {}
+    pcall(function()
+        for e in fs.dir(from_dir) do
+            if e ~= "." and e ~= ".." then
+                local st = fs.stat(from_dir .. "/" .. e)
+                if st and st.type ~= "directory" then entries[#entries + 1] = e end
+            end
+        end
+    end)
+    for _, e in ipairs(entries) do
+        local src = from_dir .. "/" .. e
+        local dst = to_dir .. "/" .. e
+        if fs.access(dst) then
+            skipped_n = skipped_n + 1
+        else
+            local ret = os.execute("/bin/mv " .. wp_sq(src) .. " " .. wp_sq(dst) .. " 2>/dev/null")
+            if ret == 0 then moved_n = moved_n + 1 else skipped_n = skipped_n + 1 end
+        end
+    end
+    return moved_n, skipped_n
+end
+
+-- Re-establish the wallpaper storage invariant after drift (2026-11-17 fix).
+-- A uci wallpaper_dir retained across a theme upgrade survives, but the
+-- reinstalled package restores the stock docroot directory, so the manager
+-- lists stock images while get_wallpaper_dir still reports the custom path
+-- (observed live: uci=/mnt/... custom=true, docroot child a real directory,
+-- no symlink). Repair = migrate a restored real dir's files into the custom
+-- store (same-name skip) and rebuild the docroot symlink. Passive by design:
+-- never creates the custom dir (a not-yet-mounted storage path must not be
+-- shadowed by a stray directory on the root fs); skips silently when the
+-- invariant already holds (one probe shell call, only when uci has a value).
+function wp_reconcile_storage()
+    local custom = wp_custom_dir()
+    if not custom then return end
+    local link_path = WALLPAPER_BG_DIR:gsub("/+$", "")
+    if custom == link_path then return end
+    local fs = require "nixio.fs"
+    local cst = fs.stat(custom)
+    if not cst or cst.type ~= "directory" then
+        server_log("wallpaper_dir reconcile skip: custom dir absent [" .. custom .. "]")
+        return
+    end
+    local kind, target = "missing", nil
+    local p = io.popen(
+        "if [ -L " .. wp_sq(link_path) .. " ]; then echo 'link|'$(readlink " .. wp_sq(link_path) .. ");" ..
+        " elif [ -d " .. wp_sq(link_path) .. " ]; then echo 'dir|';" ..
+        " elif [ -e " .. wp_sq(link_path) .. " ]; then echo 'other|';" ..
+        " else echo 'missing|'; fi 2>/dev/null")
+    if p then
+        local out = (p:read("*l") or "")
+        p:close()
+        kind = out:match("^([a-z]+)|") or kind
+        if kind == "link" then target = (out:match("^link|(.*)$") or ""):gsub("%s+$", "") end
+    end
+    if kind == "link" and target == custom then return end
+    -- Repair: relink FIRST, migrate files only after the link is confirmed —
+    -- a failure then rolls back with zero file movement.
+    local aside = nil
+    os.execute("rm -f " .. wp_sq(link_path) .. " 2>/dev/null")
+    if kind == "dir" then
+        aside = link_path .. ".old-" .. tostring(os.time())
+        if os.execute("/bin/mv " .. wp_sq(link_path) .. " " .. wp_sq(aside) .. " 2>/dev/null") ~= 0 then
+            server_log("wallpaper_dir reconcile fail: cannot aside the restored dir")
+            return
+        end
+    end
+    if os.execute("ln -s " .. wp_sq(custom) .. " " .. wp_sq(link_path) .. " 2>/dev/null") ~= 0 then
+        -- roll back to the pre-repair layout (no files were touched yet)
+        os.execute("rm -f " .. wp_sq(link_path) .. " 2>/dev/null")
+        if aside then
+            os.execute("/bin/mv " .. wp_sq(aside) .. " " .. wp_sq(link_path) .. " 2>/dev/null")
+        elseif kind == "link" and target and target ~= "" then
+            os.execute("ln -s " .. wp_sq(target) .. " " .. wp_sq(link_path) .. " 2>/dev/null")
+        end
+        server_log("wallpaper_dir reconcile fail: ln -s failed; previous layout restored")
+        return
+    end
+    local moved_n, skipped_n = 0, 0
+    if aside then
+        moved_n, skipped_n = wp_move_all(aside, custom)
+        -- Same-name files stay in the aside dir (skip = never clobber). The
+        -- aside side is package-restored stock, so a copy that is byte-
+        -- identical to the kept custom file is a pure duplicate: drop it.
+        -- Files still differing are left in the aside and reported below.
+        pcall(function()
+            for e in fs.dir(aside) do
+                if e ~= "." and e ~= ".." then
+                    local ma, mb = wp_md5(aside .. "/" .. e), wp_md5(custom .. "/" .. e)
+                    if ma and mb and ma == mb then
+                        os.execute("/bin/rm " .. wp_sq(aside .. "/" .. e) .. " 2>/dev/null")
+                    end
+                end
+            end
+        end)
+        if os.execute("rmdir " .. wp_sq(aside) .. " 2>/dev/null") == 0 then
+            aside = nil
+        else
+            aside = aside .. " KEPT(differs from custom versions)"
+        end
+    end
+    server_log("wallpaper_dir reconcile: relinked [" .. link_path .. "] -> [" .. custom ..
+        "] moved=" .. tostring(moved_n) .. " skipped=" .. tostring(skipped_n) ..
+        " previous=" .. kind .. (kind == "link" and (":" .. tostring(target)) or "") ..
+        (aside and (" leftover=[" .. aside .. "]") or ""))
+end
+
 function action_random_wallpaper()
-    local mode    = luci.http.formvalue("mode") or "builtin"
+    local mode    = wp_mode(luci.http.formvalue("mode"), "builtin")
     local force   = luci.http.formvalue("force") or ""
     -- preview=1: download to cache only, do NOT touch the confirmed
     -- desktop baseline (_desktop.jpg) — the settings panel preview
@@ -698,7 +950,7 @@ function action_random_wallpaper()
         if remote_url and remote_url ~= "" then
             os.execute("mkdir -p " .. CACHE_DIR .. " 2>/dev/null")
             local tmp = CACHE_DIR .. "wallpaper_" .. mode .. "_" .. tostring(os.time()) .. ".jpg.tmp"
-            local ret = os.execute("/usr/bin/curl -fksL --max-time 15 -o " .. tmp .. " '" .. remote_url .. "' 2>/dev/null")
+            local ret = os.execute("/usr/bin/curl -fksL --max-time 15 -o " .. wp_sq(tmp) .. " " .. wp_sq(remote_url) .. " 2>/dev/null")
             server_log("random_wallpaper mode=" .. mode .. " curl_exit=" .. tostring(ret) .. " remote=" .. remote_url:sub(1,80))
             if ret == 0 then
                 os.execute("/bin/mv " .. tmp .. " " .. dst .. " 2>/dev/null")
@@ -879,8 +1131,8 @@ local function findmd5(file_path, search_dir)
     local st = require("nixio.fs").stat(file_path)
     if not st or st.size <= 0 then return nil end
     local pipe = io.popen(
-        "src_md5=$(md5sum " .. file_path .. " | cut -d' ' -f1); " ..
-        "for f in $(find " .. search_dir .. " -maxdepth 1 -name '*.jpg' -size " .. st.size .. "c 2>/dev/null); do " ..
+        "src_md5=$(md5sum " .. wp_sq(file_path) .. " | cut -d' ' -f1); " ..
+        "for f in $(find " .. wp_sq(search_dir) .. " -maxdepth 1 -name '*.jpg' -size " .. st.size .. "c 2>/dev/null); do " ..
         "  if [ \"$(md5sum \"$f\" | cut -d' ' -f1)\" = \"$src_md5\" ]; then basename \"$f\"; break; fi; " ..
         "done 2>/dev/null")
     if pipe then
@@ -892,7 +1144,7 @@ local function findmd5(file_path, search_dir)
 end
 
 function action_save_to_builtin()
-    local mode = luci.http.formvalue("mode") or ""
+    local mode = wp_mode(luci.http.formvalue("mode"))
     -- 0.1.0-261: the client passes the basename of the image it previews
     -- (check_saved already works the same way). Restrict to whitelisted
     -- cache names so the source can never leave the cache dir; anything
@@ -959,8 +1211,11 @@ end
 
 -- Lightweight check: is the current cache image already saved to builtin?
 function action_check_saved()
-    local mode = luci.http.formvalue("mode") or ""
+    local mode = wp_mode(luci.http.formvalue("mode"))
     local file = luci.http.formvalue("file") or ""
+    -- basename only: no slashes, no traversal (this reaches an md5sum pipeline)
+    file = file:gsub("[^%w_%-%.]", "")
+    if file:find("%.%.") then file = "" end
     -- Use specified file if provided, otherwise fall back to cache file
     local check_file
     if file ~= "" then
@@ -981,7 +1236,7 @@ end
 -- Confirm desktop wallpaper: copy cache to a separate desktop file
 -- so Refresh can update cache without changing the confirmed desktop.
 function action_confirm_wallpaper()
-    local mode = luci.http.formvalue("mode") or ""
+    local mode = wp_mode(luci.http.formvalue("mode"))
     local cache = "/www/luci-static/desktop/cache/wallpaper_" .. mode .. ".jpg"
     local desktop = "/www/luci-static/desktop/cache/wallpaper_" .. mode .. "_desktop.jpg"
     local ret = os.execute("/bin/cp " .. cache .. " " .. desktop .. " 2>/dev/null")
@@ -991,6 +1246,141 @@ function action_confirm_wallpaper()
 end
 
 -- Fire-and-forget UI log (boot diagnostics → /var/log/desktop-ui.log)
+-- Report the effective wallpaper image directory (0.1.0-319).
+function action_get_wallpaper_dir()
+    local custom = wp_custom_dir()
+    local dir = custom or WALLPAPER_BG_DIR
+    luci.http.prepare_content("application/json")
+    luci.http.write('{"dir":"' .. wp_json_str(dir) .. '","custom":' ..
+        (custom and 'true' or 'false') .. ',"default":"' ..
+        wp_json_str(WALLPAPER_BG_DIR) .. '"}')
+end
+
+-- Switch the wallpaper storage directory (0.1.0-319): validate, make the
+-- target writable, migrate existing images from the old effective directory
+-- (same-name files skip, never clobbered), swap the static docroot child for
+-- a symlink, persist in uci. dir==default dissolves the symlink and restores
+-- the stock layout with the files moved back.
+function action_set_wallpaper_dir()
+    local uci = require("luci.desktop.runtime").newCursor()
+    local fs = require "nixio.fs"
+    local raw = luci.http.formvalue("dir") or ""
+    local link_path = WALLPAPER_BG_DIR:gsub("/+$", "")
+
+    local function finish(ok, msg, moved, skipped, dir, custom)
+        local emsg = (msg or ''):gsub('[%c]', ' ')
+        server_log("set_wallpaper_dir ok=" .. tostring(ok) .. " msg=[" .. emsg ..
+            "] moved=" .. tostring(moved) .. " skipped=" .. tostring(skipped) ..
+            " dir=[" .. tostring(dir) .. "]")
+        luci.http.prepare_content("application/json")
+        local r = '{"ok":' .. (ok and 'true' or 'false') .. ',"msg":"' .. emsg .. '"'
+        if moved ~= nil then r = r .. ',"moved":' .. tostring(moved) end
+        if skipped ~= nil then r = r .. ',"skipped":' .. tostring(skipped) end
+        if dir ~= nil then r = r .. ',"dir":"' .. wp_json_str(dir) .. '"' end
+        if custom ~= nil then r = r .. ',"custom":' .. (custom and 'true' or 'false') end
+        luci.http.write(r .. '}')
+    end
+
+    local dir, why = wp_validate_dir(raw)
+    if dir == nil and why == "default" then dir = link_path end
+    if dir == nil then
+        finish(false, "Invalid path")
+        return
+    end
+
+    -- The effective directory today: symlink target, or the dir itself.
+    local is_link = false
+    local old_actual = link_path
+    local p = io.popen("readlink " .. wp_sq(link_path) .. " 2>/dev/null")
+    if p then
+        local out = (p:read("*l") or ""):gsub("%s+$", "")
+        p:close()
+        if out ~= "" then is_link = true; old_actual = out end
+    end
+
+    -- Move regular files (any extension; the manager treats this dir as a
+    -- flat image store) without ever clobbering same names in the target:
+    -- shared module-level wp_move_all() above (also used by the reconciler).
+
+    if dir == link_path then
+        -- Restore stock layout: dissolve the symlink, move files back.
+        if not is_link then
+            finish(true, "Already default", 0, 0, WALLPAPER_BG_DIR, false)
+            return
+        end
+        os.execute("rm -f " .. wp_sq(link_path) .. " 2>/dev/null")
+        os.execute("mkdir -p " .. wp_sq(link_path) .. " 2>/dev/null")
+        local moved_n, skipped_n = wp_move_all(old_actual, link_path)
+        os.execute("rmdir " .. wp_sq(old_actual) .. " 2>/dev/null")
+        local delok, delerr = pcall(function()
+            uci:delete("desktop", "settings", "wallpaper_dir")
+            uci:commit("desktop")
+        end)
+        if not delok then
+            finish(false, "uci delete failed; " .. tostring(delerr or ""))
+            return
+        end
+        if uci:get("desktop", "settings", "wallpaper_dir") ~= nil then
+            finish(false, "uci delete verified failed; option still set")
+            return
+        end
+        finish(true, "Restored default storage", moved_n, skipped_n, WALLPAPER_BG_DIR, false)
+        return
+    end
+
+    -- Custom path: create it and make sure it is writable.
+    os.execute("mkdir -p " .. wp_sq(dir) .. " 2>/dev/null")
+    local wf = io.open(dir .. "/.wpwrite", "w")
+    if not wf then
+        finish(false, "Path not writable")
+        return
+    end
+    wf:write("ok"); wf:close()
+    os.remove(dir .. "/.wpwrite")
+
+    local moved_n, skipped_n = wp_move_all(old_actual, dir)
+
+    -- Swap the static docroot child for the symlink.
+    if is_link then
+        os.execute("rm -f " .. wp_sq(link_path) .. " 2>/dev/null")
+    else
+        os.execute("/bin/mv " .. wp_sq(link_path) .. " " .. wp_sq(link_path .. ".old") .. " 2>/dev/null")
+    end
+    local ret = os.execute("ln -s " .. wp_sq(dir) .. " " .. wp_sq(link_path) .. " 2>/dev/null")
+    if ret ~= 0 then
+        -- Roll back: files return to the stock dir, symlink removed.
+        os.execute("rm -f " .. wp_sq(link_path) .. " 2>/dev/null")
+        os.execute("/bin/mv " .. wp_sq(link_path .. ".old") .. " " .. wp_sq(link_path) .. " 2>/dev/null")
+        if not is_link then wp_move_all(dir, link_path) end
+        finish(false, "Symlink failed; images kept")
+        return
+    end
+    -- Best-effort cleanup of the renamed/empty leftovers.
+    if not is_link then
+        os.execute("rmdir " .. wp_sq(link_path .. ".old") .. " 2>/dev/null")
+    else
+        os.execute("rmdir " .. wp_sq(old_actual) .. " 2>/dev/null")
+    end
+
+    local setok, seterr = pcall(function()
+        uci:set("desktop", "settings", "wallpaper_dir", dir)
+        uci:commit("desktop")
+    end)
+    if not setok then
+        os.execute("rm -f " .. wp_sq(link_path) .. " 2>/dev/null")
+        os.execute("mkdir -p " .. wp_sq(link_path) .. " 2>/dev/null")
+        wp_move_all(dir, link_path)
+        os.execute("rmdir " .. wp_sq(dir) .. " 2>/dev/null")
+        finish(false, "uci persist failed; stock layout restored; " .. tostring(seterr or ""))
+        return
+    end
+    if uci:get("desktop", "settings", "wallpaper_dir") ~= dir then
+        finish(false, "uci read-back mismatch; verify desktop.settings")
+        return
+    end
+    finish(true, "Storage path updated", moved_n, skipped_n, dir .. "/", true)
+end
+
 function action_log()
     local lines = luci.http.formvalue("lines") or ""
     local logfile = "/var/log/desktop-ui.log"
@@ -1151,7 +1541,8 @@ button:disabled{opacity:.5;cursor:default}
         network: ']] .. changes_escape(t("Network error")) .. [[',
         confirmFail: ']] .. changes_escape(t("Failed")) .. [[ (auto-rollback)',
         empty: ']] .. changes_escape(t("There are no pending changes.")) .. [[',
-        loadFailed: ']] .. changes_escape(t("Failed")) .. [[: load'
+        loadFailed: ']] .. changes_escape(t("Failed")) .. [[: load',
+        expired: ']] .. changes_escape(t("Session expired. Please log in again.")) .. [['
     };
     function esc(s) {
         var d = document.createElement('div');
@@ -1201,8 +1592,18 @@ button:disabled{opacity:.5;cursor:default}
     var x = new XMLHttpRequest();
     x.open('GET', '/cgi-bin/luci/admin/desktop/uci_changes', true);
     x.onload = function() {
-        try { renderList(JSON.parse(x.responseText)); }
-        catch (e) { document.getElementById('list').innerHTML = '<div class="empty">' + esc(txt.loadFailed) + '</div>'; }
+        var r = null;
+        try { r = JSON.parse(x.responseText); } catch (e) {}
+        if (r && r.list) { renderList(r); return; }
+        // Non-JSON reply: the dispatcher bounced us to the login page
+        // (expired session) or the endpoint failed — tell the two apart so
+        // the window explains itself instead of showing a bare failure.
+        if (x.status === 401 || (r && r.msg === 'auth') ||
+            String(x.responseText || '').indexOf('luci_username') >= 0) {
+            sessionDied();
+            return;
+        }
+        document.getElementById('list').innerHTML = '<div class="empty">' + esc(txt.loadFailed) + '</div>';
     };
     x.onerror = function() { document.getElementById('list').innerHTML = '<div class="empty">' + esc(txt.loadFailed) + '</div>'; };
     x.send();
@@ -1213,12 +1614,54 @@ button:disabled{opacity:.5;cursor:default}
     function notifyShell(type) {
         try { window.parent.postMessage({ type: 'desktop-app-save', submitType: type }, '*'); } catch (e) {}
     }
+    // Session died between page render and an action (login timeout, a new
+    // login elsewhere, …): the XHRs still carry the cookie, but the server
+    // rejects it with 401 {"ok":false,"msg":"auth"} (q651/q652b evidence).
+    // Name the cause instead of a bare "Failed" and lock the buttons —
+    // nothing can succeed until the shell reloads into a fresh login — and
+    // tell the shell to pop its re-login toast.
+    function notifyShellAuth() {
+        try { window.parent.postMessage({ type: 'desktop-app-auth-expired' }, '*'); } catch (e) {}
+    }
+    function sessionDied() {
+        st.textContent = txt.expired;
+        lock();
+        notifyShellAuth();
+    }
     function reloadSoon() { setTimeout(function() { location.reload(); }, 900); }
     function lock() { busy = true; btnApply.disabled = true; btnRevert.disabled = true; }
     function unlock() { busy = false; btnApply.disabled = false; btnRevert.disabled = false; }
     btnApply.onclick = function() {
         if (busy) return;
         lock(); st.textContent = txt.applying;
+        var settled = false;
+        function settleOk() {
+            if (settled) return;
+            settled = true;
+            notifyShell('apply');
+            st.textContent = txt.done;
+            reloadSoon();
+        }
+        // 0.1.0-325: a service restart (netifd/firewall/dnsmasq) right after
+        // the commit can drop the apply response — on 19.07-era Lua LuCI the
+        // reload runs inside the request, so onload/onerror never fire and
+        // the button sits on "Applying…" forever. The pending-change count
+        // is the source of truth: once it reaches zero the commit landed.
+        var wd = null, wdTries = 0;
+        wd = setInterval(function() {
+            if (settled) { clearInterval(wd); return; }
+            if (++wdTries > 30) { clearInterval(wd); return; }
+            var q = new XMLHttpRequest();
+            q.open('GET', '/cgi-bin/luci/admin/desktop/uci_changes', true);
+            q.onload = function() {
+                if (settled) return;
+                try {
+                    var j = JSON.parse(q.responseText);
+                    if (j && j.list && j.list.length === 0) { clearInterval(wd); settleOk(); }
+                } catch (e) {}
+            };
+            q.send();
+        }, 900);
         var x = new XMLHttpRequest();
         x.open('POST', '/cgi-bin/luci/admin/desktop/changes/apply', true);
         x.onload = function() {
@@ -1231,22 +1674,27 @@ button:disabled{opacity:.5;cursor:default}
                 setTimeout(function() {
                     var c = new XMLHttpRequest();
                     c.open('POST', '/cgi-bin/luci/admin/desktop/changes/confirm?token=' + r.token, true);
-                    c.onload = function() {
-                        notifyShell('apply');
-                        st.textContent = txt.done;
-                        reloadSoon();
-                    };
+                    c.onload = function() { settleOk(); };
                     c.onerror = function() {
+                        if (settled) return;
                         st.textContent = txt.confirmFail;
                         setTimeout(function() { location.reload(); }, 1500);
                     };
                     c.send();
                 }, 1200);
-            } else {
+            } else if (!settled) {
+                settled = true;
+                if (wd) clearInterval(wd);
+                if (x.status === 401 || (r && r.msg === 'auth')) { sessionDied(); return; }
                 st.textContent = txt.failed; unlock();
             }
         };
-        x.onerror = function() { st.textContent = txt.network; unlock(); };
+        x.onerror = function() {
+            if (settled) return;
+            // The response may be lost after a successful commit; the
+            // watchdog above decides. Show the hint but keep watching.
+            st.textContent = txt.network;
+        };
         x.send();
     };
     btnRevert.onclick = function() {
@@ -1257,8 +1705,11 @@ button:disabled{opacity:.5;cursor:default}
         x.onload = function() {
             var r = null;
             try { r = JSON.parse(x.responseText); } catch (e) {}
-            if (r && r.ok) { notifyShell('revert'); st.textContent = txt.reverted; reloadSoon(); }
-            else { st.textContent = txt.failed; unlock(); }
+            if (r && r.ok) { notifyShell('revert'); st.textContent = txt.reverted; reloadSoon(); return; }
+            // Dead login session: 401 {"ok":false,"msg":"auth"} (q651) —
+            // name the cause and let the shell pop the re-login toast.
+            if (x.status === 401 || (r && r.msg === 'auth')) { sessionDied(); return; }
+            st.textContent = txt.failed; unlock();
         };
         x.onerror = function() { st.textContent = txt.network; unlock(); };
         x.send();

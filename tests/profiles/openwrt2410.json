@@ -1,0 +1,16 @@
+{
+ "label": "openwrt2410",
+ "fw": "OpenWrt 24.10.8 r29233-443ec4032a",
+ "theme": "0.1.0-368",
+ "cookieName": "sysauth_http",
+ "resources": {
+  "xhr.js": "unavailable(http 200)",
+  "cbi.js": "ccd56f6a:14535",
+  "ui.js": "2a11ae51:85343",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "9e5a68f9",
+ "pages": 19,
+ "captured": "2026-11-21T14:10:07.408Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

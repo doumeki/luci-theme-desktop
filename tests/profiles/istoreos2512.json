@@ -1,0 +1,16 @@
+{
+ "label": "istoreos2512",
+ "fw": "iStoreOS 25.12.6 2026110611",
+ "theme": "0.1.0-370",
+ "cookieName": "sysauth_http",
+ "resources": {
+  "xhr.js": "unavailable(http 200)",
+  "cbi.js": "b0707bb0:14450",
+  "ui.js": "44fab2d2:85689",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "f6b3a37d",
+ "pages": 47,
+ "captured": "2026-11-21T15:46:05.463Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

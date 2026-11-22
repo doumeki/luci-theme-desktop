@@ -1,0 +1,16 @@
+{
+ "label": "openwrt2512",
+ "fw": "OpenWrt 25.12.6 r33311-981c978eff",
+ "theme": "0.1.0-366",
+ "cookieName": "sysauth_http",
+ "resources": {
+  "xhr.js": "unavailable(http 200)",
+  "cbi.js": "3c463f03:14351",
+  "ui.js": "3878b5bc:85412",
+  "cbi.css": "unavailable(http 404)"
+ },
+ "menuHash": "393cceff",
+ "pages": 21,
+ "captured": "2026-11-21T05:19:15.492Z",
+ "note": "canonical profile captured by probe/fingerprint.js; gate rule in compat-scan.config.js (no softening)"
+}

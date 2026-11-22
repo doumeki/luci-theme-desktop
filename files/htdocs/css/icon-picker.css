@@ -2,8 +2,8 @@
  * Uses theme CSS variables so the picker matches the shell look:
  *   --startmenu-bg (panel — color + opacity follow the Start Menu
  *     setting; fully opaque when the user sets opacity 1)
- *   --startmenu-sel-color (selection accent)
- *   --titlebar-color (primary button)
+ *   --startmenu-sel (selection accent)
+ *   --win-titlebar-bg (primary button)
  *   --picker-* (fg/border/tile tones derived from the start menu color's
  *     luminance — set by theme-config.js for light/dark themes)
  */
@@ -41,7 +41,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
-    color: var(--picker-fg, var(--startmenu-font-color, #e0e0e0));
+    color: var(--picker-fg, var(--startmenu-fg, #e0e0e0));
     animation: iconPickerSlide 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
     overflow: hidden;
 }
@@ -119,7 +119,7 @@
 .icon-picker-tab:hover { color: var(--picker-fg, #fff); background: var(--picker-option-hover, rgba(255,255,255,0.07)); }
 .icon-picker-tab.active {
     color: #fff;
-    background: var(--startmenu-sel-color, rgba(74, 144, 217, 0.6));
+    background: var(--startmenu-sel, rgba(74, 144, 217, 0.6));
 }
 
 /* ===== Grid ===== */
@@ -153,7 +153,7 @@
     transform: translateY(-2px);
 }
 .icon-picker-option.selected {
-    border-color: var(--startmenu-sel-color, var(--picker-border, rgba(255,255,255,0.5)));
+    border-color: var(--startmenu-sel, var(--picker-border, rgba(255,255,255,0.5)));
     background: var(--picker-option-hover, rgba(255,255,255,0.07));
 }
 .icon-picker-option .icon-picker-emoji { font-size: 28px; line-height: 1.3; }
@@ -207,7 +207,7 @@
 }
 .icon-picker-btn:hover { background: var(--picker-option-hover, rgba(255,255,255,0.14)); color: var(--picker-fg, #fff); }
 .icon-picker-btn.icon-picker-primary {
-    background: var(--titlebar-color, rgba(74, 144, 217, 0.7));
+    background: var(--win-titlebar-bg, rgba(74, 144, 217, 0.7));
     color: #fff;
 }
 .icon-picker-btn.icon-picker-primary:hover { filter: brightness(1.15); }
@@ -248,7 +248,7 @@
     box-sizing: border-box;
     outline: none;
 }
-.link-field input[type="text"]:focus { border-color: var(--titlebar-color, rgba(74,144,217,0.7)); }
+.link-field input[type="text"]:focus { border-color: var(--win-titlebar-bg, rgba(74,144,217,0.7)); }
 .link-check {
     display: flex;
     align-items: center;
@@ -275,5 +275,5 @@
 }
 .link-cancel { background: var(--picker-btn-bg, rgba(255,255,255,0.08)); color: var(--picker-fg, rgba(255,255,255,0.8)); }
 .link-cancel:hover { background: var(--picker-option-hover, rgba(255,255,255,0.14)); }
-.link-save { background: var(--titlebar-color, rgba(74,144,217,0.7)); color: #fff; }
+.link-save { background: var(--win-titlebar-bg, rgba(74,144,217,0.7)); color: #fff; }
 .link-save:hover { filter: brightness(1.15); }

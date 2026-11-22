@@ -1,0 +1,56 @@
+/* passwall2 — "运行日志" page (view/passwall2/log/log.htm)
+ *
+ * The template ships <textarea id="log_textarea" rows="40"> — a fixed ~40-line
+ * box. On any window shorter than that the IFRAME grows an outer scrollbar,
+ * so the log box is never "the size of the window".
+ *
+ * iframe-bridge sets body.desktop-psw-log only when #log_textarea exists, so
+ * nothing here can leak onto other passwall2 pages. Layout chain from the
+ * theme's embed wrapper down to the fieldset becomes a flex column: the
+ * textarea takes exactly the remaining height, and the page never scrolls.
+ */
+body.desktop-psw-log {
+    height: 100vh;
+    overflow: hidden;
+}
+body.desktop-psw-log .main {
+    height: 100%;
+    display: flex;
+}
+body.desktop-psw-log .main-right {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+}
+body.desktop-psw-log #maincontent {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+body.desktop-psw-log #maincontent > .container {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+body.desktop-psw-log #_log_fieldset {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0 !important;
+}
+body.desktop-psw-log #log_textarea {
+    flex: 1 1 auto;
+    min-height: 140px;
+    height: auto !important;
+    margin: 10px 0 8px 0 !important;
+    resize: none;
+}
+
+/* keep the action button compact instead of stretching in the flex column */
+body.desktop-psw-log #_log_fieldset > input,
+body.desktop-psw-log #_log_fieldset > .btn {
+    align-self: flex-start;
+    flex: 0 0 auto;
+}
